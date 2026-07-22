@@ -9,6 +9,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Capa multi-LLM configurable**: Anthropic (Claude), OpenAI (GPT), Google (Gemini) y cualquier endpoint OpenAI-compatible (Groq, OpenRouter, Ollama local). API keys cifradas en el dispositivo, modelo elegible o escrito a mano, botón "Probar conexión".
 - ✅ **Prueba de vida con pantalla bloqueada**: botón "Probar voz" en la notificación persistente → dice la hora por TTS sin desbloquear.
 - ✅ **UI minimalista editorial**: onboarding guiado que pide los permisos de a uno con contexto, dashboard con estado en vivo del sistema, y tema propio (papel/tinta/acento azul, etiquetas monospace).
+- ✅ **Transiciones estilo GSAP**: curva `expo.out` centralizada en `ui/theme/Motion.kt`; cambios de pantalla/paso con `AnimatedContent` (fade + rise) y reveal escalonado de las secciones del dashboard (`Modifier.staggerReveal`).
 - ✅ **Feedback con el propio LLM**: pantalla donde el usuario cuenta qué falló o qué quiere; el LLM configurado lo analiza, responde y lo clasifica ([BUG]/[IDEA]/[MEJORA]); historial local como insumo del roadmap.
 - ⏳ Próximo: wake word real ("Xia") con Porcupine y pipeline voz → LLM → acciones.
 
@@ -51,6 +52,6 @@ app/src/main/java/com/controlxia/app/
 ├── brain/         # Capa multi-LLM (providers, settings cifrados)
 ├── feedback/      # FeedbackStore (historial local analizado por el LLM)
 └── ui/            # Onboarding, Dashboard, LlmSettings, Feedback
-    ├── theme/     # XiaTheme (papel/tinta/acento, tipografía mono)
+    ├── theme/     # XiaTheme (papel/tinta/acento, tipografía mono) + Motion (expo.out)
     └── components/# TechButton, TechPanel, StatusRow, hairlines…
 ```

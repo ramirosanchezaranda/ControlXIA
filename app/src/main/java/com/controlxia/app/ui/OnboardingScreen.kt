@@ -3,6 +3,7 @@ package com.controlxia.app.ui
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +37,7 @@ import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.components.rememberResumeTick
 import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
+import com.controlxia.app.ui.theme.screenTransition
 import java.util.Locale
 
 /**
@@ -151,8 +153,15 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp),
         ) {
+            // Cada paso entra con la transición estándar (fade + rise, expo.out)
+            AnimatedContent(
+                targetState = page,
+                transitionSpec = screenTransition(),
+                label = "onboarding-step",
+            ) { p ->
+            Column {
             when {
-                page == 0 -> {
+                p == 0 -> {
                     Spacer(Modifier.height(32.dp))
                     SectionLabel("Configuración inicial")
                     Spacer(Modifier.height(16.dp))
@@ -171,11 +180,11 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                         color = Muted,
                     )
                 }
-                page in 1..permSteps.size -> {
-                    val step = permSteps[page - 1]
+                p in 1..permSteps.size -> {
+                    val step = permSteps[p - 1]
                     Spacer(Modifier.height(32.dp))
                     Text(
-                        String.format(Locale.ROOT, "%02d", page),
+                        String.format(Locale.ROOT, "%02d", p),
                         style = MaterialTheme.typography.labelLarge,
                         color = Accent,
                     )
@@ -204,7 +213,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                         )
                     }
                 }
-                page == llmPage -> {
+                p == llmPage -> {
                     Spacer(Modifier.height(32.dp))
                     SectionLabel("Cerebro / LLM")
                     Spacer(Modifier.height(16.dp))
@@ -235,19 +244,26 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     )
                 }
             }
+            }
+            }
         }
 
         // Barra de acciones inferior
         Hairline()
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = screenTransition(),
+            label = "onboarding-actions",
+        ) { p ->
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             when {
-                page == 0 -> TechButton(
+                p == 0 -> TechButton(
                     text = "Empezar",
                     onClick = { page++ },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                page in 1..permSteps.size -> {
-                    val step = permSteps[page - 1]
+                p in 1..permSteps.size -> {
+                    val step = permSteps[p - 1]
                     if (step.granted == true) {
                         TechButton(
                             text = "Continuar",
@@ -273,7 +289,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                         }
                     }
                 }
-                page == llmPage -> TechButton(
+                p == llmPage -> TechButton(
                     text = "Continuar",
                     onClick = { page++ },
                     modifier = Modifier.fillMaxWidth(),
@@ -297,6 +313,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     }
                 }
             }
+        }
         }
     }
 }

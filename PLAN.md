@@ -30,6 +30,7 @@ La clave que la diferencia de Google Assistant: el **LLM interpreta pedidos ambi
 
 - **Lenguaje:** Kotlin
 - **UI:** Jetpack Compose. Lenguaje visual editorial/técnico: fondo papel, tinta casi negra, un acento azul "blueprint", etiquetas monospace en mayúsculas con tracking (`[ SISTEMA ]`), líneas de 1dp y esquinas casi rectas. Tres superficies: **onboarding** guiado (presenta la app y pide los permisos de a uno antes de habilitar nada), **dashboard** (estado del servicio + checklist del sistema + cerebro + feedback) y **ajustes del LLM**
+- **Movimiento:** transiciones minimalistas estilo GSAP — curva `expo.out` (`CubicBezierEasing(0.16, 1, 0.3, 1)`) centralizada en `ui/theme/Motion.kt`. Cambios de pantalla y pasos con `AnimatedContent` (fade + rise); secciones del dashboard con reveal escalonado (`Modifier.staggerReveal`)
 - **Mínimo SDK:** API 26 (Android 8.0) — cubre ~95% de dispositivos; ideal API 29+ para mejores APIs de voz
 
 ---

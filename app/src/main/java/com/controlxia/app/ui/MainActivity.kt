@@ -3,6 +3,7 @@ package com.controlxia.app.ui
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -13,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.controlxia.app.service.ServicePrefs
 import com.controlxia.app.ui.theme.XiaTheme
+import com.controlxia.app.ui.theme.screenTransition
 
 class MainActivity : ComponentActivity() {
 
@@ -28,25 +30,29 @@ class MainActivity : ComponentActivity() {
                         mutableStateOf(ServicePrefs.isOnboarded(this@MainActivity))
                     }
                     var screen by remember { mutableStateOf(Screen.DASHBOARD) }
+                    val target = if (!onboarded) ONBOARDING else screen.name
 
-                    if (!onboarded) {
-                        OnboardingFlow(
-                            onFinished = {
-                                ServicePrefs.setOnboarded(this@MainActivity, true)
-                                onboarded = true
-                            }
-                        )
-                    } else {
-                        when (screen) {
-                            Screen.DASHBOARD -> DashboardScreen(
+                    AnimatedContent(
+                        targetState = target,
+                        transitionSpec = screenTransition(),
+                        label = "screens",
+                    ) { current ->
+                        when (current) {
+                            ONBOARDING -> OnboardingFlow(
+                                onFinished = {
+                                    ServicePrefs.setOnboarded(this@MainActivity, true)
+                                    onboarded = true
+                                }
+                            )
+                            Screen.LLM_SETTINGS.name -> LlmSettingsScreen(
+                                onBack = { screen = Screen.DASHBOARD }
+                            )
+                            Screen.FEEDBACK.name -> FeedbackScreen(
+                                onBack = { screen = Screen.DASHBOARD }
+                            )
+                            else -> DashboardScreen(
                                 onOpenLlm = { screen = Screen.LLM_SETTINGS },
                                 onOpenFeedback = { screen = Screen.FEEDBACK },
-                            )
-                            Screen.LLM_SETTINGS -> LlmSettingsScreen(
-                                onBack = { screen = Screen.DASHBOARD }
-                            )
-                            Screen.FEEDBACK -> FeedbackScreen(
-                                onBack = { screen = Screen.DASHBOARD }
                             )
                         }
                     }
@@ -56,4 +62,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private enum class Screen { DASHBOARD, LLM_SETTINGS, FEEDBACK }
+
+    private companion object {
+        const val ONBOARDING = "ONBOARDING"
+    }
 }

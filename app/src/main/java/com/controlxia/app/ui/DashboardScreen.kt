@@ -39,6 +39,7 @@ import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.components.TechPanel
 import com.controlxia.app.ui.components.rememberResumeTick
 import com.controlxia.app.ui.theme.Muted
+import com.controlxia.app.ui.theme.staggerReveal
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -104,7 +105,7 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             // Estado principal
-            Column {
+            Column(Modifier.staggerReveal(0)) {
                 Spacer(Modifier.height(12.dp))
                 Text(
                     if (serviceOn) "Xia está\nescuchando." else "Xia está\nen pausa.",
@@ -153,7 +154,7 @@ fun DashboardScreen(
             }
 
             // Sistema
-            Column {
+            Column(Modifier.staggerReveal(1)) {
                 SectionLabel("Sistema")
                 Spacer(Modifier.height(12.dp))
                 TechPanel {
@@ -210,7 +211,7 @@ fun DashboardScreen(
             }
 
             // Cerebro
-            Column {
+            Column(Modifier.staggerReveal(2)) {
                 SectionLabel("Cerebro / LLM")
                 Spacer(Modifier.height(12.dp))
                 TechPanel {
@@ -226,7 +227,7 @@ fun DashboardScreen(
             }
 
             // Feedback
-            Column {
+            Column(Modifier.staggerReveal(3)) {
                 SectionLabel("Feedback")
                 Spacer(Modifier.height(12.dp))
                 TechPanel {
