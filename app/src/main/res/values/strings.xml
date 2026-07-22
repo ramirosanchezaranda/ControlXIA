@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ControlXIA</string>
+    <string name="notif_channel_service">Servicio de escucha</string>
+    <string name="notif_listening_title">Xia está escuchando</string>
+    <string name="notif_listening_text">Decí \"Xia\" para dar una orden</string>
+    <string name="notif_action_test">Probar voz</string>
+    <string name="notif_action_stop">Apagar</string>
+</resources>

@@ -81,11 +81,21 @@ Debe correr 24/7 on-device con consumo mínimo de batería.
 
 El LLM recibe el texto transcripto y decide **qué acción ejecutar** usando **tool use / function calling**. No genera código: elige entre un catálogo de herramientas definidas.
 
-**Modelo recomendado: API de Claude (Anthropic)**
-- `claude-haiku-4-5` para el ruteo de intenciones: rápido (~1s), barato, más que suficiente para elegir tools
-- Escalar a un modelo mayor solo para pedidos conversacionales complejos (patrón "router": Haiku decide si resuelve solo o delega)
+**Arquitectura multi-LLM configurable.** La app no se casa con un proveedor: el usuario elige en Ajustes el proveedor, carga su propia API key y selecciona el modelo. Todo el resto de la app habla con una interfaz común (`LlmProvider`), así cambiar de proveedor es un toggle, no un refactor.
 
-**Alternativa/complemento offline:** Gemini Nano (AICore, solo Pixel/gama alta) o un modelo pequeño local con llama.cpp para comandos básicos sin internet. Fase 3.
+| Proveedor | API | Modelos sugeridos |
+|---|---|---|
+| **Anthropic (Claude)** | Messages API + tool use | `claude-haiku-4-5` (recomendado para ruteo: rápido y barato), `claude-sonnet-5` |
+| **OpenAI (GPT)** | Chat Completions + function calling | `gpt-4o-mini`, `gpt-4o` |
+| **Google (Gemini)** | generateContent + function declarations | `gemini-2.0-flash` |
+| **OpenAI-compatible genérico** | Chat Completions con base URL configurable | Cubre Groq, OpenRouter, Mistral, **Ollama en red local** (offline), etc. |
+
+- Las API keys se guardan **cifradas en el dispositivo** (`EncryptedSharedPreferences`), una por proveedor
+- El modelo se elige de una lista sugerida o se escribe a mano (para IDs nuevos sin actualizar la app)
+- Botón "Probar conexión" en Ajustes que valida key + modelo con un request mínimo
+- Patrón "router" (fase 2+): un modelo chico rutea intenciones y delega en uno grande solo para pedidos conversacionales complejos
+
+**Alternativa/complemento offline:** vía el proveedor OpenAI-compatible apuntando a Ollama en la red local, o Gemini Nano (AICore, solo Pixel/gama alta). Fase 3.
 
 **Cómo funciona el tool use** — se le declaran herramientas al LLM y él devuelve un JSON con la llamada:
 
@@ -176,7 +186,46 @@ Esta es la parte más delicada. Android protege cada capacidad con un mecanismo 
 
 Un wizard paso a paso, pidiendo cada permiso **en contexto y de a uno**, con explicación de para qué sirve y botón que abre directo la pantalla de Ajustes correspondiente. Pantalla de estado tipo checklist (verde/rojo) para ver qué capacidades están activas. La app debe **degradar con gracia**: si no dieron acceso a notificaciones, todo lo demás sigue funcionando.
 
-### 5.4 Limitaciones que hay que conocer desde el día 1
+### 5.4 Confiabilidad: pantalla bloqueada, Doze y fabricantes
+
+El requisito más crítico: que "Xia" responda **aunque el teléfono lleve horas bloqueado**. Android hace todo lo posible por matar apps en segundo plano, así que la confiabilidad se construye en capas:
+
+**a) Foreground Service de micrófono (la base)**
+- El servicio de escucha corre como Foreground Service con `foregroundServiceType="microphone"` y notificación persistente. Es la única categoría a la que Android le permite usar el micrófono de forma continua.
+- Android 14+ exige además el permiso `FOREGROUND_SERVICE_MICROPHONE` declarado en el manifest.
+- `START_STICKY`: si el sistema mata el proceso, lo re-crea cuando hay recursos.
+
+**b) Restricción clave de Android 11+**
+Un servicio **iniciado desde background no puede acceder al micrófono**, aunque sea foreground service. El servicio debe arrancarse desde la app visible (el switch en la UI) o desde exenciones permitidas como `BOOT_COMPLETED`. El flujo correcto: el usuario lo enciende una vez desde la app → sobrevive bloqueos → tras un reboot lo relanza el `BootReceiver`.
+
+**c) Doze y ahorro de batería**
+- Pedir exención de optimización de batería (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) en el onboarding — sin esto, Doze frena el servicio tras ~1h de pantalla apagada.
+- Wake lock parcial **solo mientras se procesa un comando** (no permanente): detectar wake word → adquirir → ejecutar → soltar.
+
+**d) OEM killers (la causa #1 de "dejó de escuchar")**
+Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de apps por encima de Android. La app detecta el fabricante y guía al usuario a la pantalla exacta:
+- **Xiaomi:** activar "Inicio automático" + batería "Sin restricciones"
+- **Samsung:** sacar la app de "Apps en suspensión" / desactivar "Suspensión profunda"
+- **Huawei:** "Gestión manual" en Inicio de aplicaciones
+- **Oppo/Vivo:** permitir autoarranque y actividad en segundo plano
+- Referencia por fabricante: [dontkillmyapp.com](https://dontkillmyapp.com)
+
+**e) Watchdog de resurrección**
+- `AlarmManager` periódico (~15 min) verifica que el servicio esté vivo y lo relanza si murió (`WorkManager` como refuerzo opcional a futuro).
+- `BootReceiver` (`RECEIVE_BOOT_COMPLETED`) lo levanta tras cada reinicio del teléfono.
+
+**f) Responder con pantalla bloqueada**
+- La respuesta por **audio (TTS) funciona sin desbloquear** — no requiere nada especial.
+- Para mostrar UI sobre el bloqueo: activity con `setShowWhenLocked()` + `setTurnScreenOn()`.
+- Política de privacidad configurable: acciones sensibles (leer mensajes en voz alta) pueden limitarse a "solo con el teléfono desbloqueado".
+
+**Checklist de prueba manual en dispositivo real:**
+1. Encender el servicio → bloquear el teléfono 1+ hora → disparar la acción de prueba desde la notificación → debe responder por voz
+2. Reiniciar el teléfono → el servicio debe volver solo (sin abrir la app)
+3. Activar ahorro de batería del sistema → repetir la prueba 1
+4. En Xiaomi/Samsung: repetir la prueba 1 sin las exenciones OEM (debe fallar) y con ellas (debe funcionar) — valida el wizard
+
+### 5.5 Limitaciones que hay que conocer desde el día 1
 
 - **WhatsApp no tiene API pública** para apps de terceros. Opciones reales:
   - *Semiautomático:* intent `wa.me` que deja el chat abierto con el texto listo — el usuario solo toca "enviar". Simple y robusto. ✅ MVP
@@ -188,6 +237,8 @@ Un wizard paso a paso, pidiendo cada permiso **en contexto y de a uno**, con exp
 ---
 
 ## 6. Roadmap por fases
+
+> **Estado:** la base de la Fase 0 ya está en el repo — servicio persistente confiable (bloqueado/Doze/OEMs, §5.4) y capa multi-LLM configurable con pantalla de ajustes (§3③). Falta el pipeline de voz.
 
 ### Fase 0 — Esqueleto (1-2 semanas)
 - Proyecto Android en Kotlin + Compose
