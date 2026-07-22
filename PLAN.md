@@ -241,14 +241,17 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 
 > **Estado:** la base de la Fase 0 ya está en el repo — servicio persistente confiable (bloqueado/Doze/OEMs, §5.4), capa multi-LLM configurable (§3③), onboarding guiado de permisos, dashboard de control y canal de **feedback analizado por el propio LLM** (clasifica cada comentario en [BUG]/[IDEA]/[MEJORA] y lo guarda como insumo del roadmap).
 >
-> **Wake word (Fase 1) — parcialmente hecho:** detección on-device con **Porcupine** (motor abstraído en `voice/WakeWordEngine`, config cifrada con AccessKey + palabra de fábrica + sensibilidad). Al detectar: confirmación con vibración + TTS y **transcripción del comando** con `SpeechRecognizer` (es-AR), que se guarda y muestra en "Actividad reciente" del dashboard. Falta: cablear esa transcripción al LLM (tool use) → ejecutar la acción, y entrenar el `.ppn` custom de "Xia".
+> **Cadena de voz completa — hecho:** wake word on-device con **Porcupine** → confirmación (vibración + TTS) → **transcripción** con `SpeechRecognizer` (es-AR) → **cerebro** (`brain/CommandProcessor`): manda el texto al LLM configurado con el catálogo de tools, **ejecuta la acción** que el modelo elige y **responde en voz alta**. Memoria conversacional corta (`ConversationMemory`) para pedidos encadenados.
+>
+> **Tools que ya se ejecutan:** `get_time`, `get_date`, `open_app` (abre apps por nombre), `set_alarm`, `set_timer` (alarmas/timers con `SKIP_UI`, sin abrir el reloj). Abrir apps con la pantalla bloqueada requiere el permiso "Mostrar sobre otras apps" (fila nueva en el checklist del dashboard).
+>
+> **Falta:** tools de mensajería (SMS/WhatsApp/llamadas) que necesitan más permisos, y entrenar el `.ppn` custom de "Xia".
 
-### Fase 0 — Esqueleto (1-2 semanas)
+### Fase 0 — Esqueleto (1-2 semanas) ✅
 - Proyecto Android en Kotlin + Compose
 - Foreground Service persistente con micrófono
-- Botón "mantener para hablar" (sin wake word todavía)
-- Pipeline: `SpeechRecognizer` → API de Claude con 3 tools (`get_time`, `open_app`, `answer_question`) → TTS nativo
-- **Meta: "abrí Instagram" y "decime la hora" funcionando end-to-end**
+- Pipeline: `SpeechRecognizer` → LLM configurable con tools → TTS nativo
+- **Meta cumplida: "abrí Instagram" y "decime la hora" funcionando end-to-end**
 
 ### Fase 1 — MVP asistente (3-4 semanas)
 - ✅ Wake word con Porcupine (palabra de fábrica; "Xia" custom pendiente) + transcripción del comando con `SpeechRecognizer`

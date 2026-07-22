@@ -11,8 +11,9 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **UI minimalista editorial**: onboarding guiado que pide los permisos de a uno con contexto, dashboard con estado en vivo del sistema, y tema propio (papel/tinta/acento azul, etiquetas monospace).
 - ✅ **Transiciones estilo GSAP**: curva `expo.out` centralizada en `ui/theme/Motion.kt`; cambios de pantalla/paso con `AnimatedContent` (fade + rise) y reveal escalonado de las secciones del dashboard (`Modifier.staggerReveal`).
 - ✅ **Feedback con el propio LLM**: pantalla donde el usuario cuenta qué falló o qué quiere; el LLM configurado lo analiza, responde y lo clasifica ([BUG]/[IDEA]/[MEJORA]); historial local como insumo del roadmap.
-- ✅ **Wake word real (on-device)**: detección con Picovoice Porcupine (`voice/`), config cifrada (AccessKey + palabra de fábrica + sensibilidad). Al detectar: vibración + TTS "Te escucho" + **transcripción del comando** con `SpeechRecognizer` (es-AR), visible en "Actividad reciente". Funciona con pantalla bloqueada.
-- ⏳ Próximo: cablear la transcripción → LLM (tool use) → ejecutar la acción; entrenar el `.ppn` custom de "Xia".
+- ✅ **Wake word real (on-device)**: detección con Picovoice Porcupine (`voice/`), config cifrada (AccessKey + palabra de fábrica + sensibilidad). Al detectar: vibración + TTS "Te escucho". Funciona con pantalla bloqueada.
+- ✅ **Cadena de voz completa → acciones reales**: transcripción → `brain/CommandProcessor` (LLM configurado + catálogo de tools) → ejecuta la acción → responde en voz alta. Tools que ya andan: `get_time`, `get_date`, `open_app`, `set_alarm`, `set_timer`. Memoria conversacional corta. "Actividad reciente" muestra el comando y la respuesta.
+- ⏳ Próximo: tools de mensajería (SMS/WhatsApp/llamadas) con sus permisos; entrenar el `.ppn` custom de "Xia".
 
 ## Compilar
 
@@ -59,9 +60,10 @@ Probá (mejor con pantalla bloqueada): decí la palabra → sentís la vibració
 
 ```
 app/src/main/java/com/controlxia/app/
-├── service/       # WakeWordService (orquesta wake word → confirmación → ASR), BootReceiver, Watchdog
-├── permissions/   # PermissionManager (incl. ajustes por fabricante)
-├── brain/         # Capa multi-LLM (providers, settings cifrados)
+├── service/       # WakeWordService (orquesta wake word → ASR → cerebro → TTS), BootReceiver, Watchdog
+├── permissions/   # PermissionManager (fabricante + overlay para abrir apps bloqueado)
+├── brain/         # Multi-LLM + CommandProcessor, ToolRegistry, ConversationMemory
+├── actions/       # AppLauncher (abrir apps por nombre), AlarmActions (alarmas/timers)
 ├── voice/         # WakeWordEngine/Porcupine, SpeechToText/Android, settings cifrados, RecentCommandsStore
 ├── feedback/      # FeedbackStore (historial local analizado por el LLM)
 └── ui/            # Onboarding, Dashboard, LlmSettings, Feedback, WakeWordSettings

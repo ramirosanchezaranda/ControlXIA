@@ -38,6 +38,7 @@ import com.controlxia.app.ui.components.StatusRow
 import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.components.TechPanel
 import com.controlxia.app.ui.components.rememberResumeTick
+import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
 import com.controlxia.app.ui.theme.staggerReveal
 import com.controlxia.app.voice.RecentCommandsStore
@@ -67,6 +68,7 @@ fun DashboardScreen(
     val micOk = remember(tick, bump) { PermissionManager.hasRecordAudio(context) }
     val notifOk = remember(tick, bump) { PermissionManager.hasPostNotifications(context) }
     val batteryOk = remember(tick, bump) { PermissionManager.isIgnoringBatteryOptimizations(context) }
+    val overlayOk = remember(tick, bump) { PermissionManager.canDrawOverlays(context) }
     val oemNeeded = remember { PermissionManager.needsOemSetup() }
     val llmConfigured = remember(tick, bump) { LlmSettings(context).activeConfig() != null }
     val llmSummary = remember(tick, bump) {
@@ -197,6 +199,21 @@ fun DashboardScreen(
                             }
                         },
                     )
+                    Hairline()
+                    StatusRow(
+                        label = "Abrir apps bloqueado",
+                        ok = if (overlayOk) true else null,
+                        actionLabel = "Permitir",
+                        onAction = {
+                            runCatching {
+                                context.startActivity(
+                                    PermissionManager.overlayPermissionIntent(context)
+                                )
+                            }.onFailure {
+                                context.startActivity(PermissionManager.appDetailsIntent(context))
+                            }
+                        },
+                    )
                     if (oemNeeded) {
                         Hairline()
                         StatusRow(
@@ -263,6 +280,14 @@ fun DashboardScreen(
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text("“${cmd.text}”", style = MaterialTheme.typography.bodyMedium)
+                                cmd.reply?.let { reply ->
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "→ $reply",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Accent,
+                                    )
+                                }
                             }
                         }
                     }

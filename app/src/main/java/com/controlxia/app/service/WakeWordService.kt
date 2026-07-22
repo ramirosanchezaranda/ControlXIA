@@ -21,6 +21,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
+import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.ui.MainActivity
 import com.controlxia.app.voice.AndroidSpeechToText
@@ -29,6 +30,11 @@ import com.controlxia.app.voice.RecentCommandsStore
 import com.controlxia.app.voice.SpeechToText
 import com.controlxia.app.voice.WakeWordEngine
 import com.controlxia.app.voice.WakeWordSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -51,12 +57,14 @@ import java.util.Locale
 class WakeWordService : Service() {
 
     private val main = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
 
     private var wakeEngine: WakeWordEngine? = null
     private var stt: SpeechToText? = null
+    private var commandProcessor: CommandProcessor? = null
     private var listeningCommand = false
     private var notifText: String = ""
 
@@ -204,10 +212,7 @@ class WakeWordService : Service() {
                 RecentCommandsStore(applicationContext).add(text)
                 lastCommand = text
                 updateNotification("Escuché: “$text”")
-                if (ttsReady) {
-                    tts?.speak("Escuché: $text", TextToSpeech.QUEUE_FLUSH, null, "heard")
-                }
-                resumeListening()
+                processAndRespond(text)
             },
             onError = { message ->
                 updateNotification(getString(R.string.notif_listening_text))
@@ -215,6 +220,26 @@ class WakeWordService : Service() {
                 resumeListening()
             },
         )
+    }
+
+    /**
+     * Manda la transcripción al cerebro (LLM + tools), dice la respuesta en voz
+     * alta y reanuda la escucha del wake word. Todo el trabajo de red ocurre en
+     * la corrutina; la ejecución de acciones y el TTS vuelven al main thread.
+     */
+    private fun processAndRespond(command: String) {
+        val processor = commandProcessor
+            ?: CommandProcessor(applicationContext).also { commandProcessor = it }
+        scope.launch {
+            val reply = processor.process(command)
+            lastReply = reply
+            RecentCommandsStore(applicationContext).addReply(reply)
+            updateNotification(reply)
+            if (ttsReady) {
+                tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "reply")
+            }
+            resumeListening()
+        }
     }
 
     private fun resumeListening() {
@@ -290,6 +315,7 @@ class WakeWordService : Service() {
         running = false
         wakeWordActive = false
         releaseVoice()
+        scope.cancel()
         tts?.shutdown()
         tts = null
         super.onDestroy()
@@ -320,6 +346,11 @@ class WakeWordService : Service() {
         /** Última transcripción escuchada (para feedback inmediato en la UI). */
         @Volatile
         var lastCommand: String? = null
+            private set
+
+        /** Última respuesta hablada de Xia (para mostrar en la UI). */
+        @Volatile
+        var lastReply: String? = null
             private set
 
         fun start(context: Context) {

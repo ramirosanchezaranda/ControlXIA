@@ -5,17 +5,17 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** Una transcripción escuchada tras el wake word. */
+/** Una transcripción escuchada tras el wake word y la respuesta de Xia. */
 @Serializable
 data class RecentCommand(
     val at: Long,
     val text: String,
+    val reply: String? = null,
 )
 
 /**
- * Guarda las últimas transcripciones para mostrarlas en el dashboard. Todavía
- * no se ejecuta ninguna acción: por ahora es el registro visible de lo que Xia
- * entendió. Mantiene solo las [MAX] más recientes.
+ * Guarda los últimos comandos (lo que Xia escuchó + lo que respondió/ejecutó)
+ * para mostrarlos en el dashboard. Mantiene solo los [MAX] más recientes.
  */
 class RecentCommandsStore(context: Context) {
 
@@ -28,10 +28,22 @@ class RecentCommandsStore(context: Context) {
             ?.let { raw -> runCatching { json.decodeFromString<List<RecentCommand>>(raw) }.getOrNull() }
             ?: emptyList()
 
+    /** Registra un comando escuchado (sin respuesta todavía). */
     fun add(text: String) {
-        val updated = (all() + RecentCommand(System.currentTimeMillis(), text))
-            .takeLast(MAX)
-        prefs.edit().putString(KEY, json.encodeToString(updated)).apply()
+        val updated = (all() + RecentCommand(System.currentTimeMillis(), text)).takeLast(MAX)
+        save(updated)
+    }
+
+    /** Completa la respuesta de Xia sobre el último comando registrado. */
+    fun addReply(reply: String) {
+        val current = all().toMutableList()
+        val last = current.lastOrNull() ?: return
+        current[current.lastIndex] = last.copy(reply = reply)
+        save(current)
+    }
+
+    private fun save(list: List<RecentCommand>) {
+        prefs.edit().putString(KEY, json.encodeToString(list)).apply()
     }
 
     private companion object {

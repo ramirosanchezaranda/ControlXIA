@@ -45,6 +45,21 @@ object PermissionManager {
             Uri.parse("package:${context.packageName}")
         )
 
+    /**
+     * "Mostrar sobre otras apps". Habilita abrir apps y lanzar acciones con UI
+     * desde el servicio en segundo plano / pantalla bloqueada (background
+     * activity start). Opcional: sin esto, abrir apps solo anda con la app en
+     * primer plano; las alarmas/temporizadores igual funcionan (usan SKIP_UI).
+     */
+    fun canDrawOverlays(context: Context): Boolean =
+        Settings.canDrawOverlays(context)
+
+    fun overlayPermissionIntent(context: Context): Intent =
+        Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}")
+        )
+
     // ---------------------------------------------------------------------
     // OEM killers: Xiaomi, Samsung, Huawei, etc. agregan sus propios ajustes
     // de autoarranque/batería por encima de Android. No hay API para saber si

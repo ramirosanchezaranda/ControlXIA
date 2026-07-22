@@ -11,12 +11,21 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Permite abrir apps / disparar acciones con la pantalla bloqueada o en
+         segundo plano (background activity start). Opcional: sin esto, abrir
+         apps solo funciona con ControlXIA en primer plano. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <!-- Android 11+: declarar que consultamos el servicio de reconocimiento de
-         voz para que SpeechRecognizer pueda encontrarlo. -->
+    <!-- Android 11+: declarar las consultas de paquetes que hacemos. -->
     <queries>
+        <!-- Servicio de reconocimiento de voz (SpeechRecognizer). -->
         <intent>
             <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <!-- Apps con ícono de lanzador, para resolver "abrí <app>" por nombre. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
 
