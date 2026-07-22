@@ -29,7 +29,7 @@ La clave que la diferencia de Google Assistant: el **LLM interpreta pedidos ambi
 | Flutter / React Native | ⚠️ No conviene | Todo lo importante (AccessibilityService, NotificationListener, wake word) requiere código nativo igual; el framework solo suma fricción |
 
 - **Lenguaje:** Kotlin
-- **UI:** Jetpack Compose (la UI es mínima: onboarding de permisos, configuración, historial)
+- **UI:** Jetpack Compose. Lenguaje visual editorial/técnico: fondo papel, tinta casi negra, un acento azul "blueprint", etiquetas monospace en mayúsculas con tracking (`[ SISTEMA ]`), líneas de 1dp y esquinas casi rectas. Tres superficies: **onboarding** guiado (presenta la app y pide los permisos de a uno antes de habilitar nada), **dashboard** (estado del servicio + checklist del sistema + cerebro + feedback) y **ajustes del LLM**
 - **Mínimo SDK:** API 26 (Android 8.0) — cubre ~95% de dispositivos; ideal API 29+ para mejores APIs de voz
 
 ---
@@ -238,7 +238,7 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 
 ## 6. Roadmap por fases
 
-> **Estado:** la base de la Fase 0 ya está en el repo — servicio persistente confiable (bloqueado/Doze/OEMs, §5.4) y capa multi-LLM configurable con pantalla de ajustes (§3③). Falta el pipeline de voz.
+> **Estado:** la base de la Fase 0 ya está en el repo — servicio persistente confiable (bloqueado/Doze/OEMs, §5.4), capa multi-LLM configurable (§3③), onboarding guiado de permisos, dashboard de control y canal de **feedback analizado por el propio LLM** (clasifica cada comentario en [BUG]/[IDEA]/[MEJORA] y lo guarda como insumo del roadmap). Falta el pipeline de voz.
 
 ### Fase 0 — Esqueleto (1-2 semanas)
 - Proyecto Android en Kotlin + Compose

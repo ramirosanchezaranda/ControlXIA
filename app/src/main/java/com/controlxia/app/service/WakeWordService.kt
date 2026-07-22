@@ -171,5 +171,13 @@ class WakeWordService : Service() {
                 Intent(context, WakeWordService::class.java).setAction(ACTION_STOP)
             )
         }
+
+        /** Dispara la prueba de voz ("son las HH:mm") sobre el servicio activo. */
+        fun speakTime(context: Context) {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, WakeWordService::class.java).setAction(ACTION_SPEAK_TIME)
+            )
+        }
     }
 }
