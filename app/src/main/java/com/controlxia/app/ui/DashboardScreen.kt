@@ -40,6 +40,8 @@ import com.controlxia.app.ui.components.TechPanel
 import com.controlxia.app.ui.components.rememberResumeTick
 import com.controlxia.app.ui.theme.Muted
 import com.controlxia.app.ui.theme.staggerReveal
+import com.controlxia.app.voice.RecentCommandsStore
+import com.controlxia.app.voice.WakeWordSettings
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -53,6 +55,7 @@ import java.util.Locale
 fun DashboardScreen(
     onOpenLlm: () -> Unit,
     onOpenFeedback: () -> Unit,
+    onOpenWakeWord: () -> Unit,
 ) {
     val context = LocalContext.current
     val tick = rememberResumeTick()
@@ -70,6 +73,10 @@ fun DashboardScreen(
         val settings = LlmSettings(context)
         "${settings.activeProvider.displayName} · ${settings.model(settings.activeProvider).ifBlank { "sin modelo" }}"
     }
+    val wakeReady = remember(tick, bump) { WakeWordSettings(context).isReady() }
+    val wakeActive = WakeWordService.wakeWordActive
+    val wakeStatus = WakeWordService.wakeWordStatus
+    val recentCommands = remember(tick, bump) { RecentCommandsStore(context).all() }
 
     var serviceOn by remember(tick, bump) {
         mutableStateOf(ServicePrefs.isEnabled(context) || WakeWordService.running)
@@ -210,8 +217,60 @@ fun DashboardScreen(
                 }
             }
 
-            // Cerebro
+            // Wake word (palabra de activación)
             Column(Modifier.staggerReveal(2)) {
+                SectionLabel("Palabra de activación")
+                Spacer(Modifier.height(12.dp))
+                TechPanel {
+                    StatusRow(
+                        label = when {
+                            wakeActive -> wakeStatus ?: "Escuchando"
+                            wakeReady -> "Configurado — se activa con la escucha"
+                            else -> "Falta el AccessKey de Picovoice"
+                        },
+                        ok = if (wakeActive) true else if (wakeReady) null else false,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TechButton(
+                        text = if (wakeReady) "Ajustar" else "Configurar",
+                        filled = false,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenWakeWord,
+                    )
+                }
+            }
+
+            // Actividad reciente (transcripciones tras el wake word)
+            Column(Modifier.staggerReveal(3)) {
+                SectionLabel("Actividad reciente")
+                Spacer(Modifier.height(12.dp))
+                TechPanel {
+                    if (recentCommands.isEmpty()) {
+                        Text(
+                            "Todavía no escuché ningún comando. Encendé la escucha, " +
+                                "decí la palabra de activación y hablá.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Muted,
+                        )
+                    } else {
+                        recentCommands.asReversed().forEachIndexed { i, cmd ->
+                            if (i > 0) Hairline()
+                            Column(Modifier.padding(vertical = 10.dp)) {
+                                Text(
+                                    formatClock(cmd.at),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Muted,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text("“${cmd.text}”", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Cerebro
+            Column(Modifier.staggerReveal(4)) {
                 SectionLabel("Cerebro / LLM")
                 Spacer(Modifier.height(12.dp))
                 TechPanel {
@@ -227,7 +286,7 @@ fun DashboardScreen(
             }
 
             // Feedback
-            Column(Modifier.staggerReveal(3)) {
+            Column(Modifier.staggerReveal(5)) {
                 SectionLabel("Feedback")
                 Spacer(Modifier.height(12.dp))
                 TechPanel {
@@ -253,3 +312,6 @@ fun DashboardScreen(
 
 private fun currentTime(): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+
+private fun formatClock(timestamp: Long): String =
+    SimpleDateFormat("dd.MM  HH:mm", Locale.getDefault()).format(Date(timestamp))

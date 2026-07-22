@@ -239,7 +239,9 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 
 ## 6. Roadmap por fases
 
-> **Estado:** la base de la Fase 0 ya está en el repo — servicio persistente confiable (bloqueado/Doze/OEMs, §5.4), capa multi-LLM configurable (§3③), onboarding guiado de permisos, dashboard de control y canal de **feedback analizado por el propio LLM** (clasifica cada comentario en [BUG]/[IDEA]/[MEJORA] y lo guarda como insumo del roadmap). Falta el pipeline de voz.
+> **Estado:** la base de la Fase 0 ya está en el repo — servicio persistente confiable (bloqueado/Doze/OEMs, §5.4), capa multi-LLM configurable (§3③), onboarding guiado de permisos, dashboard de control y canal de **feedback analizado por el propio LLM** (clasifica cada comentario en [BUG]/[IDEA]/[MEJORA] y lo guarda como insumo del roadmap).
+>
+> **Wake word (Fase 1) — parcialmente hecho:** detección on-device con **Porcupine** (motor abstraído en `voice/WakeWordEngine`, config cifrada con AccessKey + palabra de fábrica + sensibilidad). Al detectar: confirmación con vibración + TTS y **transcripción del comando** con `SpeechRecognizer` (es-AR), que se guarda y muestra en "Actividad reciente" del dashboard. Falta: cablear esa transcripción al LLM (tool use) → ejecutar la acción, y entrenar el `.ppn` custom de "Xia".
 
 ### Fase 0 — Esqueleto (1-2 semanas)
 - Proyecto Android en Kotlin + Compose
@@ -249,7 +251,7 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 - **Meta: "abrí Instagram" y "decime la hora" funcionando end-to-end**
 
 ### Fase 1 — MVP asistente (3-4 semanas)
-- Wake word con Porcupine ("Xia, …")
+- ✅ Wake word con Porcupine (palabra de fábrica; "Xia" custom pendiente) + transcripción del comando con `SpeechRecognizer`
 - Tools: `send_sms`, `read_messages` (SMS), `make_call`, `set_alarm`, `set_timer`
 - Aliases de contactos ("mi pareja") en onboarding
 - Wizard de permisos completo

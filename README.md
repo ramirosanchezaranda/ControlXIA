@@ -11,7 +11,8 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **UI minimalista editorial**: onboarding guiado que pide los permisos de a uno con contexto, dashboard con estado en vivo del sistema, y tema propio (papel/tinta/acento azul, etiquetas monospace).
 - ✅ **Transiciones estilo GSAP**: curva `expo.out` centralizada en `ui/theme/Motion.kt`; cambios de pantalla/paso con `AnimatedContent` (fade + rise) y reveal escalonado de las secciones del dashboard (`Modifier.staggerReveal`).
 - ✅ **Feedback con el propio LLM**: pantalla donde el usuario cuenta qué falló o qué quiere; el LLM configurado lo analiza, responde y lo clasifica ([BUG]/[IDEA]/[MEJORA]); historial local como insumo del roadmap.
-- ⏳ Próximo: wake word real ("Xia") con Porcupine y pipeline voz → LLM → acciones.
+- ✅ **Wake word real (on-device)**: detección con Picovoice Porcupine (`voice/`), config cifrada (AccessKey + palabra de fábrica + sensibilidad). Al detectar: vibración + TTS "Te escucho" + **transcripción del comando** con `SpeechRecognizer` (es-AR), visible en "Actividad reciente". Funciona con pantalla bloqueada.
+- ⏳ Próximo: cablear la transcripción → LLM (tool use) → ejecutar la acción; entrenar el `.ppn` custom de "Xia".
 
 ## Compilar
 
@@ -43,15 +44,27 @@ En la app: ⚙️ → elegir proveedor → pegar API key → elegir modelo → *
 | Google Gemini | https://aistudio.google.com |
 | Groq / OpenRouter / Ollama | Su consola, con la base URL del servicio |
 
+## Configurar la palabra de activación
+
+En la app: panel → **Palabra de activación**. Necesitás un AccessKey gratuito de Picovoice:
+
+1. Creá una cuenta en https://console.picovoice.ai (gratis para uso personal).
+2. Copiá el **AccessKey** y pegalo en la app (se guarda cifrado).
+3. Elegí una palabra de fábrica (Jarvis / Computer / Bumblebee / Picovoice) y la sensibilidad.
+4. Encendé la escucha en el panel.
+
+Probá (mejor con pantalla bloqueada): decí la palabra → sentís la vibración y "Te escucho" → decí un comando → la transcripción aparece en **Actividad reciente**. El wake word "Xia" propio requiere entrenar un `.ppn` en la consola de Picovoice (paso siguiente).
+
 ## Estructura
 
 ```
 app/src/main/java/com/controlxia/app/
-├── service/       # WakeWordService, BootReceiver, WatchdogReceiver
+├── service/       # WakeWordService (orquesta wake word → confirmación → ASR), BootReceiver, Watchdog
 ├── permissions/   # PermissionManager (incl. ajustes por fabricante)
 ├── brain/         # Capa multi-LLM (providers, settings cifrados)
+├── voice/         # WakeWordEngine/Porcupine, SpeechToText/Android, settings cifrados, RecentCommandsStore
 ├── feedback/      # FeedbackStore (historial local analizado por el LLM)
-└── ui/            # Onboarding, Dashboard, LlmSettings, Feedback
+└── ui/            # Onboarding, Dashboard, LlmSettings, Feedback, WakeWordSettings
     ├── theme/     # XiaTheme (papel/tinta/acento, tipografía mono) + Motion (expo.out)
     └── components/# TechButton, TechPanel, StatusRow, hairlines…
 ```

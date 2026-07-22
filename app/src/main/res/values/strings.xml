@@ -6,4 +6,5 @@
     <string name="notif_listening_text">Decí \"Xia\" para dar una orden</string>
     <string name="notif_action_test">Probar voz</string>
     <string name="notif_action_stop">Apagar</string>
+    <string name="picovoice_console_url">https://console.picovoice.ai</string>
 </resources>
