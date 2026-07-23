@@ -3,6 +3,10 @@ name: Android Build
 # Compila el APK debug en cada push. Sirve para dos cosas:
 #  1. Verificar que la parte Android compila de verdad (acá no hay SDK de Google).
 #  2. Dejar un APK descargable como artefacto, sin depender de una máquina local.
+#
+# Usa solo acciones propias de GitHub (checkout / setup-java / upload-artifact)
+# y el Android SDK que ya viene preinstalado en el runner ubuntu-latest, para
+# no depender de acciones de terceros que el repo podría tener restringidas.
 on:
   push:
   workflow_dispatch:
@@ -20,11 +24,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - name: Install Android SDK packages
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "Usando Android SDK en: $SDK"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Build debug APK
         run: |
