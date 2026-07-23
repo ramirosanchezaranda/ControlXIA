@@ -1,0 +1,14 @@
+name: CI Smoke Test
+
+# Diagnóstico mínimo: un solo step que imprime texto, sin acciones ni build.
+# Si este workflow también falla en el arranque, el problema es de la
+# configuración de Actions de la cuenta/repo, no del build de Android.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "hello from CI — el runner arranca correctamente"
