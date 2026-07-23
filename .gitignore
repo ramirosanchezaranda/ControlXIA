@@ -9,3 +9,7 @@ captures/
 .cxx/
 *.apk
 *.aab
+# Firma release — nunca commitear claves
+keystore.properties
+*.jks
+*.keystore

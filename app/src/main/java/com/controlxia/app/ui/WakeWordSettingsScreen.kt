@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,6 +34,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,14 +62,16 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { WakeWordSettings(context) }
 
+    var agentName by remember { mutableStateOf(settings.agentName) }
     var accessKey by remember { mutableStateOf(settings.accessKey) }
     var keyword by remember { mutableStateOf(settings.keyword) }
     var sensitivity by remember { mutableFloatStateOf(settings.sensitivity) }
+    var useCustom by remember { mutableStateOf(settings.useCustomKeyword) }
     var showKey by remember { mutableStateOf(false) }
     var keywordMenu by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        TechTopBar(title = "Palabra de activación", onBack = onBack)
+        TechTopBar(title = "Asistente y activación", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -75,11 +79,25 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            SectionLabel("Nombre del asistente")
+            OutlinedTextField(
+                value = agentName,
+                onValueChange = {
+                    agentName = it
+                    settings.agentName = it
+                },
+                label = { Text("Nombre") },
+                singleLine = true,
+                supportingText = {
+                    Text("Cómo se llama a sí mismo y cómo figura en el aviso de escucha")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             SectionLabel("Motor · Picovoice Porcupine")
             Text(
                 "El wake word corre 100% en el teléfono. Porcupine necesita un " +
-                    "AccessKey gratuito (uso personal). Por ahora se usa una palabra " +
-                    "de fábrica; entrenar “Xia” propio llega en un paso siguiente.",
+                    "AccessKey gratuito (uso personal).",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Muted,
             )
@@ -122,38 +140,71 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            ExposedDropdownMenuBox(
-                expanded = keywordMenu,
-                onExpandedChange = { keywordMenu = it }
+            // Wake word custom (modelo entrenado propio, ej. "Xia")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedTextField(
-                    value = keyword.label,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Palabra de activación") },
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = keywordMenu)
+                Column(Modifier.weight(1f)) {
+                    Text("Wake word custom", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Usar tu modelo entrenado (assets/xia.ppn). Ver la guía " +
+                            "CUSTOM_WAKE_WORD.md.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                }
+                Switch(
+                    checked = useCustom,
+                    onCheckedChange = {
+                        useCustom = it
+                        settings.useCustomKeyword = it
                     },
-                    supportingText = { Text("Decí esta palabra para despertar a Xia") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor()
                 )
-                ExposedDropdownMenu(
+            }
+
+            if (!useCustom) {
+                ExposedDropdownMenuBox(
                     expanded = keywordMenu,
-                    onDismissRequest = { keywordMenu = false }
+                    onExpandedChange = { keywordMenu = it }
                 ) {
-                    WakeKeyword.entries.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option.label) },
-                            onClick = {
-                                keyword = option
-                                settings.keyword = option
-                                keywordMenu = false
-                            }
-                        )
+                    OutlinedTextField(
+                        value = keyword.label,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Palabra de activación (de fábrica)") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = keywordMenu)
+                        },
+                        supportingText = { Text("Decí esta palabra para despertar al asistente") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = keywordMenu,
+                        onDismissRequest = { keywordMenu = false }
+                    ) {
+                        WakeKeyword.entries.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.label) },
+                                onClick = {
+                                    keyword = option
+                                    settings.keyword = option
+                                    keywordMenu = false
+                                }
+                            )
+                        }
                     }
                 }
+            } else {
+                Text(
+                    "Activá el wake word custom colocando xia.ppn y " +
+                        "porcupine_params_es.pv en app/src/main/assets/. Con eso, decí " +
+                        "“$agentName” para despertarlo.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
             }
 
             Column {

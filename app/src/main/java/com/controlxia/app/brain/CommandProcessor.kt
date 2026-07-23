@@ -1,6 +1,7 @@
 package com.controlxia.app.brain
 
 import android.content.Context
+import com.controlxia.app.voice.WakeWordSettings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -57,8 +58,9 @@ class CommandProcessor(context: Context) {
 
     private fun systemPrompt(): String {
         val now = SimpleDateFormat("EEEE d 'de' MMMM, HH:mm", Locale("es")).format(Date())
+        val name = WakeWordSettings(appContext).agentName
         return """
-            Sos Xia, un asistente de voz en un teléfono Android. El usuario te
+            Sos $name, un asistente de voz en un teléfono Android. El usuario te
             habla en español rioplatense y vos respondés para ser escuchado en
             voz alta: frases cortas, naturales, sin markdown ni emojis.
 

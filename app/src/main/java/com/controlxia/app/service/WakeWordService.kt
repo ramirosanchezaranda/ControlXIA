@@ -25,6 +25,7 @@ import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.ui.MainActivity
 import com.controlxia.app.voice.AndroidSpeechToText
+import com.controlxia.app.voice.ListeningOverlay
 import com.controlxia.app.voice.PorcupineWakeWordEngine
 import com.controlxia.app.voice.RecentCommandsStore
 import com.controlxia.app.voice.SpeechToText
@@ -66,11 +67,13 @@ class WakeWordService : Service() {
     private var wakeEngine: WakeWordEngine? = null
     private var stt: SpeechToText? = null
     private var commandProcessor: CommandProcessor? = null
+    private var overlay: ListeningOverlay? = null
     private var listeningCommand = false
     private var notifText: String = ""
 
     override fun onCreate() {
         super.onCreate()
+        overlay = ListeningOverlay(this)
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale("es", "AR")
@@ -124,9 +127,10 @@ class WakeWordService : Service() {
             Intent(this, WakeWordService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val agent = WakeWordSettings(this).agentName
         return NotificationCompat.Builder(this, XiaApplication.CHANNEL_SERVICE)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(getString(R.string.notif_listening_title))
+            .setContentTitle("$agent está escuchando")
             .setContentText(contentText)
             .setContentIntent(openApp)
             .setOngoing(true)
@@ -164,16 +168,20 @@ class WakeWordService : Service() {
             return
         }
         try {
+            val custom = settings.useCustomKeyword
             val engine = PorcupineWakeWordEngine(
                 context = applicationContext,
                 accessKey = settings.accessKey,
                 keyword = settings.keyword,
                 sensitivity = settings.sensitivity,
+                customKeywordAsset = if (custom) WakeWordSettings.CUSTOM_KEYWORD_ASSET else null,
+                customModelAsset = if (custom) WakeWordSettings.CUSTOM_MODEL_ASSET else null,
             )
             engine.start { onWakeWordDetected() }
             wakeEngine = engine
             wakeWordActive = true
-            wakeWordStatus = "Escuchando “${settings.keyword.label}”"
+            val heard = if (custom) settings.agentName else settings.keyword.label
+            wakeWordStatus = "Escuchando “$heard”"
             updateNotification(getString(R.string.notif_listening_text))
         } catch (e: Exception) {
             wakeEngine = null
@@ -194,6 +202,8 @@ class WakeWordService : Service() {
 
             acquireBriefWakeLock()
             vibrate()
+            // Overlay flotante "escuchando" sobre cualquier pantalla.
+            overlay?.show(WakeWordSettings(this).agentName, "Escuchando…")
             speakOut("Te escucho", "ack")
             wakeEngine?.stop() // liberar el micrófono para el ASR
 
@@ -206,11 +216,15 @@ class WakeWordService : Service() {
         val recognizer = stt ?: AndroidSpeechToText(applicationContext).also { stt = it }
         updateNotification("Escuchando tu comando…")
         recognizer.listen(
-            onPartial = { partial -> updateNotification("… $partial") },
+            onPartial = { partial ->
+                updateNotification("… $partial")
+                overlay?.updateStatus(partial)
+            },
             onResult = { text ->
                 RecentCommandsStore(applicationContext).add(text)
                 lastCommand = text
                 updateNotification("Escuché: “$text”")
+                overlay?.updateStatus("“$text”")
                 processAndRespond(text)
             },
             onError = { message ->
@@ -234,13 +248,16 @@ class WakeWordService : Service() {
             lastReply = reply
             RecentCommandsStore(applicationContext).addReply(reply)
             updateNotification(reply)
+            overlay?.updateStatus(reply)
             speakOut(reply, "reply")
-            resumeListening()
+            // Dejar la respuesta visible un instante antes de reanudar/ocultar.
+            main.postDelayed({ resumeListening() }, 1800L)
         }
     }
 
     private fun resumeListening() {
         listeningCommand = false
+        overlay?.hide()
         // Reanudar el wake word; si el engine se perdió, reconstruirlo.
         val engine = wakeEngine
         if (engine != null) {
@@ -310,6 +327,7 @@ class WakeWordService : Service() {
     private fun releaseVoice() {
         main.removeCallbacksAndMessages(null)
         listeningCommand = false
+        overlay?.hide()
         stt?.cancel()
         stt = null
         wakeEngine?.release()

@@ -245,7 +245,11 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 >
 > **Tools que ya se ejecutan:** `get_time`, `get_date`, `open_app` (abre apps por nombre), `set_alarm`, `set_timer` (alarmas/timers con `SKIP_UI`, sin abrir el reloj). Abrir apps con la pantalla bloqueada requiere el permiso "Mostrar sobre otras apps" (fila nueva en el checklist del dashboard).
 >
-> **Falta:** tools de mensajería (SMS/WhatsApp/llamadas) que necesitan más permisos, y entrenar el `.ppn` custom de "Xia".
+> **Identidad y presencia:** el **nombre del asistente es configurable** (se usa en el prompt, la notificación y el overlay). El wake word puede ser una palabra de fábrica o un **modelo custom entrenado** (guía en `docs/CUSTOM_WAKE_WORD.md`). Al activarse aparece un **overlay flotante "escuchando" sobre cualquier app** (estilo Google Assistant, `voice/ListeningOverlay`, requiere permiso de overlay).
+>
+> **Build/release:** `signingConfig` con keystore por archivo o env, y minify/shrink con reglas ProGuard (`app/proguard-rules.pro`).
+>
+> **Falta:** tools de mensajería (SMS/WhatsApp/llamadas) que necesitan más permisos; activación con botón home (rol de asistente digital); entrenar el `.ppn` custom de "Xia".
 
 ### Fase 0 — Esqueleto (1-2 semanas) ✅
 - Proyecto Android en Kotlin + Compose

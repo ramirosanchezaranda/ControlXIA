@@ -46,6 +46,19 @@ class WakeWordSettings(context: Context) {
         get() = prefs.getString(KEY_ACCESS, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_ACCESS, value).apply()
 
+    /** Cómo se llama el asistente: se dice a sí mismo y figura en el overlay. */
+    var agentName: String
+        get() = prefs.getString(KEY_AGENT, "Xia").orEmpty().ifBlank { "Xia" }
+        set(value) = prefs.edit().putString(KEY_AGENT, value.trim()).apply()
+
+    /**
+     * Usar un modelo de wake word custom (assets/xia.ppn + porcupine_params_es.pv)
+     * en vez de una palabra de fábrica. Ver docs/CUSTOM_WAKE_WORD.md.
+     */
+    var useCustomKeyword: Boolean
+        get() = prefs.getBoolean(KEY_CUSTOM, false)
+        set(value) = prefs.edit().putBoolean(KEY_CUSTOM, value).apply()
+
     var keyword: WakeKeyword
         get() = WakeKeyword.fromName(prefs.getString(KEY_KEYWORD, null))
         set(value) = prefs.edit().putString(KEY_KEYWORD, value.name).apply()
@@ -58,9 +71,15 @@ class WakeWordSettings(context: Context) {
     /** true cuando el motor tiene lo mínimo para arrancar (el AccessKey). */
     fun isReady(): Boolean = accessKey.isNotBlank()
 
-    private companion object {
-        const val KEY_ACCESS = "access_key"
-        const val KEY_KEYWORD = "keyword"
-        const val KEY_SENS = "sensitivity"
+    companion object {
+        private const val KEY_ACCESS = "access_key"
+        private const val KEY_KEYWORD = "keyword"
+        private const val KEY_SENS = "sensitivity"
+        private const val KEY_AGENT = "agent_name"
+        private const val KEY_CUSTOM = "use_custom_keyword"
+
+        /** Archivos que el usuario coloca en assets/ para el wake word custom. */
+        const val CUSTOM_KEYWORD_ASSET = "xia.ppn"
+        const val CUSTOM_MODEL_ASSET = "porcupine_params_es.pv"
     }
 }

@@ -13,8 +13,11 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Feedback con el propio LLM**: pantalla donde el usuario cuenta qué falló o qué quiere; el LLM configurado lo analiza, responde y lo clasifica ([BUG]/[IDEA]/[MEJORA]); historial local como insumo del roadmap.
 - ✅ **Wake word real (on-device)**: detección con Picovoice Porcupine (`voice/`), config cifrada (AccessKey + palabra de fábrica + sensibilidad). Al detectar: vibración + TTS "Te escucho". Funciona con pantalla bloqueada.
 - ✅ **Cadena de voz completa → acciones reales**: transcripción → `brain/CommandProcessor` (LLM configurado + catálogo de tools) → ejecuta la acción → responde en voz alta. Tools que ya andan: `get_time`, `get_date`, `open_app`, `set_alarm`, `set_timer`. Memoria conversacional corta. "Actividad reciente" muestra el comando y la respuesta.
-- ✅ **Voz configurable**: pantalla para elegir la voz del sistema (con género inferido), tono y velocidad, con presets Grave/Neutra/Aguda y "Probar" (`voice/VoiceSettings` + `ui/VoiceSettingsScreen`). Xia usa esa voz para todo lo que dice.
-- ⏳ Próximo: tools de mensajería (SMS/WhatsApp/llamadas) con sus permisos; entrenar el `.ppn` custom de "Xia".
+- ✅ **Voz configurable**: pantalla para elegir la voz del sistema (con género inferido), tono y velocidad, con presets Grave/Neutra/Aguda y "Probar" (`voice/VoiceSettings` + `ui/VoiceSettingsScreen`). El asistente usa esa voz para todo lo que dice.
+- ✅ **Nombre del asistente configurable**: se le puede cambiar el nombre (cómo se llama a sí mismo, la notificación y el overlay). Wake word por palabra de fábrica o modelo custom entrenado (ver `docs/CUSTOM_WAKE_WORD.md`).
+- ✅ **Overlay flotante de "escuchando"**: al activarse, muestra un indicador **sobre cualquier app** (estilo Google Assistant), con el nombre del asistente y lo que va entendiendo (`voice/ListeningOverlay`). Requiere el permiso "Mostrar sobre otras apps".
+- ✅ **Build release**: `signingConfig` (keystore por `keystore.properties`/env) + minify/shrink con reglas ProGuard (`app/proguard-rules.pro`).
+- ⏳ Próximo: tools de mensajería (SMS/WhatsApp/llamadas) con sus permisos; activación con botón home (rol de asistente).
 
 ## Compilar
 
@@ -65,7 +68,7 @@ app/src/main/java/com/controlxia/app/
 ├── permissions/   # PermissionManager (fabricante + overlay para abrir apps bloqueado)
 ├── brain/         # Multi-LLM + CommandProcessor, ToolRegistry, ConversationMemory
 ├── actions/       # AppLauncher (abrir apps por nombre), AlarmActions (alarmas/timers)
-├── voice/         # WakeWordEngine/Porcupine, SpeechToText/Android, settings cifrados, RecentCommandsStore
+├── voice/         # WakeWordEngine/Porcupine (+custom .ppn), SpeechToText, ListeningOverlay, VoiceSettings, settings, RecentCommandsStore
 ├── feedback/      # FeedbackStore (historial local analizado por el LLM)
 └── ui/            # Onboarding, Dashboard, LlmSettings, Feedback, WakeWordSettings, VoiceSettings
     ├── theme/     # XiaTheme (papel/tinta/acento, tipografía mono) + Motion (expo.out)

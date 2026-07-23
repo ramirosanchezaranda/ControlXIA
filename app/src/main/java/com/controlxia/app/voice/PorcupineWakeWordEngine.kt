@@ -5,17 +5,24 @@ import ai.picovoice.porcupine.PorcupineManager
 import ai.picovoice.porcupine.PorcupineManagerCallback
 
 /**
- * Motor de wake word basado en Picovoice Porcupine. Usa una palabra de fábrica
- * ([WakeKeyword]) y requiere un AccessKey gratuito de Picovoice.
+ * Motor de wake word basado en Picovoice Porcupine.
  *
- * `PorcupineManager` administra su propio `AudioRecord` en un hilo interno; el
- * callback de detección corre en ese hilo.
+ * Dos modos:
+ *  - **Fábrica**: una palabra incluida ([WakeKeyword], en inglés).
+ *  - **Custom**: un modelo `.ppn` propio (ej. "Xia") + el modelo de idioma
+ *    español, ambos en assets. Ver docs/CUSTOM_WAKE_WORD.md.
+ *
+ * En ambos casos se necesita un AccessKey gratuito de Picovoice.
+ * `PorcupineManager` administra su propio `AudioRecord`; el callback corre en
+ * el hilo del motor.
  */
 class PorcupineWakeWordEngine(
     private val context: Context,
     private val accessKey: String,
     private val keyword: WakeKeyword,
     private val sensitivity: Float,
+    private val customKeywordAsset: String? = null,
+    private val customModelAsset: String? = null,
 ) : WakeWordEngine {
 
     private var manager: PorcupineManager? = null
@@ -27,11 +34,17 @@ class PorcupineWakeWordEngine(
         try {
             if (manager == null) {
                 val callback = PorcupineManagerCallback { onDetected() }
-                manager = PorcupineManager.Builder()
+                val builder = PorcupineManager.Builder()
                     .setAccessKey(accessKey)
-                    .setKeyword(keyword.builtIn)
                     .setSensitivity(sensitivity.coerceIn(0f, 1f))
-                    .build(context, callback)
+                if (customKeywordAsset != null) {
+                    // Modelo entrenado propio (ej. "Xia") + modelo de idioma es.
+                    builder.setKeywordPath(customKeywordAsset)
+                    if (customModelAsset != null) builder.setModelPath(customModelAsset)
+                } else {
+                    builder.setKeyword(keyword.builtIn)
+                }
+                manager = builder.build(context, callback)
             }
             manager?.start()
         } catch (e: Exception) {
@@ -41,7 +54,6 @@ class PorcupineWakeWordEngine(
     }
 
     override fun stop() {
-        // stop() pausa la captura sin destruir el modelo, así reanudar es barato.
         runCatching { manager?.stop() }
     }
 
