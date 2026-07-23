@@ -28,6 +28,7 @@ import com.controlxia.app.voice.AndroidSpeechToText
 import com.controlxia.app.voice.PorcupineWakeWordEngine
 import com.controlxia.app.voice.RecentCommandsStore
 import com.controlxia.app.voice.SpeechToText
+import com.controlxia.app.voice.VoiceSettings
 import com.controlxia.app.voice.WakeWordEngine
 import com.controlxia.app.voice.WakeWordSettings
 import kotlinx.coroutines.CoroutineScope
@@ -193,9 +194,7 @@ class WakeWordService : Service() {
 
             acquireBriefWakeLock()
             vibrate()
-            if (ttsReady) {
-                tts?.speak("Te escucho", TextToSpeech.QUEUE_FLUSH, null, "ack")
-            }
+            speakOut("Te escucho", "ack")
             wakeEngine?.stop() // liberar el micrófono para el ASR
 
             // Pequeña espera para que el "Te escucho" no se transcriba a sí mismo.
@@ -235,9 +234,7 @@ class WakeWordService : Service() {
             lastReply = reply
             RecentCommandsStore(applicationContext).addReply(reply)
             updateNotification(reply)
-            if (ttsReady) {
-                tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "reply")
-            }
+            speakOut(reply, "reply")
             resumeListening()
         }
     }
@@ -267,7 +264,15 @@ class WakeWordService : Service() {
         if (!ttsReady) return
         acquireBriefWakeLock()
         val hora = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-        tts?.speak("Son las $hora", TextToSpeech.QUEUE_FLUSH, null, "speak_time")
+        speakOut("Son las $hora", "speak_time")
+    }
+
+    /** Aplica la voz/tono elegidos y dice el texto en voz alta. */
+    private fun speakOut(text: String, id: String) {
+        val engine = tts ?: return
+        if (!ttsReady) return
+        VoiceSettings(this).applyTo(engine)
+        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
     }
 
     private fun acquireBriefWakeLock() {

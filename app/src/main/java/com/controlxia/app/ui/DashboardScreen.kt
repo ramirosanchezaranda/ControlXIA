@@ -42,6 +42,7 @@ import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
 import com.controlxia.app.ui.theme.staggerReveal
 import com.controlxia.app.voice.RecentCommandsStore
+import com.controlxia.app.voice.VoiceSettings
 import com.controlxia.app.voice.WakeWordSettings
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -57,6 +58,7 @@ fun DashboardScreen(
     onOpenLlm: () -> Unit,
     onOpenFeedback: () -> Unit,
     onOpenWakeWord: () -> Unit,
+    onOpenVoice: () -> Unit,
 ) {
     val context = LocalContext.current
     val tick = rememberResumeTick()
@@ -79,6 +81,11 @@ fun DashboardScreen(
     val wakeActive = WakeWordService.wakeWordActive
     val wakeStatus = WakeWordService.wakeWordStatus
     val recentCommands = remember(tick, bump) { RecentCommandsStore(context).all() }
+    val voiceSummary = remember(tick, bump) {
+        val vs = VoiceSettings(context)
+        val name = vs.voiceName?.substringBefore("#")?.take(22) ?: "Voz por defecto"
+        "$name · tono ${(vs.pitch * 100).toInt()}%"
+    }
 
     var serviceOn by remember(tick, bump) {
         mutableStateOf(ServicePrefs.isEnabled(context) || WakeWordService.running)
@@ -310,8 +317,24 @@ fun DashboardScreen(
                 }
             }
 
-            // Feedback
+            // Voz
             Column(Modifier.staggerReveal(5)) {
+                SectionLabel("Voz")
+                Spacer(Modifier.height(12.dp))
+                TechPanel {
+                    StatusRow(label = voiceSummary, ok = true)
+                    Spacer(Modifier.height(8.dp))
+                    TechButton(
+                        text = "Cambiar voz y tono",
+                        filled = false,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenVoice,
+                    )
+                }
+            }
+
+            // Feedback
+            Column(Modifier.staggerReveal(6)) {
                 SectionLabel("Feedback")
                 Spacer(Modifier.height(12.dp))
                 TechPanel {

@@ -53,10 +53,14 @@ class MainActivity : ComponentActivity() {
                             Screen.WAKEWORD.name -> WakeWordSettingsScreen(
                                 onBack = { screen = Screen.DASHBOARD }
                             )
+                            Screen.VOICE.name -> VoiceSettingsScreen(
+                                onBack = { screen = Screen.DASHBOARD }
+                            )
                             else -> DashboardScreen(
                                 onOpenLlm = { screen = Screen.LLM_SETTINGS },
                                 onOpenFeedback = { screen = Screen.FEEDBACK },
                                 onOpenWakeWord = { screen = Screen.WAKEWORD },
+                                onOpenVoice = { screen = Screen.VOICE },
                             )
                         }
                     }
@@ -65,7 +69,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private enum class Screen { DASHBOARD, LLM_SETTINGS, FEEDBACK, WAKEWORD }
+    private enum class Screen { DASHBOARD, LLM_SETTINGS, FEEDBACK, WAKEWORD, VOICE }
 
     private companion object {
         const val ONBOARDING = "ONBOARDING"

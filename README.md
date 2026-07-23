@@ -13,6 +13,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Feedback con el propio LLM**: pantalla donde el usuario cuenta qué falló o qué quiere; el LLM configurado lo analiza, responde y lo clasifica ([BUG]/[IDEA]/[MEJORA]); historial local como insumo del roadmap.
 - ✅ **Wake word real (on-device)**: detección con Picovoice Porcupine (`voice/`), config cifrada (AccessKey + palabra de fábrica + sensibilidad). Al detectar: vibración + TTS "Te escucho". Funciona con pantalla bloqueada.
 - ✅ **Cadena de voz completa → acciones reales**: transcripción → `brain/CommandProcessor` (LLM configurado + catálogo de tools) → ejecuta la acción → responde en voz alta. Tools que ya andan: `get_time`, `get_date`, `open_app`, `set_alarm`, `set_timer`. Memoria conversacional corta. "Actividad reciente" muestra el comando y la respuesta.
+- ✅ **Voz configurable**: pantalla para elegir la voz del sistema (con género inferido), tono y velocidad, con presets Grave/Neutra/Aguda y "Probar" (`voice/VoiceSettings` + `ui/VoiceSettingsScreen`). Xia usa esa voz para todo lo que dice.
 - ⏳ Próximo: tools de mensajería (SMS/WhatsApp/llamadas) con sus permisos; entrenar el `.ppn` custom de "Xia".
 
 ## Compilar
@@ -66,7 +67,7 @@ app/src/main/java/com/controlxia/app/
 ├── actions/       # AppLauncher (abrir apps por nombre), AlarmActions (alarmas/timers)
 ├── voice/         # WakeWordEngine/Porcupine, SpeechToText/Android, settings cifrados, RecentCommandsStore
 ├── feedback/      # FeedbackStore (historial local analizado por el LLM)
-└── ui/            # Onboarding, Dashboard, LlmSettings, Feedback, WakeWordSettings
+└── ui/            # Onboarding, Dashboard, LlmSettings, Feedback, WakeWordSettings, VoiceSettings
     ├── theme/     # XiaTheme (papel/tinta/acento, tipografía mono) + Motion (expo.out)
     └── components/# TechButton, TechPanel, StatusRow, hairlines…
 ```
