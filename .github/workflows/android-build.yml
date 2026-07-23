@@ -1,0 +1,40 @@
+name: Android Build
+
+# Compila el APK debug en cada push. Sirve para dos cosas:
+#  1. Verificar que la parte Android compila de verdad (acá no hay SDK de Google).
+#  2. Dejar un APK descargable como artefacto, sin depender de una máquina local.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: controlxia-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
