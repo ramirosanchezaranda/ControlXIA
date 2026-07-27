@@ -1,5 +1,6 @@
 package com.controlxia.app.service
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
@@ -23,8 +24,10 @@ import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
 import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.permissions.PermissionManager
+import com.controlxia.app.ui.AssistantActivity
 import com.controlxia.app.ui.MainActivity
 import com.controlxia.app.voice.AndroidSpeechToText
+import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.ListeningOverlay
 import com.controlxia.app.voice.PorcupineWakeWordEngine
 import com.controlxia.app.voice.RecentCommandsStore
@@ -69,6 +72,8 @@ class WakeWordService : Service() {
     private var commandProcessor: CommandProcessor? = null
     private var overlay: ListeningOverlay? = null
     private var listeningCommand = false
+    private var lockedSession = false
+    private var showContentLocked = true
     private var notifText: String = ""
 
     override fun onCreate() {
@@ -202,8 +207,19 @@ class WakeWordService : Service() {
 
             acquireBriefWakeLock()
             vibrate()
-            // Overlay flotante "escuchando" sobre cualquier pantalla.
-            overlay?.show(WakeWordSettings(this).agentName, "Escuchando…")
+
+            val settings = WakeWordSettings(this)
+            lockedSession = isLockedOrScreenOff()
+            showContentLocked = settings.showContentWhenLocked
+            AssistantState.begin(settings.agentName, lockedSession)
+            if (lockedSession) {
+                // Bloqueado / pantalla apagada: prender la pantalla y responder
+                // sobre el bloqueo (requiere permiso de overlay para lanzarla).
+                if (overlay?.canShow() == true) launchAssistantScreen()
+            } else {
+                // Desbloqueado: pill flotante sobre la app actual.
+                overlay?.show(settings.agentName, "Escuchando…")
+            }
             speakOut("Te escucho", "ack")
             wakeEngine?.stop() // liberar el micrófono para el ASR
 
@@ -218,13 +234,17 @@ class WakeWordService : Service() {
         recognizer.listen(
             onPartial = { partial ->
                 updateNotification("… $partial")
-                overlay?.updateStatus(partial)
+                val shown = maskedStatus(partial, "Te escuché")
+                AssistantState.update(AssistantState.Phase.HEARD, shown)
+                if (!lockedSession) overlay?.updateStatus(shown)
             },
             onResult = { text ->
                 RecentCommandsStore(applicationContext).add(text)
                 lastCommand = text
                 updateNotification("Escuché: “$text”")
-                overlay?.updateStatus("“$text”")
+                val shown = maskedStatus("“$text”", "Te escuché")
+                AssistantState.update(AssistantState.Phase.HEARD, shown)
+                if (!lockedSession) overlay?.updateStatus(shown)
                 processAndRespond(text)
             },
             onError = { message ->
@@ -248,7 +268,8 @@ class WakeWordService : Service() {
             lastReply = reply
             RecentCommandsStore(applicationContext).addReply(reply)
             updateNotification(reply)
-            overlay?.updateStatus(reply)
+            AssistantState.update(AssistantState.Phase.REPLYING, maskedStatus(reply, "Respuesta lista"))
+            if (!lockedSession) overlay?.updateStatus(reply)
             speakOut(reply, "reply")
             // Dejar la respuesta visible un instante antes de reanudar/ocultar.
             main.postDelayed({ resumeListening() }, 1800L)
@@ -258,6 +279,7 @@ class WakeWordService : Service() {
     private fun resumeListening() {
         listeningCommand = false
         overlay?.hide()
+        AssistantState.idle()
         // Reanudar el wake word; si el engine se perdió, reconstruirlo.
         val engine = wakeEngine
         if (engine != null) {
@@ -300,6 +322,22 @@ class WakeWordService : Service() {
             .acquire(15_000L)
     }
 
+    private fun isLockedOrScreenOff(): Boolean {
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return km.isKeyguardLocked || !pm.isInteractive
+    }
+
+    private fun launchAssistantScreen() {
+        val intent = Intent(this, AssistantActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        runCatching { startActivity(intent) }
+    }
+
+    /** Con el teléfono bloqueado y privacidad activada, oculta el contenido real. */
+    private fun maskedStatus(text: String, generic: String): String =
+        if (lockedSession && !showContentLocked) generic else text
+
     @Suppress("DEPRECATION")
     private fun vibrate() {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -328,6 +366,7 @@ class WakeWordService : Service() {
         main.removeCallbacksAndMessages(null)
         listeningCommand = false
         overlay?.hide()
+        AssistantState.idle()
         stt?.cancel()
         stt = null
         wakeEngine?.release()

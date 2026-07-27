@@ -67,6 +67,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
     var keyword by remember { mutableStateOf(settings.keyword) }
     var sensitivity by remember { mutableFloatStateOf(settings.sensitivity) }
     var useCustom by remember { mutableStateOf(settings.useCustomKeyword) }
+    var showLockedContent by remember { mutableStateOf(settings.showContentWhenLocked) }
     var showKey by remember { mutableStateOf(false) }
     var keywordMenu by remember { mutableStateOf(false) }
 
@@ -229,9 +230,34 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                 )
             }
 
+            // Privacidad con el teléfono bloqueado
+            SectionLabel("Privacidad")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Mostrar contenido bloqueado", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Con el teléfono bloqueado, mostrar en pantalla lo que se " +
+                            "escuchó y la respuesta. Si lo apagás, la voz igual responde " +
+                            "pero la pantalla no muestra el contenido.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                }
+                Switch(
+                    checked = showLockedContent,
+                    onCheckedChange = {
+                        showLockedContent = it
+                        settings.showContentWhenLocked = it
+                    },
+                )
+            }
+
             Text(
-                "Los cambios se aplican al reiniciar la escucha: apagá y encendé " +
-                    "el servicio desde el panel.",
+                "Los cambios de wake word se aplican al reiniciar la escucha: apagá " +
+                    "y encendé el servicio desde el panel.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Muted,
             )

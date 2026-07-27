@@ -47,6 +47,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Pantalla del asistente que aparece sobre el bloqueo al detectar la
+             palabra de activación. La lanza el servicio (necesita el permiso de
+             overlay para el background activity start). -->
+        <activity
+            android:name=".ui.AssistantActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.ControlXIA.Transparent" />
+
         <!-- Servicio de escucha persistente. El tipo "microphone" es obligatorio
              para poder usar el micrófono de forma continua (Android 14+ además
              exige el permiso FOREGROUND_SERVICE_MICROPHONE de arriba). -->

@@ -59,6 +59,15 @@ class WakeWordSettings(context: Context) {
         get() = prefs.getBoolean(KEY_CUSTOM, false)
         set(value) = prefs.edit().putBoolean(KEY_CUSTOM, value).apply()
 
+    /**
+     * Con el teléfono bloqueado, mostrar en pantalla lo que se escuchó y la
+     * respuesta. Si está en false, sobre el bloqueo se muestra un texto genérico
+     * (la voz igual responde). Privacidad tipo Alexa.
+     */
+    var showContentWhenLocked: Boolean
+        get() = prefs.getBoolean(KEY_LOCKED_CONTENT, true)
+        set(value) = prefs.edit().putBoolean(KEY_LOCKED_CONTENT, value).apply()
+
     var keyword: WakeKeyword
         get() = WakeKeyword.fromName(prefs.getString(KEY_KEYWORD, null))
         set(value) = prefs.edit().putString(KEY_KEYWORD, value.name).apply()
@@ -77,6 +86,7 @@ class WakeWordSettings(context: Context) {
         private const val KEY_SENS = "sensitivity"
         private const val KEY_AGENT = "agent_name"
         private const val KEY_CUSTOM = "use_custom_keyword"
+        private const val KEY_LOCKED_CONTENT = "locked_content"
 
         /** Archivos que el usuario coloca en assets/ para el wake word custom. */
         const val CUSTOM_KEYWORD_ASSET = "xia.ppn"

@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.ControlXIA" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Tema translúcido para la pantalla del asistente sobre el bloqueo. -->
+    <style name="Theme.ControlXIA.Transparent" parent="Theme.ControlXIA">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
 </resources>

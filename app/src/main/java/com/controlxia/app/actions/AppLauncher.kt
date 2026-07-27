@@ -1,5 +1,6 @@
 package com.controlxia.app.actions
 
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 
@@ -35,6 +36,14 @@ class AppLauncher(private val context: Context) {
 
         val launch = pm.getLaunchIntentForPackage(match.second)
             ?: return "No pude abrir ${match.first}"
+
+        // Con el teléfono bloqueado, Android no permite abrir apps de terceros
+        // sin desbloquear (por seguridad). Avisamos en vez de fallar en silencio.
+        val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        if (keyguard.isKeyguardLocked) {
+            return "Desbloqueá el teléfono para abrir ${match.first}"
+        }
+
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return try {
             context.startActivity(launch)

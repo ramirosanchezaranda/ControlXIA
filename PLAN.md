@@ -249,7 +249,9 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 >
 > **Build/release:** `signingConfig` con keystore por archivo o env, y minify/shrink con reglas ProGuard (`app/proguard-rules.pro`).
 >
-> **Falta:** tools de mensajería (SMS/WhatsApp/llamadas) que necesitan más permisos; activación con botón home (rol de asistente digital); entrenar el `.ppn` custom de "Xia".
+> **Modo Alexa (sin botón):** la escucha del wake word es **siempre activa** (no necesita el botón home). Bloqueado o con la pantalla apagada, al activarse se **prende la pantalla y responde sobre el candado** (`ui/AssistantActivity`, show-when-locked + turn-screen-on), con toggle de privacidad para mostrar/ocultar el contenido. Único límite (de seguridad de Android): abrir apps de terceros bloqueado pide desbloquear.
+>
+> **Falta:** tools de mensajería (SMS/WhatsApp/llamadas) que necesitan más permisos; entrenar el `.ppn` custom de "Xia".
 
 ### Fase 0 — Esqueleto (1-2 semanas) ✅
 - Proyecto Android en Kotlin + Compose
