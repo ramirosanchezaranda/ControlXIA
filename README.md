@@ -18,7 +18,9 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Overlay flotante de "escuchando"**: al activarse, muestra un indicador **sobre cualquier app** (estilo Google Assistant), con el nombre del asistente y lo que va entendiendo (`voice/ListeningOverlay`). Requiere el permiso "Mostrar sobre otras apps".
 - ✅ **Respuesta sobre el bloqueo (modo Alexa)**: con el teléfono bloqueado o la pantalla apagada, al decir la palabra se **prende la pantalla y responde sobre el candado** sin desbloquear (`ui/AssistantActivity` con show-when-locked/turn-screen-on, estado en vivo vía `voice/AssistantState`). No usa el botón home: la escucha es siempre activa. Toggle de **privacidad** para mostrar u ocultar el contenido en pantalla estando bloqueado. Abrir apps de terceros bloqueado avisa "desbloqueá para abrir X" (límite de seguridad de Android).
 - ✅ **Build release**: `signingConfig` (keystore por `keystore.properties`/env) + minify/shrink con reglas ProGuard (`app/proguard-rules.pro`).
-- ⏳ Próximo: tools de mensajería (SMS/WhatsApp/llamadas) con sus permisos; activación con botón home (rol de asistente).
+- ✅ **Agente que usa tus apps**: resuelve pedidos en varios pasos (`brain/CommandProcessor`). Abre apps directo en búsquedas o secciones (Mercado Libre ordenado por precio, Instagram Reels…), lee y maneja la pantalla de cualquier app con el control de apps (accesibilidad), y lee, responde y manda mensajes (WhatsApp, SMS) a contactos o apodos. Antes de enviar, comprar o pagar siempre pide confirmación por voz. Ver [docs/AGENT.md](docs/AGENT.md).
+- ✅ **Groq como proveedor**: `openai/gpt-oss-120b` recomendado; el agente se adapta a su límite de tokens por minuto.
+- ⏳ Próximo: llamadas, recordatorios, activación con botón home (rol de asistente).
 
 ## Compilar
 
@@ -48,7 +50,8 @@ En la app: ⚙️ → elegir proveedor → pegar API key → elegir modelo → *
 | Anthropic | https://console.anthropic.com |
 | OpenAI | https://platform.openai.com |
 | Google Gemini | https://aistudio.google.com |
-| Groq / OpenRouter / Ollama | Su consola, con la base URL del servicio |
+| Groq | https://console.groq.com (elegí el proveedor «Groq», sin base URL) |
+| OpenRouter / Ollama | Su consola, con la base URL del servicio |
 
 ## Configurar la palabra de activación
 
@@ -65,7 +68,7 @@ app/src/main/java/com/controlxia/app/
 ├── service/       # WakeWordService (orquesta wake word → ASR → cerebro → TTS), BootReceiver, Watchdog
 ├── permissions/   # PermissionManager (fabricante + overlay para abrir apps bloqueado)
 ├── brain/         # Multi-LLM + CommandProcessor, ToolRegistry, ConversationMemory
-├── actions/       # AppLauncher (abrir apps por nombre), AlarmActions (alarmas/timers)
+├── actions/       # AppLauncher, AlarmActions, AppDeepLinks (búsquedas/secciones), ScreenControl (accesibilidad), MessageStore/MessageSender/Contacts (mensajería)
 ├── voice/         # WakeWordEngine (Vosk + WakePhraseDetector + VoskModelStore), SpeechToText, ListeningOverlay, VoiceSettings, settings, RecentCommandsStore
 ├── feedback/      # FeedbackStore (historial local analizado por el LLM)
 └── ui/            # Onboarding, Dashboard, LlmSettings, Feedback, WakeWordSettings, VoiceSettings

@@ -30,6 +30,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.WakeWordService
+import com.controlxia.app.service.XiaAccessibilityService
+import com.controlxia.app.service.XiaNotificationListener
 import com.controlxia.app.ui.components.Hairline
 import com.controlxia.app.ui.components.SectionLabel
 import com.controlxia.app.ui.components.StatusDot
@@ -59,6 +61,11 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     val notifOk = remember(tick, bump) { PermissionManager.hasPostNotifications(context) }
     val batteryOk = remember(tick, bump) { PermissionManager.isIgnoringBatteryOptimizations(context) }
     val overlayOk = remember(tick, bump) { PermissionManager.canDrawOverlays(context) }
+    val screenControlOk = remember(tick, bump) { XiaAccessibilityService.isEnabled(context) }
+    val messagesOk = remember(tick, bump) { XiaNotificationListener.isEnabled(context) }
+    val contactsOk = remember(tick, bump) {
+        PermissionManager.hasContacts(context) && PermissionManager.hasSendSms(context)
+    }
     val oemNeeded = remember { PermissionManager.needsOemSetup() }
     val wakeSettings = remember { WakeWordSettings(context) }
 
@@ -119,6 +126,39 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     context.startActivity(PermissionManager.overlayPermissionIntent(context))
                 }.onFailure {
                     context.startActivity(PermissionManager.appDetailsIntent(context))
+                }
+            },
+        ))
+        add(PermStep(
+            label = "CONTROL DE APPS",
+            title = "Que pueda usar tus apps.",
+            description = "Con el control de apps (accesibilidad), Xia lee la pantalla y toca, " +
+                "escribe o desplaza por vos: «buscá en Mercado Libre las zapatillas más " +
+                "baratas», «abrí los Reels». Antes de enviar, comprar o pagar siempre te " +
+                "pregunta. Si Android dice «Ajuste restringido», abrí la info de la app → ⋮ → " +
+                "«Permitir ajustes restringidos».",
+            granted = screenControlOk,
+            actionLabel = "Activar control de apps",
+            action = {
+                runCatching { context.startActivity(PermissionManager.accessibilitySettingsIntent()) }
+            },
+        ))
+        add(PermStep(
+            label = "MENSAJES",
+            title = "Leer y responder mensajes.",
+            description = "Para leerte los mensajes que llegan y responderlos, Xia necesita el " +
+                "acceso a notificaciones. Para escribirle a tus contactos («mandale a mi " +
+                "pareja que llego en 10»), los contactos y los SMS. Siempre te pide " +
+                "confirmación antes de enviar.",
+            granted = messagesOk && contactsOk,
+            actionLabel = if (!contactsOk) "Permitir contactos y SMS" else "Activar leer mensajes",
+            action = {
+                if (!contactsOk) {
+                    permissionLauncher.launch(
+                        arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)
+                    )
+                } else {
+                    runCatching { context.startActivity(PermissionManager.notificationAccessIntent()) }
                 }
             },
         ))

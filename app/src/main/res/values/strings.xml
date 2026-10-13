@@ -7,4 +7,7 @@
     <string name="notif_action_stop">Apagar</string>
     <string name="notif_reactivate_title">La escucha está en pausa</string>
     <string name="notif_reactivate_text">Android no dejó encenderla en segundo plano. Tocá para reactivarla.</string>
+    <string name="a11y_label">ControlXIA · control de apps</string>
+    <string name="a11y_description">Permite que el asistente lea la pantalla y toque, escriba o desplace dentro de las apps cuando se lo pedís por voz (por ejemplo: buscar en Mercado Libre o abrir los Reels). Antes de enviar mensajes, comprar o pagar siempre te pide confirmación. No hace nada por su cuenta.</string>
+    <string name="notif_listener_label">ControlXIA · leer mensajes</string>
 </resources>

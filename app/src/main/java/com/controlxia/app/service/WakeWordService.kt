@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
 import com.controlxia.app.brain.CommandProcessor
+import com.controlxia.app.brain.Reply
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.ui.AssistantActivity
 import com.controlxia.app.ui.MainActivity
@@ -96,7 +97,11 @@ class WakeWordService : Service() {
 
     private val afterAck = Runnable { startTranscriptionOnce() }
     private val sttTimeout = Runnable { onTranscriptionTimeout() }
-    private val resumeAfterReply = Runnable { resumeListening() }
+    private val resumeAfterReply = Runnable { afterReply() }
+
+    /** El asistente hizo una pregunta: al terminar de hablar, escuchar la respuesta. */
+    private var followUpPending = false
+    private var followUps = 0
     private val retryWakeWord = Runnable { if (!listeningCommand) startListening() }
 
     override fun onCreate() {
@@ -344,6 +349,8 @@ class WakeWordService : Service() {
         main.post {
             if (listeningCommand) return@post
             listeningCommand = true
+            followUps = 0
+            followUpPending = false
             transcriptionStarted = false
 
             voiceWakeLock.acquire(INTERACTION_MAX_MS)
@@ -441,20 +448,33 @@ class WakeWordService : Service() {
     private fun processAndRespond(command: String) {
         val processor = commandProcessor
             ?: CommandProcessor(applicationContext).also { commandProcessor = it }
+        // Un agente puede tardar (abrir apps, leer pantallas): el wake lock se
+        // renueva con tope y la pantalla muestra en qué paso va.
+        voiceWakeLock.acquire(INTERACTION_MAX_MS)
         scope.launch {
             val reply = try {
-                processor.process(command)
+                processor.process(command) { step -> main.post { showProgress(step) } }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                "Tuve un problema para procesar eso. Probá de nuevo."
+                Reply("Tuve un problema para procesar eso. Probá de nuevo.")
             }
             deliverReply(reply, processor.lastError)
         }
     }
 
-    private fun deliverReply(reply: String, error: String?) {
+    private fun showProgress(step: String) {
         if (!listeningCommand) return
+        updateNotification(step)
+        AssistantState.update(AssistantState.Phase.HEARD, step)
+        if (!lockedSession) overlay?.updateStatus(step)
+    }
+
+    private fun deliverReply(answer: Reply, error: String?) {
+        if (!listeningCommand) return
+        val reply = answer.text
+        // Si preguntó algo (ej. "¿Le mando…?"), seguir escuchando sin wake word.
+        followUpPending = answer.expectsReply && followUps < MAX_FOLLOW_UPS
         lastReply = reply
         lastBrainError = error
         runCatching { RecentCommandsStore(applicationContext).addReply(reply) }
@@ -468,6 +488,24 @@ class WakeWordService : Service() {
         speakOut(reply, UTT_REPLY)
     }
 
+    /** Terminó de hablar: o escucha la respuesta a su pregunta, o vuelve a esperar el nombre. */
+    private fun afterReply() {
+        if (!listeningCommand) return
+        if (!followUpPending) {
+            resumeListening()
+            return
+        }
+        followUpPending = false
+        followUps++
+        main.removeCallbacks(resumeAfterReply)
+        voiceWakeLock.acquire(INTERACTION_MAX_MS)
+        vibrate()
+        AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
+        if (!lockedSession) overlay?.updateStatus("Te escucho…")
+        transcriptionStarted = true
+        transcribeCommand()
+    }
+
     private fun estimatedSpeechMs(text: String): Long =
         (2_000L + text.length * 90L).coerceAtMost(45_000L)
 
@@ -477,6 +515,7 @@ class WakeWordService : Service() {
         main.removeCallbacks(resumeAfterReply)
         listeningCommand = false
         transcriptionStarted = false
+        followUpPending = false
         overlay?.hide()
         AssistantState.idle()
         if (voiceWakeLock.isHeld) runCatching { voiceWakeLock.release() }
@@ -608,7 +647,8 @@ class WakeWordService : Service() {
         private const val ACK_MAX_WAIT_MS = 2_500L
         private const val ACK_NO_TTS_MS = 300L
         private const val STT_MAX_MS = 20_000L
-        private const val INTERACTION_MAX_MS = 90_000L
+        private const val INTERACTION_MAX_MS = 180_000L
+        private const val MAX_FOLLOW_UPS = 2
         private const val ENGINE_RETRY_MS = 10_000L
 
         /** Estado observable simple para la UI. */

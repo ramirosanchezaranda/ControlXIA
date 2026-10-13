@@ -1,11 +1,11 @@
 package com.controlxia.app.brain
 
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 
 /**
@@ -15,15 +15,22 @@ import kotlinx.serialization.json.put
  * Los modelos actuales piensan antes de responder (thinking adaptativo) y esos
  * tokens cuentan dentro de max_tokens; por eso el margen es amplio y se pide
  * effort "low", que alcanza para respuestas de voz cortas y baja la latencia.
+ *
+ * En el bucle de herramientas, cada turno del asistente se reenvía tal cual
+ * llegó (incluidos los bloques de thinking) y el historial solo crece: editar
+ * pasos anteriores invalida el razonamiento y la API lo rechaza.
  */
 class AnthropicProvider(
     private val apiKey: String,
     private val model: String,
 ) : LlmProvider {
 
+    override val canCompactSteps: Boolean get() = false
+
     override suspend fun complete(
         messages: List<ChatMessage>,
         tools: List<ToolSpec>,
+        steps: List<AgentStep>,
     ): LlmResponse {
         // Anthropic recibe el system prompt por fuera de la lista de mensajes.
         val system = messages.filter { it.role == ChatRole.SYSTEM }
@@ -46,6 +53,24 @@ class AnthropicProvider(
                     add(buildJsonObject {
                         put("role", if (msg.role == ChatRole.USER) "user" else "assistant")
                         put("content", msg.content)
+                    })
+                }
+                steps.forEach { step ->
+                    add(buildJsonObject {
+                        put("role", "assistant")
+                        put("content", step.request.raw)
+                    })
+                    add(buildJsonObject {
+                        put("role", "user")
+                        put("content", buildJsonArray {
+                            step.results.forEach { result ->
+                                add(buildJsonObject {
+                                    put("type", "tool_result")
+                                    put("tool_use_id", result.callId)
+                                    put("content", result.content)
+                                })
+                            }
+                        })
                     })
                 }
             })
@@ -79,24 +104,26 @@ class AnthropicProvider(
             return LlmResponse.Text("Prefiero no ayudar con eso.")
         }
 
-        val content = runCatching { response["content"]?.jsonArray }.getOrNull()
+        val content = response["content"] as? JsonArray
             ?: throw LlmException(
                 "Respuesta sin contenido: ${response.toString().take(200)}",
                 kind = LlmException.Kind.BAD_RESPONSE,
             )
         val blocks = content.mapNotNull { it as? JsonObject }
 
-        // Si el modelo pidió una tool, eso manda; si no, juntamos el texto.
-        // Los bloques de thinking se ignoran.
-        for (block in blocks) {
-            if (block.str("type") == "tool_use") {
-                val name = block.str("name") ?: continue
-                return LlmResponse.ToolCall(
-                    name = name,
+        // Si el modelo pidió herramientas, eso manda; si no, juntamos el texto.
+        // Los bloques de thinking se ignoran acá pero viajan en [raw].
+        val calls = blocks
+            .filter { it.str("type") == "tool_use" }
+            .mapNotNull { block ->
+                ToolCallRequest(
+                    id = block.str("id") ?: return@mapNotNull null,
+                    name = block.str("name") ?: return@mapNotNull null,
                     arguments = block["input"] as? JsonObject ?: JsonObject(emptyMap()),
                 )
             }
-        }
+        if (calls.isNotEmpty()) return LlmResponse.ToolCalls(calls, raw = content)
+
         val text = blocks
             .filter { it.str("type") == "text" }
             .joinToString("") { it.str("text").orEmpty() }

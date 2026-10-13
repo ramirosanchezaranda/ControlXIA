@@ -21,6 +21,7 @@ class GeminiProvider(
     override suspend fun complete(
         messages: List<ChatMessage>,
         tools: List<ToolSpec>,
+        steps: List<AgentStep>,
     ): LlmResponse {
         val system = messages.filter { it.role == ChatRole.SYSTEM }
             .joinToString("\n") { it.content }
@@ -39,6 +40,25 @@ class GeminiProvider(
                         put("role", if (msg.role == ChatRole.USER) "user" else "model")
                         put("parts", buildJsonArray {
                             add(buildJsonObject { put("text", msg.content) })
+                        })
+                    })
+                }
+                // Pasos del agente: el turno del modelo tal cual llegó (con sus
+                // firmas de razonamiento) y las respuestas de las funciones.
+                steps.forEach { step ->
+                    add(step.request.raw)
+                    add(buildJsonObject {
+                        put("role", "user")
+                        put("parts", buildJsonArray {
+                            step.results.forEach { result ->
+                                add(buildJsonObject {
+                                    put("functionResponse", buildJsonObject {
+                                        if (!result.callId.startsWith(GENERATED_ID)) put("id", result.callId)
+                                        put("name", result.name)
+                                        put("response", buildJsonObject { put("result", result.content) })
+                                    })
+                                })
+                            }
                         })
                     })
                 }
@@ -89,19 +109,32 @@ class GeminiProvider(
             )
         }
 
-        for (part in parts) {
-            val functionCall = part["functionCall"] as? JsonObject ?: continue
-            val name = (functionCall["name"] as? JsonPrimitive)?.contentOrNull ?: continue
-            return LlmResponse.ToolCall(
+        val calls = parts.mapIndexedNotNull { index, part ->
+            val functionCall = part["functionCall"] as? JsonObject ?: return@mapIndexedNotNull null
+            val name = (functionCall["name"] as? JsonPrimitive)?.contentOrNull
+                ?: return@mapIndexedNotNull null
+            ToolCallRequest(
+                id = (functionCall["id"] as? JsonPrimitive)?.contentOrNull ?: "$GENERATED_ID$index",
                 name = name,
                 arguments = functionCall["args"] as? JsonObject ?: JsonObject(emptyMap()),
             )
+        }
+        if (calls.isNotEmpty()) {
+            val content = candidate?.get("content") as? JsonObject ?: JsonObject(emptyMap())
+            // El turno se reenvía igual, con el rol que Gemini espera.
+            val raw = if (content.containsKey("role")) content else JsonObject(content + ("role" to JsonPrimitive("model")))
+            return LlmResponse.ToolCalls(calls, raw)
         }
         // Las partes de "pensamiento" (thought = true) no se leen en voz alta.
         val text = parts
             .filter { (it["thought"] as? JsonPrimitive)?.booleanOrNull != true }
             .joinToString("") { (it["text"] as? JsonPrimitive)?.contentOrNull.orEmpty() }
         return LlmResponse.Text(text)
+    }
+
+    private companion object {
+        /** Prefijo de ids que genera la app cuando Gemini no manda uno (no se reenvían). */
+        const val GENERATED_ID = "xia_call_"
     }
 
     private fun hasProperties(schema: JsonObject): Boolean =

@@ -27,6 +27,22 @@ object PermissionManager {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
 
+    fun hasContacts(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    fun hasSendSms(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    /** Ajustes de accesibilidad, donde se activa el "Control de apps". */
+    fun accessibilitySettingsIntent(): Intent =
+        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /** Ajustes de acceso a notificaciones, para leer y responder mensajes. */
+    fun notificationAccessIntent(): Intent =
+        Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
     /** Sin esta exención, Doze frena el servicio tras ~1 h de pantalla apagada. */
     fun isIgnoringBatteryOptimizations(context: Context): Boolean =
         (context.getSystemService(Context.POWER_SERVICE) as PowerManager)

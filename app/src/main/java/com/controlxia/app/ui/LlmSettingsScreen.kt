@@ -241,7 +241,7 @@ fun LlmSettingsContent(modifier: Modifier = Modifier) {
                         when (response) {
                             is LlmResponse.Text ->
                                 "✔ Conexión OK — respondió: ${response.text.take(80)}"
-                            is LlmResponse.ToolCall ->
+                            is LlmResponse.ToolCalls ->
                                 "✔ Conexión OK (respondió con tool call)"
                         }
                     } catch (e: Exception) {

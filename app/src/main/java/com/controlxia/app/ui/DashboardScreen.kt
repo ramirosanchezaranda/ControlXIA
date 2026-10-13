@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +32,8 @@ import com.controlxia.app.brain.LlmSettings
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.ServicePrefs
 import com.controlxia.app.service.WakeWordService
+import com.controlxia.app.service.XiaAccessibilityService
+import com.controlxia.app.service.XiaNotificationListener
 import com.controlxia.app.ui.components.Hairline
 import com.controlxia.app.ui.components.SectionLabel
 import com.controlxia.app.ui.components.StatusDot
@@ -71,6 +74,11 @@ fun DashboardScreen(
     val notifOk = remember(tick, bump) { PermissionManager.hasPostNotifications(context) }
     val batteryOk = remember(tick, bump) { PermissionManager.isIgnoringBatteryOptimizations(context) }
     val overlayOk = remember(tick, bump) { PermissionManager.canDrawOverlays(context) }
+    val screenControlOk = remember(tick, bump) { XiaAccessibilityService.isEnabled(context) }
+    val messagesOk = remember(tick, bump) { XiaNotificationListener.isEnabled(context) }
+    val contactsOk = remember(tick, bump) {
+        PermissionManager.hasContacts(context) && PermissionManager.hasSendSms(context)
+    }
     val oemNeeded = remember { PermissionManager.needsOemSetup() }
     val llmConfigured = remember(tick, bump) { LlmSettings(context).activeConfig() != null }
     val llmSummary = remember(tick, bump) {
@@ -246,6 +254,42 @@ fun DashboardScreen(
                             }
                         },
                     )
+                    Hairline()
+                    StatusRow(
+                        label = "Control de apps",
+                        ok = if (screenControlOk) true else null,
+                        actionLabel = "Activar",
+                        onAction = {
+                            runCatching {
+                                context.startActivity(PermissionManager.accessibilitySettingsIntent())
+                            }
+                        },
+                    )
+                    Hairline()
+                    StatusRow(
+                        label = "Leer mensajes",
+                        ok = if (messagesOk) true else null,
+                        actionLabel = "Activar",
+                        onAction = {
+                            runCatching {
+                                context.startActivity(PermissionManager.notificationAccessIntent())
+                            }
+                        },
+                    )
+                    Hairline()
+                    StatusRow(
+                        label = "Contactos y SMS",
+                        ok = if (contactsOk) true else null,
+                        actionLabel = "Permitir",
+                        onAction = {
+                            permissionLauncher.launch(
+                                arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)
+                            )
+                        },
+                    )
+                    if (!screenControlOk || !messagesOk) {
+                        RestrictedSettingsHint()
+                    }
                     if (oemNeeded) {
                         Hairline()
                         StatusRow(
@@ -401,3 +445,26 @@ private fun currentTime(): String =
 
 private fun formatClock(timestamp: Long): String =
     SimpleDateFormat("dd.MM  HH:mm", Locale.getDefault()).format(Date(timestamp))
+
+/**
+ * En Android 13+, a las apps instaladas desde un archivo el sistema les
+ * bloquea la accesibilidad y el acceso a notificaciones ("ajuste
+ * restringido") hasta que el usuario lo permite desde la info de la app.
+ */
+@Composable
+private fun RestrictedSettingsHint() {
+    val context = LocalContext.current
+    Column(Modifier.padding(top = 8.dp)) {
+        Text(
+            "Si Android dice «Ajuste restringido»: abrí la info de la app → menú ⋮ → " +
+                "«Permitir ajustes restringidos», y volvé a activarlo.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+        )
+        TextButton(onClick = {
+            runCatching { context.startActivity(PermissionManager.appDetailsIntent(context)) }
+        }) {
+            Text("ABRIR INFO DE LA APP", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
