@@ -118,7 +118,9 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             title = "Que aparezca donde estés.",
             description = "Con este permiso Xia muestra el aviso de escucha encima de " +
                 "cualquier app, responde sobre la pantalla bloqueada y puede abrir apps " +
-                "y poner alarmas aunque no estés en ControlXIA. Sin él, solo responde por voz.",
+                "y poner alarmas aunque no estés en ControlXIA. Sin él, solo responde por voz. " +
+                "Si Android dice que se negó el acceso, abrí la info de la app → ⋮ → " +
+                "«Permitir ajustes restringidos» y volvé a intentarlo.",
             granted = overlayOk,
             actionLabel = "Permitir mostrar sobre otras apps",
             action = {

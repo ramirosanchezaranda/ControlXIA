@@ -287,7 +287,7 @@ fun DashboardScreen(
                             )
                         },
                     )
-                    if (!screenControlOk || !messagesOk) {
+                    if (!overlayOk || !screenControlOk || !messagesOk) {
                         RestrictedSettingsHint()
                     }
                     if (oemNeeded) {
