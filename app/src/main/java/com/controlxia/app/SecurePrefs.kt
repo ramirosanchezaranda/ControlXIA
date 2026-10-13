@@ -6,7 +6,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 /**
- * Acceso único a las preferencias cifradas (API keys, AccessKey).
+ * Acceso único a las preferencias cifradas (API keys y ajustes del asistente).
  *
  * - Cachea cada archivo: abrir EncryptedSharedPreferences es caro (Keystore +
  *   Tink) y antes se hacía en cada `LlmSettings(...)` / `WakeWordSettings(...)`,

@@ -2,24 +2,29 @@ package com.controlxia.app.voice
 
 /**
  * Motor de palabra de activación ("wake word"). Corre on-device y llama a
- * [onDetected] cuando escucha la palabra. Abstrae el motor concreto (Porcupine
- * hoy; Vosk / openWakeWord podrían enchufarse detrás de esta misma interfaz).
+ * [start]'s `onDetected` cuando escucha la palabra. Abstrae el motor concreto
+ * (Vosk hoy; openWakeWord podría enchufarse detrás de esta misma interfaz).
  */
 interface WakeWordEngine {
 
     /**
-     * Empieza a escuchar. [onDetected] se invoca en un hilo del motor.
-     * [onError] avisa si la escucha se cae después de arrancar (por ejemplo,
-     * otra app o una llamada tomó el micrófono).
+     * Empieza a escuchar sin bloquear (la primera vez carga el modelo de voz).
+     * Todos los callbacks llegan en un hilo del motor:
+     * - [onReady]: ya está escuchando.
+     * - [onDetected]: escuchó la palabra; el motor deja de escuchar solo.
+     * - [onError]: no pudo arrancar o se cayó. `transient` = vale la pena
+     *   reintentar más tarde (micrófono ocupado), a diferencia de un error de
+     *   configuración (palabra fuera del vocabulario).
      */
-    fun start(onDetected: () -> Unit, onError: (String) -> Unit = {})
+    fun start(
+        onDetected: () -> Unit,
+        onError: (message: String, transient: Boolean) -> Unit = { _, _ -> },
+        onReady: () -> Unit = {},
+    )
 
-    /** Pausa la escucha y libera el micrófono (p. ej. para pasarle el mic al ASR). */
+    /** Deja de escuchar y libera el micrófono (p. ej. para pasárselo al ASR). */
     fun stop()
 
-    /** Libera todos los recursos nativos. Tras esto el motor no se reutiliza. */
+    /** Libera todos los recursos. Tras esto el motor no se reutiliza. */
     fun release()
 }
-
-/** Error de inicialización o ejecución del motor, con mensaje legible para la UI. */
-class WakeWordException(message: String, cause: Throwable? = null) : Exception(message, cause)

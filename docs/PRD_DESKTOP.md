@@ -24,7 +24,7 @@ ControlXIA para Windows es el mismo asistente de voz que la app de Android, pero
 | # | Decisión | Elección | Alternativa descartada |
 |---|---|---|---|
 | D1 | Tecnología | Kotlin + Compose Desktop, para compartir el módulo del cerebro con Android | Electron: tiene más referencias (OpenDex) pero obliga a reescribir el cerebro en JavaScript |
-| D2 | Palabra de activación | Porcupine (JVM), mismo AccessKey y mismo `.ppn` que en Android | openWakeWord: sin cuenta, pero requiere Python o ONNX; queda como plan B |
+| D2 | Palabra de activación | Vosk (JVM) con el mismo modelo en español y el mismo `WakePhraseDetector` que en Android | Porcupine: exige cuenta y AccessKey; openWakeWord queda como plan B |
 | D3 | Voz a texto | Vosk offline para empezar; Whisper local como mejora | Servicio en la nube: costo y privacidad |
 | D4 | Texto a voz | Voz de Windows (SAPI) con selección de voz, tono y velocidad | ElevenLabs: queda como opción posterior |
 | D5 | LLM | Los mismos proveedores que Android (Anthropic, OpenAI, Gemini, compatibles) | — |
@@ -78,7 +78,7 @@ Si el equipo prefiere Electron, D1 cambia y los requisitos funcionales se mantie
 ## 7. Arquitectura
 
 ```
-Micrófono → Wake word (Porcupine) → STT (Vosk) → Cerebro (módulo común) → Acción de Windows → TTS (SAPI)
+Micrófono → Wake word (Vosk) → STT (Vosk) → Cerebro (módulo común) → Acción de Windows → TTS (SAPI)
                                                      ↑
                                       Proveedores LLM + tools + memoria
 ```
@@ -104,7 +104,7 @@ Micrófono → Wake word (Porcupine) → STT (Vosk) → Cerebro (módulo común)
 ## 9. Criterios de aceptación de la v1
 
 1. Se instala con el `.exe` en una PC con Windows 11 limpia.
-2. Tras cargar la API key y el AccessKey, decir la palabra de activación y "qué hora es" produce la respuesta hablada correcta.
+2. Tras cargar la API key, decir la palabra de activación y "qué hora es" produce la respuesta hablada correcta.
 3. "Abrí [programa instalado]" lo abre y "silenciá el volumen" lo silencia.
 4. "Apagá la PC" pide confirmación y no apaga sin ella.
 5. Con la escucha pausada, no se procesa audio.
@@ -118,7 +118,7 @@ Micrófono → Wake word (Porcupine) → STT (Vosk) → Cerebro (módulo común)
 | Calidad de Vosk en español rioplatense | Entiende mal algunos comandos | Whisper local como alternativa; modelo configurable |
 | Falsos positivos de la palabra de activación en una PC con música o videollamadas | Se activa solo | Sensibilidad ajustable y atajo de teclado como respaldo |
 | Acciones destructivas ejecutadas por error del LLM | Pérdida de datos | Confirmación obligatoria y lista de acciones permitidas (RF-17, RF-18) |
-| Dependencia de Porcupine y su AccessKey | Fricción de alta | openWakeWord como plan B |
+| Activaciones falsas de Vosk con palabras parecidas al nombre | Se activa solo | Doble verificación (como en Android), sensibilidad y atajo de teclado |
 | El código de Android nunca se compiló todavía | El módulo compartido podría heredar errores | Compilar y corregir Android antes de M0 |
 
 ## 11. Métricas de éxito

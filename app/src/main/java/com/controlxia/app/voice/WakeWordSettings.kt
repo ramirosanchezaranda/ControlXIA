@@ -2,29 +2,12 @@ package com.controlxia.app.voice
 
 import android.content.Context
 import android.content.SharedPreferences
-import ai.picovoice.porcupine.Porcupine
 import com.controlxia.app.SecurePrefs
 
 /**
- * Palabras de activación de fábrica disponibles sin entrenar un modelo custom.
- * "Xia" propio requiere entrenar un .ppn en la consola de Picovoice — queda
- * para una iteración siguiente. Mientras tanto se usa una de estas.
- */
-enum class WakeKeyword(val builtIn: Porcupine.BuiltInKeyword, val label: String) {
-    JARVIS(Porcupine.BuiltInKeyword.JARVIS, "Jarvis"),
-    COMPUTER(Porcupine.BuiltInKeyword.COMPUTER, "Computer"),
-    BUMBLEBEE(Porcupine.BuiltInKeyword.BUMBLEBEE, "Bumblebee"),
-    PICOVOICE(Porcupine.BuiltInKeyword.PICOVOICE, "Picovoice");
-
-    companion object {
-        fun fromName(name: String?): WakeKeyword =
-            entries.firstOrNull { it.name == name } ?: JARVIS
-    }
-}
-
-/**
- * Configuración del wake word, persistida cifrada en el dispositivo. El AccessKey
- * de Picovoice es obligatorio (gratuito) incluso para palabras de fábrica.
+ * Configuración del asistente y de su palabra de activación (Vosk). No hace
+ * falta ninguna cuenta ni clave: la palabra se reconoce con el modelo de voz
+ * en español que viaja dentro de la app.
  */
 class WakeWordSettings(context: Context) {
 
@@ -32,22 +15,19 @@ class WakeWordSettings(context: Context) {
         SecurePrefs.get(context, "wakeword_settings")
     }
 
-    var accessKey: String
-        get() = prefs.getString(KEY_ACCESS, "").orEmpty()
-        set(value) = prefs.edit().putString(KEY_ACCESS, value).apply()
-
-    /** Cómo se llama el asistente: se dice a sí mismo y figura en el overlay. */
+    /** Cómo se llama el asistente: se nombra así y es la palabra para despertarlo. */
     var agentName: String
         get() = prefs.getString(KEY_AGENT, "Xia").orEmpty().ifBlank { "Xia" }
         set(value) = prefs.edit().putString(KEY_AGENT, value.trim()).apply()
 
     /**
-     * Usar un modelo de wake word custom (assets/xia.ppn + porcupine_params_es.pv)
-     * en vez de una palabra de fábrica. Ver docs/CUSTOM_WAKE_WORD.md.
+     * Cómo suena la palabra de activación, si no coincide con cómo se escribe
+     * el nombre (ej. nombre "Xia", palabra "sia"). Puede ser una frase corta
+     * ("oye xia"). Vacío = el nombre.
      */
-    var useCustomKeyword: Boolean
-        get() = prefs.getBoolean(KEY_CUSTOM, false)
-        set(value) = prefs.edit().putBoolean(KEY_CUSTOM, value).apply()
+    var wakeWord: String
+        get() = prefs.getString(KEY_WAKE_WORD, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_WAKE_WORD, value.trim()).apply()
 
     /**
      * Con el teléfono bloqueado, mostrar en pantalla lo que se escuchó y la
@@ -58,31 +38,18 @@ class WakeWordSettings(context: Context) {
         get() = prefs.getBoolean(KEY_LOCKED_CONTENT, true)
         set(value) = prefs.edit().putBoolean(KEY_LOCKED_CONTENT, value).apply()
 
-    var keyword: WakeKeyword
-        get() = WakeKeyword.fromName(prefs.getString(KEY_KEYWORD, null))
-        set(value) = prefs.edit().putString(KEY_KEYWORD, value.name).apply()
-
     /** 0f = menos sensible (menos falsos positivos), 1f = más sensible. */
     var sensitivity: Float
         get() = prefs.getFloat(KEY_SENS, 0.5f)
         set(value) = prefs.edit().putFloat(KEY_SENS, value.coerceIn(0f, 1f)).apply()
 
-    /** true cuando el motor tiene lo mínimo para arrancar (el AccessKey). */
-    fun isReady(): Boolean = accessKey.isNotBlank()
+    /** La palabra (o frase) que hay que decir para despertarlo. */
+    fun spokenWakeWord(): String = wakeWord.ifBlank { agentName }
 
-    /** La palabra que hay que decir para despertarlo, tal como se pronuncia. */
-    fun spokenWakeWord(): String = if (useCustomKeyword) agentName else keyword.label
-
-    companion object {
-        private const val KEY_ACCESS = "access_key"
-        private const val KEY_KEYWORD = "keyword"
-        private const val KEY_SENS = "sensitivity"
-        private const val KEY_AGENT = "agent_name"
-        private const val KEY_CUSTOM = "use_custom_keyword"
-        private const val KEY_LOCKED_CONTENT = "locked_content"
-
-        /** Archivos que el usuario coloca en assets/ para el wake word custom. */
-        const val CUSTOM_KEYWORD_ASSET = "xia.ppn"
-        const val CUSTOM_MODEL_ASSET = "porcupine_params_es.pv"
+    private companion object {
+        const val KEY_AGENT = "agent_name"
+        const val KEY_WAKE_WORD = "wake_word"
+        const val KEY_SENS = "sensitivity"
+        const val KEY_LOCKED_CONTENT = "locked_content"
     }
 }

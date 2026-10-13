@@ -1,7 +1,5 @@
 package com.controlxia.app.ui
 
-import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,17 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -38,26 +26,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.service.WakeWordService
-import com.controlxia.app.voice.WakeKeyword
-import com.controlxia.app.voice.WakeWordSettings
 import com.controlxia.app.ui.components.SectionLabel
-import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.components.TechTopBar
 import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
+import com.controlxia.app.voice.WakeWordSettings
 import kotlin.math.roundToInt
 
 /**
- * Ajustes de la palabra de activación: AccessKey de Picovoice (cifrado), palabra
- * de fábrica y sensibilidad. Los cambios se aplican solos al salir de la
- * pantalla, sin apagar el servicio.
+ * Ajustes del asistente: nombre, palabra de activación (cómo suena),
+ * sensibilidad y privacidad con el teléfono bloqueado. Los cambios se aplican
+ * solos al salir de la pantalla, sin apagar el servicio.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WakeWordSettingsScreen(onBack: () -> Unit) {
     BackHandler(onBack = onBack)
@@ -70,12 +52,8 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
         onDispose { WakeWordService.reload(context) }
     }
 
-    var agentName by remember { mutableStateOf(settings.agentName) }
-    var keyword by remember { mutableStateOf(settings.keyword) }
     var sensitivity by remember { mutableFloatStateOf(settings.sensitivity) }
-    var useCustom by remember { mutableStateOf(settings.useCustomKeyword) }
     var showLockedContent by remember { mutableStateOf(settings.showContentWhenLocked) }
-    var keywordMenu by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
         TechTopBar(title = "Asistente y activación", onBack = onBack)
@@ -86,96 +64,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SectionLabel("Nombre del asistente")
-            OutlinedTextField(
-                value = agentName,
-                onValueChange = {
-                    agentName = it
-                    settings.agentName = it
-                },
-                label = { Text("Nombre") },
-                singleLine = true,
-                supportingText = {
-                    Text("Cómo se llama a sí mismo y cómo figura en el aviso de escucha")
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            SectionLabel("Motor · Picovoice Porcupine")
-            Text(
-                "El wake word corre 100% en el teléfono. Porcupine necesita un " +
-                    "AccessKey gratuito (uso personal).",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Muted,
-            )
-            AccessKeyContent(settings)
-
-            // Wake word custom (modelo entrenado propio, ej. "Xia")
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Wake word custom", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "Usar tu modelo entrenado (assets/xia.ppn). Ver la guía " +
-                            "CUSTOM_WAKE_WORD.md.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Muted,
-                    )
-                }
-                Switch(
-                    checked = useCustom,
-                    onCheckedChange = {
-                        useCustom = it
-                        settings.useCustomKeyword = it
-                    },
-                )
-            }
-
-            if (!useCustom) {
-                ExposedDropdownMenuBox(
-                    expanded = keywordMenu,
-                    onExpandedChange = { keywordMenu = it }
-                ) {
-                    OutlinedTextField(
-                        value = keyword.label,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Palabra de activación (de fábrica)") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = keywordMenu)
-                        },
-                        supportingText = { Text("Decí esta palabra para despertar al asistente") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = keywordMenu,
-                        onDismissRequest = { keywordMenu = false }
-                    ) {
-                        WakeKeyword.entries.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option.label) },
-                                onClick = {
-                                    keyword = option
-                                    settings.keyword = option
-                                    keywordMenu = false
-                                }
-                            )
-                        }
-                    }
-                }
-            } else {
-                Text(
-                    "Activá el wake word custom colocando xia.ppn y " +
-                        "porcupine_params_es.pv en app/src/main/assets/. Con eso, decí " +
-                        "“$agentName” para despertarlo.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Muted,
-                )
-            }
+            AgentNameContent(settings)
 
             Column {
                 Row(Modifier.fillMaxWidth()) {
@@ -193,7 +82,8 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                     onValueChangeFinished = { settings.sensitivity = sensitivity },
                 )
                 Text(
-                    "Más alta detecta mejor pero con más falsos positivos.",
+                    "Más alta responde aunque no se te escuche del todo claro, pero " +
+                        "se activa más seguido sin querer.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
@@ -234,53 +124,54 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
 }
 
 /**
- * Botón para sacar el AccessKey gratis + campo para pegarlo (se guarda cifrado
- * al instante). Lo usan los ajustes y el onboarding.
+ * Nombre del asistente y cómo suena su palabra de activación (se guardan al
+ * instante). Lo usan los ajustes y el onboarding.
  */
 @Composable
-fun AccessKeyContent(settings: WakeWordSettings, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    var accessKey by remember { mutableStateOf(settings.accessKey) }
-    var showKey by remember { mutableStateOf(false) }
+fun AgentNameContent(settings: WakeWordSettings, modifier: Modifier = Modifier) {
+    var agentName by remember { mutableStateOf(settings.agentName) }
+    var wakeWord by remember { mutableStateOf(settings.wakeWord) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TechButton(
-            text = "Obtener AccessKey gratis",
-            filled = false,
-            modifier = Modifier.fillMaxWidth(),
-            onClick = {
-                runCatching {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse("https://console.picovoice.ai"))
-                    )
-                }
+        SectionLabel("Nombre del asistente")
+        OutlinedTextField(
+            value = agentName,
+            onValueChange = {
+                agentName = it
+                settings.agentName = it
             },
+            label = { Text("Nombre") },
+            singleLine = true,
+            supportingText = {
+                Text("Decí su nombre para despertarlo. Así se presenta y figura en el aviso de escucha.")
+            },
+            modifier = Modifier.fillMaxWidth(),
         )
 
+        SectionLabel("Cómo suena (opcional)")
         OutlinedTextField(
-            value = accessKey,
+            value = wakeWord,
             onValueChange = {
-                accessKey = it
-                settings.accessKey = it.trim()
+                wakeWord = it
+                settings.wakeWord = it
             },
-            label = { Text("AccessKey") },
+            label = { Text("Palabra de activación") },
+            placeholder = { Text(agentName.ifBlank { "Xia" }.lowercase()) },
             singleLine = true,
-            visualTransformation = if (showKey) {
-                VisualTransformation.None
-            } else {
-                PasswordVisualTransformation()
+            supportingText = {
+                Text(
+                    "Si no te reconoce, escribila como la decís (ej. «sia»). También " +
+                        "acepta una frase corta, como «oye xia»."
+                )
             },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            trailingIcon = {
-                IconButton(onClick = { showKey = !showKey }) {
-                    Icon(
-                        if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = if (showKey) "Ocultar" else "Mostrar"
-                    )
-                }
-            },
-            supportingText = { Text("Se guarda cifrada en el dispositivo") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Text(
+            "La palabra se reconoce en el teléfono con Vosk: sin internet, sin " +
+                "cuentas y sin enviar audio a ningún lado.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
         )
     }
 }

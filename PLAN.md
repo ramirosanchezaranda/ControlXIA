@@ -62,11 +62,11 @@ Debe correr 24/7 on-device con consumo mínimo de batería.
 
 | Opción | Pros | Contras |
 |---|---|---|
-| **Picovoice Porcupine** ✅ | Wake word personalizada ("Xia"), muy eficiente, SDK Android oficial, entrenás la palabra en su consola web | Plan gratuito limitado (uso personal OK), pago para producción |
+| **Picovoice Porcupine** | Wake word personalizada, muy eficiente, SDK Android oficial | Exige cuenta (con mail de empresa) y AccessKey: descartado |
 | openWakeWord | Open source, gratis | Más difícil de integrar en Android, modelos custom requieren entrenamiento propio |
 | Vosk keyword spotting | Gratis, offline | Más falsos positivos, mayor consumo |
 
-**Recomendación:** Porcupine para MVP (gratis para uso personal). Se implementa dentro de un **Foreground Service** con notificación persistente ("Xia está escuchando").
+**Elegido: Vosk** (Apache 2.0, modelo en español on-device, sin cuentas). Se reconoce el nombre con una gramática mínima y una segunda verificación con el vocabulario completo (ver `docs/WAKE_WORD.md`). Corre dentro de un **Foreground Service** con notificación persistente ("Xia está escuchando").
 
 ### ② ASR — Reconocimiento de voz (Speech-to-Text)
 
@@ -241,7 +241,7 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 
 > **Estado:** la base de la Fase 0 ya está en el repo — servicio persistente confiable (bloqueado/Doze/OEMs, §5.4), capa multi-LLM configurable (§3③), onboarding guiado de permisos, dashboard de control y canal de **feedback analizado por el propio LLM** (clasifica cada comentario en [BUG]/[IDEA]/[MEJORA] y lo guarda como insumo del roadmap).
 >
-> **Cadena de voz completa — hecho:** wake word on-device con **Porcupine** → confirmación (vibración + TTS) → **transcripción** con `SpeechRecognizer` (es-AR) → **cerebro** (`brain/CommandProcessor`): manda el texto al LLM configurado con el catálogo de tools, **ejecuta la acción** que el modelo elige y **responde en voz alta**. Memoria conversacional corta (`ConversationMemory`) para pedidos encadenados.
+> **Cadena de voz completa — hecho:** wake word on-device con **Vosk** → confirmación (vibración + TTS) → **transcripción** con `SpeechRecognizer` (es-AR) → **cerebro** (`brain/CommandProcessor`): manda el texto al LLM configurado con el catálogo de tools, **ejecuta la acción** que el modelo elige y **responde en voz alta**. Memoria conversacional corta (`ConversationMemory`) para pedidos encadenados.
 >
 > **Tools que ya se ejecutan:** `get_time`, `get_date`, `open_app` (abre apps por nombre), `set_alarm`, `set_timer` (alarmas/timers con `SKIP_UI`, sin abrir el reloj). Abrir apps con la pantalla bloqueada requiere el permiso "Mostrar sobre otras apps" (fila nueva en el checklist del dashboard).
 >
@@ -251,7 +251,7 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 >
 > **Modo Alexa (sin botón):** la escucha del wake word es **siempre activa** (no necesita el botón home). Bloqueado o con la pantalla apagada, al activarse se **prende la pantalla y responde sobre el candado** (`ui/AssistantActivity`, show-when-locked + turn-screen-on), con toggle de privacidad para mostrar/ocultar el contenido. Único límite (de seguridad de Android): abrir apps de terceros bloqueado pide desbloquear.
 >
-> **Falta:** tools de mensajería (SMS/WhatsApp/llamadas) que necesitan más permisos; entrenar el `.ppn` custom de "Xia".
+> **Falta:** tools de mensajería (SMS/WhatsApp/llamadas) que necesitan más permisos; probar la palabra de activación con voces reales y ruido.
 
 ### Fase 0 — Esqueleto (1-2 semanas) ✅
 - Proyecto Android en Kotlin + Compose
@@ -260,7 +260,7 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 - **Meta cumplida: "abrí Instagram" y "decime la hora" funcionando end-to-end**
 
 ### Fase 1 — MVP asistente (3-4 semanas)
-- ✅ Wake word con Porcupine (palabra de fábrica; "Xia" custom pendiente) + transcripción del comando con `SpeechRecognizer`
+- ✅ Wake word por nombre ("Xia") con Vosk, sin cuentas + transcripción del comando con `SpeechRecognizer`
 - Tools: `send_sms`, `read_messages` (SMS), `make_call`, `set_alarm`, `set_timer`
 - Aliases de contactos ("mi pareja") en onboarding
 - Wizard de permisos completo
@@ -288,7 +288,7 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 |---|---|
 | ASR (`SpeechRecognizer`) | $0 |
 | TTS nativo | $0 |
-| Porcupine (uso personal) | $0 |
+| Vosk (open source) | $0 |
 | LLM (Claude Haiku, ~100 comandos/día) | ~USD 1-3/mes |
 | Backend | $0 (MVP sin backend) |
 
@@ -310,7 +310,7 @@ Xiaomi/MIUI, Samsung, Huawei, Oppo, Vivo y otros agregan sus propios asesinos de
 ```
 app/
 ├── service/
-│   ├── WakeWordService.kt          # Foreground service + Porcupine
+│   ├── WakeWordService.kt          # Foreground service + wake word (Vosk)
 │   ├── NotificationReaderService.kt # NotificationListenerService
 │   └── XiaAccessibilityService.kt   # (Fase 3)
 ├── voice/
@@ -335,7 +335,7 @@ app/
 
 ## 10. Próximos pasos inmediatos
 
-1. Definir el nombre/wake word final y registrarla en Picovoice Console
+1. Definir el nombre/wake word final y probarlo con voces reales
 2. Crear el proyecto Android (Fase 0)
 3. Conseguir API key de Anthropic y definir el system prompt + schemas de las primeras 3 tools
 4. Probar el loop completo en un dispositivo real (el emulador no sirve para micrófono continuo)

@@ -239,25 +239,17 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     Spacer(Modifier.height(32.dp))
                     SectionLabel("Palabra de activación")
                     Spacer(Modifier.height(16.dp))
-                    Text("Elegí cómo despertarla.", style = MaterialTheme.typography.headlineMedium)
+                    Text("Ponele nombre.", style = MaterialTheme.typography.headlineMedium)
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "La palabra de activación se detecta en el teléfono, sin " +
-                            "internet, con Picovoice. Necesita un AccessKey gratuito: " +
-                            "creá una cuenta, copiá la clave y pegala acá. Sin esto, " +
-                            "Xia no puede escucharte en segundo plano.",
+                        "Para despertarla, decí su nombre. Se reconoce en el teléfono, " +
+                            "sin internet ni cuentas. La primera vez prepara el modelo " +
+                            "de voz y tarda unos segundos.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = Muted,
                     )
                     Spacer(Modifier.height(24.dp))
-                    AccessKeyContent(wakeSettings)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Por defecto se despierta con “${wakeSettings.keyword.label}”. " +
-                            "Podés cambiar la palabra y el nombre desde el panel.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Muted,
-                    )
+                    AgentNameContent(wakeSettings)
                 }
                 p == llmPage -> {
                     Spacer(Modifier.height(32.dp))

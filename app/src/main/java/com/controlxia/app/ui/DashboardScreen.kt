@@ -77,8 +77,8 @@ fun DashboardScreen(
         val settings = LlmSettings(context)
         "${settings.activeProvider.displayName} · ${settings.model(settings.activeProvider).ifBlank { "sin modelo" }}"
     }
-    val wakeReady = remember(tick, bump) { WakeWordSettings(context).isReady() }
     val agentName = remember(tick, bump) { WakeWordSettings(context).agentName }
+    val wakeWord = remember(tick, bump) { WakeWordSettings(context).spokenWakeWord() }
     val voiceSummary = remember(tick, bump) {
         val vs = VoiceSettings(context)
         val name = vs.voiceName?.substringBefore("#")?.take(22) ?: "Voz por defecto"
@@ -94,6 +94,7 @@ fun DashboardScreen(
     var running by remember { mutableStateOf(WakeWordService.running) }
     var wakeActive by remember { mutableStateOf(WakeWordService.wakeWordActive) }
     var wakeStatus by remember { mutableStateOf(WakeWordService.wakeWordStatus) }
+    var wakeFailed by remember { mutableStateOf(WakeWordService.wakeWordFailed) }
     var brainError by remember { mutableStateOf(WakeWordService.lastBrainError) }
     var lastReply by remember { mutableStateOf(WakeWordService.lastReply) }
     LaunchedEffect(Unit) {
@@ -101,6 +102,7 @@ fun DashboardScreen(
             running = WakeWordService.running
             wakeActive = WakeWordService.wakeWordActive
             wakeStatus = WakeWordService.wakeWordStatus
+            wakeFailed = WakeWordService.wakeWordFailed
             brainError = WakeWordService.lastBrainError
             lastReply = WakeWordService.lastReply
             delay(1_000)
@@ -269,25 +271,20 @@ fun DashboardScreen(
                 SectionLabel("Palabra de activación")
                 Spacer(Modifier.height(12.dp))
                 TechPanel {
-                    // Con el servicio corriendo y el wake word inactivo, el
-                    // estado trae el motivo real (AccessKey inválido, etc.).
-                    val wakeFailed = running && !wakeActive && wakeStatus != null
+                    // Con el servicio corriendo, el estado trae lo que pasa en vivo:
+                    // preparando el modelo, escuchando o el motivo de un error.
+                    val live = running && wakeStatus != null
                     StatusRow(
-                        label = when {
-                            wakeActive -> wakeStatus ?: "Escuchando"
-                            wakeFailed -> wakeStatus.orEmpty()
-                            wakeReady -> "Configurado — se activa con la escucha"
-                            else -> "Falta el AccessKey de Picovoice"
-                        },
+                        label = if (live) wakeStatus.orEmpty() else "Decí “$wakeWord” — se activa con la escucha",
                         ok = when {
                             wakeActive -> true
-                            wakeFailed || !wakeReady -> false
+                            live && wakeFailed -> false
                             else -> null
                         },
                     )
                     Spacer(Modifier.height(8.dp))
                     TechButton(
-                        text = if (wakeReady) "Ajustar" else "Configurar",
+                        text = "Ajustar nombre y sensibilidad",
                         filled = false,
                         modifier = Modifier.fillMaxWidth(),
                         onClick = onOpenWakeWord,

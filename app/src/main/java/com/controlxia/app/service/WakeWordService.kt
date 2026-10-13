@@ -31,10 +31,11 @@ import com.controlxia.app.ui.MainActivity
 import com.controlxia.app.voice.AndroidSpeechToText
 import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.ListeningOverlay
-import com.controlxia.app.voice.PorcupineWakeWordEngine
 import com.controlxia.app.voice.RecentCommandsStore
 import com.controlxia.app.voice.SpeechToText
 import com.controlxia.app.voice.VoiceSettings
+import com.controlxia.app.voice.VoskModelStore
+import com.controlxia.app.voice.VoskWakeWordEngine
 import com.controlxia.app.voice.WakeWordEngine
 import com.controlxia.app.voice.WakeWordSettings
 import kotlinx.coroutines.CancellationException
@@ -56,9 +57,9 @@ import java.util.Locale
  * Android no deja encender el micrófono desde segundo plano (Android 14+), el
  * servicio no crashea: avisa con una notificación para reactivarlo con un toque.
  *
- * Cadena de voz: wake word (Porcupine) → "Te escucho" (vibración + TTS) →
+ * Cadena de voz: wake word (Vosk) → "Te escucho" (vibración + TTS) →
  * transcripción (SpeechRecognizer) → cerebro (LLM + tools) → respuesta hablada
- * → vuelve a esperar la palabra. Porcupine y SpeechRecognizer comparten el
+ * → vuelve a esperar la palabra. Vosk y SpeechRecognizer comparten el
  * micrófono, así que el wake word se pausa mientras se transcribe. Cada espera
  * tiene un tope de tiempo: si el TTS o el reconocedor no avisan, igual se sigue
  * y la escucha nunca queda colgada.
@@ -212,14 +213,12 @@ class WakeWordService : Service() {
         }
     }
 
-    private fun idleNotificationText(): String {
-        val settings = WakeWordSettings(this)
-        return when {
-            !PermissionManager.hasRecordAudio(this) -> "Falta el permiso de micrófono"
-            !settings.isReady() -> "Falta configurar la palabra de activación"
-            else -> "Decí “${settings.spokenWakeWord()}” para dar una orden"
+    private fun idleNotificationText(): String =
+        if (!PermissionManager.hasRecordAudio(this)) {
+            "Falta el permiso de micrófono"
+        } else {
+            "Decí “${WakeWordSettings(this).spokenWakeWord()}” para dar una orden"
         }
-    }
 
     private fun buildNotification(contentText: String): Notification {
         val openApp = PendingIntent.getActivity(
@@ -261,87 +260,68 @@ class WakeWordService : Service() {
         }
     }
 
-    private fun setWakeStatus(active: Boolean, status: String) {
+    private fun setWakeStatus(active: Boolean, status: String, failed: Boolean = false) {
         wakeWordActive = active
         wakeWordStatus = status
+        wakeWordFailed = failed
         updateNotification(if (active) idleNotificationText() else status)
     }
 
     /**
-     * Inicia el motor de wake word si están dadas las condiciones (permiso de
-     * micrófono + AccessKey configurado). Idempotente: si ya está escuchando,
-     * no hace nada. Degrada con gracia: sin AccessKey, el servicio sigue vivo
-     * y el resto de la app funciona; solo no hay palabra de activación.
+     * Inicia el wake word (Vosk) si hay permiso de micrófono. Idempotente: si
+     * ya hay un motor, no hace nada. El motor arranca en su propio hilo (la
+     * primera vez prepara el modelo de voz, unos segundos) y avisa por
+     * callbacks cuándo está escuchando o si falló.
      */
     private fun startListening() {
         if (wakeEngine != null || listeningCommand) return
         main.removeCallbacks(retryWakeWord)
         if (!PermissionManager.hasRecordAudio(this)) {
-            setWakeStatus(false, "Falta el permiso de micrófono")
+            setWakeStatus(false, "Falta el permiso de micrófono", failed = true)
             return
         }
         val settings = WakeWordSettings(this)
         agentName = settings.agentName
-        if (!settings.isReady()) {
-            setWakeStatus(false, "Falta el AccessKey de Picovoice")
-            return
-        }
-        try {
-            val custom = settings.useCustomKeyword
-            val engine = PorcupineWakeWordEngine(
-                context = applicationContext,
-                accessKey = settings.accessKey,
-                keyword = settings.keyword,
-                sensitivity = settings.sensitivity,
-                customKeywordAsset = if (custom) WakeWordSettings.CUSTOM_KEYWORD_ASSET else null,
-                customModelAsset = if (custom) WakeWordSettings.CUSTOM_MODEL_ASSET else null,
-            )
-            engine.start(onDetected = { onWakeWordDetected() }, onError = { onWakeEngineError(it) })
-            wakeEngine = engine
-            setWakeStatus(true, "Escuchando “${settings.spokenWakeWord()}”")
-        } catch (e: Exception) {
-            wakeEngine = null
-            val (message, transient) = friendlyWakeError(e, settings.useCustomKeyword)
-            setWakeStatus(false, message)
-            // Micrófono ocupado (una llamada, otra app grabando): reintentar
-            // solo. Los errores de configuración no se arreglan reintentando.
-            if (transient) {
-                main.removeCallbacks(retryWakeWord)
-                main.postDelayed(retryWakeWord, ENGINE_RETRY_MS * 3)
-            }
-        }
+        val engine = VoskWakeWordEngine(
+            context = applicationContext,
+            phrase = settings.spokenWakeWord(),
+            sensitivity = settings.sensitivity,
+        )
+        wakeEngine = engine
+        setWakeStatus(false, "Preparando el reconocimiento de voz…")
+        startEngine(engine)
+    }
+
+    private fun startEngine(engine: WakeWordEngine) {
+        val heard = WakeWordSettings(this).spokenWakeWord()
+        engine.start(
+            onDetected = { onWakeWordDetected() },
+            onError = { message, transient -> onWakeEngineError(engine, message, transient) },
+            onReady = {
+                main.post {
+                    if (wakeEngine === engine && !listeningCommand) {
+                        setWakeStatus(true, "Escuchando “$heard”")
+                    }
+                }
+            },
+        )
     }
 
     /**
-     * Traduce los errores de Porcupine a algo accionable para el usuario.
-     * Devuelve el mensaje y si vale la pena reintentar más tarde.
+     * El motor no pudo arrancar o se cayó. Si es algo pasajero (una llamada u
+     * otra app tomó el micrófono) se reintenta solo; si es de configuración
+     * (palabra fuera del vocabulario) queda el motivo a la vista en el panel.
      */
-    private fun friendlyWakeError(e: Exception, custom: Boolean): Pair<String, Boolean> {
-        val name = (e.cause ?: e).javaClass.simpleName
-        return when {
-            name.contains("ActivationLimit") ->
-                "El AccessKey llegó a su límite de dispositivos" to false
-            name.contains("ActivationThrottled") ->
-                "Picovoice limitó las activaciones; probá en un rato" to false
-            name.contains("Activation") ->
-                "El AccessKey de Picovoice no es válido (o no hay internet para validarlo)" to false
-            custom && name.contains("IO") ->
-                "Faltan xia.ppn y porcupine_params_es.pv en assets" to false
-            custom && name.contains("InvalidArgument") ->
-                "El modelo custom no coincide con el idioma o la versión" to false
-            else -> (e.message ?: "No se pudo iniciar el wake word") to true
-        }
-    }
-
-    /** La escucha se cayó después de arrancar (ej. una llamada tomó el micrófono). */
-    private fun onWakeEngineError(message: String) {
+    private fun onWakeEngineError(engine: WakeWordEngine, message: String, transient: Boolean) {
         main.post {
-            if (listeningCommand) return@post
-            wakeEngine?.release()
+            if (wakeEngine !== engine || listeningCommand) return@post
+            engine.release()
             wakeEngine = null
-            setWakeStatus(false, "Escucha interrumpida: $message")
-            main.removeCallbacks(retryWakeWord)
-            main.postDelayed(retryWakeWord, ENGINE_RETRY_MS)
+            setWakeStatus(false, message, failed = true)
+            if (transient) {
+                main.removeCallbacks(retryWakeWord)
+                main.postDelayed(retryWakeWord, ENGINE_RETRY_MS)
+            }
         }
     }
 
@@ -509,13 +489,7 @@ class WakeWordService : Service() {
             startListeningFresh()
             return
         }
-        runCatching {
-            engine.start(onDetected = { onWakeWordDetected() }, onError = { onWakeEngineError(it) })
-        }.onSuccess {
-            updateNotification(idleNotificationText())
-        }.onFailure {
-            startListeningFresh()
-        }
+        startEngine(engine)
     }
 
     private fun startListeningFresh() {
@@ -611,6 +585,8 @@ class WakeWordService : Service() {
         wakeWordActive = false
         inForeground = false
         releaseVoice()
+        // Libera los ~110 MB del modelo de voz si el motor ya soltó el micrófono.
+        VoskModelStore.releaseIfIdle()
         scope.cancel()
         tts?.shutdown()
         tts = null
@@ -648,6 +624,11 @@ class WakeWordService : Service() {
         /** Último estado legible del wake word (motivo si está inactivo). */
         @Volatile
         var wakeWordStatus: String? = null
+            private set
+
+        /** true si el wake word está inactivo por un error (no mientras se prepara). */
+        @Volatile
+        var wakeWordFailed: Boolean = false
             private set
 
         /** Última transcripción escuchada (para feedback inmediato en la UI). */

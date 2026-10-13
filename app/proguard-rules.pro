@@ -1,8 +1,11 @@
 # Reglas ProGuard/R8 para el build release (minify + shrink).
 
-# --- Picovoice Porcupine: usa JNI y carga clases por reflexión ---
--keep class ai.picovoice.** { *; }
--dontwarn ai.picovoice.**
+# --- Vosk + JNA: la librería nativa se llama por reflexión (JNA) ---
+-keep class org.vosk.** { *; }
+-keep class com.sun.jna.** { *; }
+-keepclassmembers class * extends com.sun.jna.** { public *; }
+-dontwarn java.awt.**
+-dontwarn com.sun.jna.**
 
 # --- kotlinx.serialization ---
 -keepattributes *Annotation*, InnerClasses

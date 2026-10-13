@@ -7,5 +7,4 @@
     <string name="notif_action_stop">Apagar</string>
     <string name="notif_reactivate_title">La escucha está en pausa</string>
     <string name="notif_reactivate_text">Android no dejó encenderla en segundo plano. Tocá para reactivarla.</string>
-    <string name="picovoice_console_url">https://console.picovoice.ai</string>
 </resources>
