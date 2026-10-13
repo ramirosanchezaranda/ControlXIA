@@ -115,6 +115,77 @@ class WhatsAppUi(private val context: Context) {
 
     private fun failed(reason: String) = OpenResult.Failed(fail(reason))
 
+    /**
+     * Manda un archivo (un audio) a un chat. Con [number] va directo a ese
+     * chat; si no (grupos, gente sin número en la agenda), se elige [chatName]
+     * en la pantalla "Enviar a…" de WhatsApp. null si salió bien.
+     */
+    suspend fun sendFile(file: java.io.File, mime: String, number: String?, chatName: String): String? =
+        withContext(Dispatchers.Default) {
+            val service = XiaAccessibilityService.instance
+                ?: return@withContext "Para mandarlo necesito el control de apps activado."
+            val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            if (keyguard.isKeyguardLocked) return@withContext "Desbloqueá el teléfono para usar WhatsApp."
+            val pkg = PACKAGES.firstOrNull { context.packageManager.getLaunchIntentForPackage(it) != null }
+                ?: return@withContext "No encontré WhatsApp instalado."
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+            val share = Intent(Intent.ACTION_SEND)
+                .setType(mime)
+                .setPackage(pkg)
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            share.clipData = android.content.ClipData.newRawUri("audio", uri)
+            if (number != null) share.putExtra("jid", "$number@s.whatsapp.net")
+            AgentLog.add("WHATSAPP compartir ${file.name} con ${number ?: "«$chatName»"}")
+            val opened = runCatching { withContext(Dispatchers.Main) { context.startActivity(share) } }.isSuccess
+            if (!opened) return@withContext fail("No pude pasarle el audio a WhatsApp.")
+
+            if (number == null) {
+                // "Enviar a…": buscar el chat, marcarlo y tocar enviar.
+                val search = waitFor(service, pkg, 6_000) { findSearch(it, pkg) }
+                    ?: return@withContext fail("No encontré el buscador de «Enviar a» en WhatsApp.")
+                click(service, search)
+                if (!typeSearch(service, pkg, chatName)) return@withContext fail("No pude buscar «$chatName».")
+                val row = waitFor(service, pkg, 3_000) { findResult(it, pkg, chatName) }
+                    ?: waitFor(service, pkg, 2_000) { root ->
+                        closestResult(root, pkg, chatName)?.takeIf { it.second >= MIN_SIMILARITY }?.first
+                    }
+                    ?: return@withContext fail("No encontré «$chatName» para mandarle el audio.")
+                click(service, row)
+                delay(600)
+            }
+            // El botón de enviar, y si WhatsApp pregunta "¿Enviar audio a…?", confirmar.
+            val deadline = System.currentTimeMillis() + 8_000
+            var sent = false
+            while (System.currentTimeMillis() < deadline && !sent) {
+                val root = service.rootInActiveWindow
+                if (root != null && root.packageName?.toString() == pkg) {
+                    val button = findSendButton(root, pkg) ?: findDialogButton(root)
+                    if (button != null) {
+                        click(service, button)
+                        sent = true
+                        delay(800)
+                        // Algunas versiones piden confirmar después del primer toque.
+                        service.rootInActiveWindow?.let { findDialogButton(it) }?.let { click(service, it) }
+                    }
+                }
+                if (!sent) delay(300)
+            }
+            if (!sent) return@withContext fail("Dejé el audio listo en WhatsApp, pero no encontré el botón de enviar: tocalo vos.")
+            AgentLog.add("WHATSAPP audio enviado")
+            null
+        }
+
+    /** El "Enviar" de un diálogo de confirmación. */
+    private fun findDialogButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? =
+        listOf("android:id/button1").firstNotNullOfOrNull { id ->
+            root.findAccessibilityNodeInfosByViewId(id).firstOrNull { it.isVisibleToUser }
+        } ?: listOf("ENVIAR", "Enviar", "SEND", "Send").firstNotNullOfOrNull { label ->
+            root.findAccessibilityNodeInfosByText(label).firstOrNull {
+                it.isVisibleToUser && it.isClickable && it.text?.toString().equals(label, ignoreCase = true)
+            }
+        }
+
     private fun fail(reason: String): String {
         AgentLog.add("WHATSAPP $reason")
         return reason

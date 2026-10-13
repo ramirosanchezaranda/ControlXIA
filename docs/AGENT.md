@@ -14,6 +14,8 @@ Desde la versión 0.3.0 el asistente resuelve los pedidos en **varios pasos**: e
 | Pantalla | `screen_read`, `screen_tap`, `screen_type`, `screen_scroll`, `screen_back` | Con el **control de apps** (accesibilidad) lee la pantalla como una lista numerada y toca, escribe o desplaza. Cada acción devuelve la pantalla nueva. |
 | Mensajes | `read_messages`, `reply_to_message`, `send_message`, `save_contact_alias` | Lee los mensajes desde las notificaciones, los responde con la acción "Responder" de la notificación, manda mensajes nuevos por WhatsApp o SMS a contactos, apodos ("mi pareja") o grupos. |
 | WhatsApp por nombre | `whatsapp_open_chat` | Abre un chat o **grupo** buscándolo por nombre dentro de WhatsApp, en un solo paso (`actions/WhatsAppUi`). |
+| Teléfono | `phone`, `camera`, `call` | Botones y ajustes del sistema, cámara y llamadas: lo mismo que los comandos directos ([VOICE_CONTROL.md](VOICE_CONTROL.md)), para pedidos compuestos ("sacate una selfie y mandásela a Juan"). |
+| Audios | `send_audio` | Graba la voz del usuario o genera el audio con la voz del asistente y lo manda por WhatsApp (con confirmación). |
 | Básicas | `get_time`, `get_date`, `open_app`, `set_alarm`, `set_timer` | En pedidos de una sola cosa se responden sin volver al modelo. |
 
 ## WhatsApp: grupos y nombres mal entendidos
@@ -39,6 +41,16 @@ Además:
 - El atajo de "decir el resultado sin volver al modelo" (abrir una app, poner una alarma) solo se usa en pedidos de **una sola cosa**; en "abrí WhatsApp y mandale…" el modelo sigue después de abrir.
 - Si en medio de un pedido de varias cosas hace falta confirmar ("mandale hola a Juan y poneme una alarma"), después del "sí" **sigue con lo que falta** (la alarma) en vez de terminar ahí.
 - Todo queda en el **Registro del agente** (líneas `CONTROL:` y `SIGO`).
+
+## Comandos directos
+
+Antes de llamar al modelo, las frases cortas y fijas ("atrás", "tocá 5", "subí el volumen", "sacá una foto", "llamá a mamá") se resuelven en el teléfono: al instante, sin tokens. Lista completa en [VOICE_CONTROL.md](VOICE_CONTROL.md).
+
+## Correcciones y despedidas
+
+- "No, mandale este otro mensaje" a una confirmación: no se manda lo anterior y se atiende lo nuevo (antes solo cancelaba).
+- "Bueno, gracias Beto" cierra la conversación aunque tenga el nombre o una muletilla adelante.
+- En mensajes y audios, el modelo manda el texto ya redactado y no la orden: "decile que llego tarde" → «Llego tarde».
 
 ## Frenarlo
 

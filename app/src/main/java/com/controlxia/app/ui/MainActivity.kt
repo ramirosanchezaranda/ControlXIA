@@ -13,10 +13,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.controlxia.app.permissions.PermissionManager
+import com.controlxia.app.service.HandsWatchService
 import com.controlxia.app.service.ServicePrefs
 import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.ui.theme.XiaTheme
 import com.controlxia.app.ui.theme.screenTransition
+import com.controlxia.app.voice.GestureModel
+import com.controlxia.app.voice.WakeWordSettings
 
 class MainActivity : ComponentActivity() {
 
@@ -82,6 +85,12 @@ class MainActivity : ComponentActivity() {
             PermissionManager.hasRecordAudio(this)
         ) {
             WakeWordService.tryStart(this)
+        }
+        // "Pausa con las manos" solo puede prender la cámara si arranca con la app a la vista.
+        if (WakeWordSettings(this).handsPause && !HandsWatchService.running &&
+            PermissionManager.hasCamera(this) && GestureModel.isInstalled(this)
+        ) {
+            HandsWatchService.start(this)
         }
     }
 

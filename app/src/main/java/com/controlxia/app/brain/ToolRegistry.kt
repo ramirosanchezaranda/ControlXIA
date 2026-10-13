@@ -4,9 +4,11 @@ import android.content.Context
 import com.controlxia.app.actions.AlarmActions
 import com.controlxia.app.actions.AppDeepLinks
 import com.controlxia.app.actions.AppLauncher
+import com.controlxia.app.actions.AudioMessage
 import com.controlxia.app.actions.Contacts
 import com.controlxia.app.actions.MessageSender
 import com.controlxia.app.actions.MessageStore
+import com.controlxia.app.actions.PhoneCalls
 import com.controlxia.app.actions.ScreenControl
 import com.controlxia.app.actions.WhatsAppUi
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +55,7 @@ class ToolRegistry(private val context: Context) {
     private val sender by lazy { MessageSender(context) }
     private val whatsApp by lazy { WhatsAppUi(context) }
     private val direct by lazy { DirectCommandRunner(context) }
+    private val audioMessages by lazy { AudioMessage(context) }
 
     // Descripciones cortas a propósito: el catálogo viaja en cada paso del
     // agente y con Groq gratis (8K tokens por minuto) cada palabra cuenta.
@@ -108,8 +111,24 @@ class ToolRegistry(private val context: Context) {
                 "SMS. Pide confirmación sola.",
             parameters = schema(required = listOf("contact", "text")) {
                 put("contact", str("Nombre, apodo (\"mi pareja\") o grupo"))
-                put("text", str("Mensaje, tal cual"))
+                put("text", str("El mensaje ya redactado como lo escribiría el usuario: «decile que llego tarde» → «Llego tarde»"))
                 put("app", enumProp("Por dónde", listOf("whatsapp", "sms")))
+            },
+        ),
+        ToolSpec(
+            name = "call",
+            description = "Llama por teléfono a un contacto o número. Pide confirmación sola.",
+            parameters = schema(required = listOf("contact")) {
+                put("contact", str("Nombre, apodo o número"))
+            },
+        ),
+        ToolSpec(
+            name = "send_audio",
+            description = "Manda un audio de WhatsApp a un contacto o grupo. Con text lo dice la voz " +
+                "del asistente; sin text graba la voz del usuario. Pide confirmación sola.",
+            parameters = schema(required = listOf("contact")) {
+                put("contact", str("Nombre, apodo o grupo"))
+                put("text", str("Qué dice el audio, ya redactado; vacío para grabar la voz del usuario"))
             },
         ),
         ToolSpec(
@@ -127,7 +146,7 @@ class ToolRegistry(private val context: Context) {
             description = "Responde un mensaje de read_messages sin abrir la app. Pide confirmación sola.",
             parameters = schema(required = listOf("message_id", "text")) {
                 put("message_id", intProp("Id del mensaje"))
-                put("text", str("Respuesta"))
+                put("text", str("La respuesta ya redactada, no la orden"))
             },
         ),
         ToolSpec(
@@ -222,6 +241,7 @@ class ToolRegistry(private val context: Context) {
             "screen_back" -> "Volviendo…"
             "read_messages" -> "Leyendo mensajes…"
             "reply_to_message", "send_message" -> "Preparando el mensaje…"
+            "send_audio" -> "Preparando el audio…"
             else -> "Pensando…"
         }
     }
@@ -259,6 +279,8 @@ class ToolRegistry(private val context: Context) {
         "read_messages" -> readMessages(args)
         "reply_to_message" -> replyToMessage(args)
         "send_message" -> sendMessage(args)
+        "send_audio" -> sendAudio(args)
+        "call" -> call(args)
         "phone" -> phone(args)
         "camera" -> {
             val action = CAMERA_ACTIONS[args.strArg("action")]
@@ -305,6 +327,30 @@ class ToolRegistry(private val context: Context) {
             else -> PHONE_ACTIONS[action] ?: return ToolOutcome("Acción desconocida: $action.")
         }
         return directOutcome(direct.run(command))
+    }
+
+    private suspend fun call(args: JsonObject): ToolOutcome {
+        val who = args.strArg("contact").ifBlank { return ToolOutcome("Falta a quién llamar.") }
+        val digits = who.filter { it.isDigit() }
+        val (name, number) = if (digits.length >= 6) {
+            digits to digits
+        } else {
+            when (val found = withContext(Dispatchers.IO) { contacts.find(who) }) {
+                is Contacts.Lookup.Found -> found.contact.name to found.contact.phone
+                is Contacts.Lookup.Ambiguous -> return ToolOutcome(
+                    "Hay varios contactos parecidos: ${found.names.joinToString(", ")}. Preguntale al usuario cuál."
+                )
+                is Contacts.Lookup.NotFound -> return ToolOutcome(found.reason)
+            }
+        }
+        return ToolOutcome(
+            text = "Necesito la confirmación del usuario antes de llamar.",
+            pending = PendingAction(
+                question = "¿Llamo a $name?",
+                progress = "Llamando…",
+                execute = { PhoneCalls(context).call(number) ?: "Llamando a $name." },
+            ),
+        )
     }
 
     private fun directOutcome(reply: Reply?): ToolOutcome =
@@ -408,6 +454,45 @@ class ToolRegistry(private val context: Context) {
     }
 
     /**
+     * Graba al usuario (o genera el audio con la voz del asistente) y, con su
+     * "sí", lo manda al chat: directo si el contacto tiene número, si no por
+     * nombre (grupos).
+     */
+    private suspend fun sendAudio(args: JsonObject): ToolOutcome {
+        val target = args.strArg("contact").ifBlank { return ToolOutcome("Falta a quién mandarle el audio.") }
+        val text = args.strArgOrNull("text")
+        var name = WhatsAppUi.chatName(target)
+        var number: String? = null
+        if (!GROUP.containsMatchIn(target)) {
+            when (val found = withContext(Dispatchers.IO) { contacts.find(target) }) {
+                is Contacts.Lookup.Found -> {
+                    name = found.contact.name
+                    number = contacts.international(found.contact.phone)
+                }
+                is Contacts.Lookup.Ambiguous -> return ToolOutcome(
+                    "Hay varios contactos parecidos: ${found.names.joinToString(", ")}. Preguntale al usuario cuál."
+                )
+                is Contacts.Lookup.NotFound -> Unit // puede ser un chat que no está en la agenda
+            }
+        }
+        val (audio, error) = if (text != null) audioMessages.synthesize(text) else audioMessages.record()
+        if (audio == null) return ToolOutcome(error ?: "No pude hacer el audio.", terminal = true)
+        val question = if (text != null) {
+            "¿Le mando a $name un audio que dice «$text»?"
+        } else {
+            "¿Le mando a $name el audio de ${audio.seconds} segundos?"
+        }
+        return ToolOutcome(
+            text = "Necesito la confirmación del usuario antes de enviar.",
+            pending = PendingAction(
+                question = question,
+                progress = "Enviando el audio…",
+                execute = { whatsApp.sendFile(audio.file, audio.mime, number, name) ?: "Listo, le mandé el audio a $name." },
+            ),
+        )
+    }
+
+    /**
      * Abre el chat por nombre en WhatsApp y recién ahí pregunta, con el nombre
      * real del chat: si se eligió uno parecido ("fulgo 2" → «Fútbol 2 ⚽»), el
      * usuario lo ve antes de decir que sí.
@@ -454,6 +539,11 @@ class ToolRegistry(private val context: Context) {
     }
 }
 
+private val CALL_ACTIONS = mapOf(
+    "answer_call" to DirectCommands.AnswerCall,
+    "end_call" to DirectCommands.HangUp,
+)
+
 private val PHONE_ACTIONS: Map<String, DirectCommands.Command?> = mapOf(
     "back" to DirectCommands.Global(DirectCommands.GlobalAction.BACK),
     "home" to DirectCommands.Global(DirectCommands.GlobalAction.HOME),
@@ -480,7 +570,7 @@ private val PHONE_ACTIONS: Map<String, DirectCommands.Command?> = mapOf(
     "airplane_on" to DirectCommands.Toggle(DirectCommands.Setting.AIRPLANE, true),
     "airplane_off" to DirectCommands.Toggle(DirectCommands.Setting.AIRPLANE, false),
     "brightness_set" to null,
-)
+) + CALL_ACTIONS
 
 private val CAMERA_ACTIONS = mapOf(
     "open" to DirectCommands.CameraAction.OPEN,

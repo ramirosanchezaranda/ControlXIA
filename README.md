@@ -22,6 +22,11 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Modo conversación**: después de responder sigue escuchando unos segundos (configurable) para el próximo pedido, sin repetir el nombre; "gracias" o "listo" la cierran.
 - ✅ **Groq como proveedor**: `openai/gpt-oss-120b` recomendado; el agente se adapta al plan gratis (pedidos livianos, espera y reintenta solo si Groq pide esperar).
 - ✅ **Control de que hizo todo**: si el modelo dice haber hecho algo sin hacerlo, o hace una parte de un pedido de varias cosas, se le muestra lo hecho de verdad y completa lo que falta; después de confirmar un mensaje sigue con el resto del pedido.
+- ✅ **Manejar el teléfono solo con la voz** (como el Acceso por voz de Google, sin pasar por el modelo): "atrás", "inicio", "bajá", "mostrá los números" + "tocá 5", "tocá Guardar", "escribí…", volumen, música y videos, linterna, Wi-Fi, Bluetooth, brillo, "abrí Instagram". Ver [docs/VOICE_CONTROL.md](docs/VOICE_CONTROL.md).
+- ✅ **Cámara por voz**: abrir, foto, selfie, empezar y terminar un video ("terminá el video" se escucha sin internet mientras graba), cambiar de cámara.
+- ✅ **Audios de WhatsApp**: graba tu voz hasta que te callás, o lo dice la voz del asistente; confirma y lo manda (también a grupos).
+- ✅ **Llamadas**: "llamá a mamá", "atendé", "colgá".
+- ✅ **Pausa con las manos** (opcional): mirando un video, levantá las dos manos y pone pausa y te pregunta qué necesitás (cámara frontal + MediaPipe, todo en el teléfono).
 - ✅ **Frenarlo por voz**: "pará", "basta" o "cancelá" mientras trabaja o habla (o su nombre para interrumpirlo); también tocando la píldora o "Frenar" en la notificación. Se entera de que lo frenaron y de qué alcanzó a hacer.
 - ✅ **Modelos recomendados** al elegir proveedor y modelo, con una nota de para qué sirve cada uno (gratis: Groq gpt-oss-120b o Gemini 3.8 Flash; pago y eficiente: Claude Haiku 5.5 o GPT-6 Luna).
 - ✅ **WhatsApp por nombre**: abre chats y grupos buscándolos en WhatsApp, aunque el reconocimiento de voz entienda mal el nombre ("fulgo 2" → «Fútbol 2 ⚽»), y confirma con el nombre real antes de enviar.

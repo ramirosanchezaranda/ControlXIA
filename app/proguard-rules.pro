@@ -36,3 +36,13 @@
 # Referencia anotaciones de Error Prone que no viajan en el APK; sin esto R8
 # corta el build release con "Missing class".
 -dontwarn com.google.errorprone.annotations.**
+
+# --- MediaPipe (gestos con la cámara): la parte nativa llama a clases Java y
+# usa protobuf por reflexión; las AAR no traen reglas propias. ---
+-keep class com.google.mediapipe.** { *; }
+-keep class com.google.protobuf.** { *; }
+-dontwarn com.google.mediapipe.**
+-dontwarn com.google.protobuf.**
+-dontwarn com.google.auto.value.**
+-dontwarn javax.lang.model.**
+-dontwarn autovalue.shaded.**

@@ -64,7 +64,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     val screenControlOk = remember(tick, bump) { XiaAccessibilityService.isEnabled(context) }
     val messagesOk = remember(tick, bump) { XiaNotificationListener.isEnabled(context) }
     val contactsOk = remember(tick, bump) {
-        PermissionManager.hasContacts(context) && PermissionManager.hasSendSms(context)
+        PermissionManager.hasPhonePermissions(context)
     }
     val oemNeeded = remember { PermissionManager.needsOemSetup() }
     val wakeSettings = remember { WakeWordSettings(context) }
@@ -153,11 +153,11 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                 "pareja que llego en 10»), los contactos y los SMS. Siempre te pide " +
                 "confirmación antes de enviar.",
             granted = messagesOk && contactsOk,
-            actionLabel = if (!contactsOk) "Permitir contactos y SMS" else "Activar leer mensajes",
+            actionLabel = if (!contactsOk) "Permitir contactos, SMS y llamadas" else "Activar leer mensajes",
             action = {
                 if (!contactsOk) {
                     permissionLauncher.launch(
-                        arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)
+                        PermissionManager.PHONE_PERMISSIONS
                     )
                 } else {
                     runCatching { context.startActivity(PermissionManager.notificationAccessIntent()) }

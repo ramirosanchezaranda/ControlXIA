@@ -2,6 +2,8 @@ package com.controlxia.app.ui
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,21 +33,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.controlxia.app.permissions.PermissionManager
+import com.controlxia.app.service.HandsWatchService
 import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.ui.components.SectionLabel
 import com.controlxia.app.ui.components.StatusDot
 import com.controlxia.app.ui.components.TechTopBar
 import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
+import com.controlxia.app.voice.GestureModel
 import com.controlxia.app.voice.VoskModelDownloader
 import com.controlxia.app.voice.VoskModelStore
 import com.controlxia.app.voice.WakePhraseDetector
 import com.controlxia.app.voice.WakePhraseResolver
 import com.controlxia.app.voice.WakeWordSettings
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 /**
  * Ajustes del asistente: nombre, palabra de activación (cómo suena),
@@ -153,6 +158,8 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                     )
                 }
             }
+
+            HandsPauseContent(settings)
 
             // Privacidad con el teléfono bloqueado
             SectionLabel("Privacidad")
@@ -281,5 +288,68 @@ private fun checkName(context: Context, phrase: String): NameCheck {
         NameCheck(true, "Va a responder cuando digas «$phrase».")
     } else {
         NameCheck(true, "Va a responder a «$phrase» (lo reconoce como «$heard»).")
+    }
+}
+
+/**
+ * "Pausa con las manos": pide el permiso de cámara, baja el modelo de gestos
+ * (8 MB, una vez) y arranca el servicio que mira mientras se reproduce algo.
+ */
+@Composable
+private fun HandsPauseContent(settings: WakeWordSettings) {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(settings.handsPause) }
+    val download by GestureModel.state.collectAsState()
+
+    fun turnOn() {
+        settings.handsPause = true
+        enabled = true
+        GestureModel.ensure(context) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post { HandsWatchService.start(context) }
+        }
+    }
+
+    val cameraPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) turnOn() }
+
+    SectionLabel("Pausa con las manos")
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Levantar las dos manos", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Mientras ves un video o escuchás música, levantá las dos manos con las " +
+                    "palmas hacia el teléfono: pone pausa y te pregunta qué necesitás. La " +
+                    "cámara frontal se prende solo mientras algo se reproduce y todo se " +
+                    "analiza en el teléfono, sin guardar imágenes.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+            )
+        }
+        Switch(
+            checked = enabled,
+            onCheckedChange = { on ->
+                if (on) {
+                    if (PermissionManager.hasCamera(context)) turnOn()
+                    else cameraPermission.launch(android.Manifest.permission.CAMERA)
+                } else {
+                    settings.handsPause = false
+                    enabled = false
+                    HandsWatchService.stop(context)
+                }
+            },
+        )
+    }
+    when (val state = download) {
+        is GestureModel.State.Downloading -> Text(
+            "Bajando el modelo de gestos… ${(state.progress * 100).roundToInt()}%",
+            style = MaterialTheme.typography.bodySmall,
+            color = Accent,
+        )
+        is GestureModel.State.Failed -> Text(state.message, style = MaterialTheme.typography.bodySmall, color = Accent)
+        else -> Unit
     }
 }

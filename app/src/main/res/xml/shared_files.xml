@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo la carpeta de audios para compartir (se borra sola: es caché). -->
+<paths>
+    <cache-path name="audio" path="audio/" />
+</paths>

@@ -52,6 +52,11 @@ object DirectCommands {
 
     data object Help : Command
 
+    /** "Llamá a mamá" / "llamá al 1155554444". */
+    data class Call(val who: String) : Command
+    data object AnswerCall : Command
+    data object HangUp : Command
+
     /** "Abrí Instagram": si no hay una app con ese nombre, el pedido va al modelo. */
     data class OpenApp(val name: String) : Command
 
@@ -75,6 +80,8 @@ object DirectCommands {
     }
 
     private val TYPE_VERBS = listOf("escribi", "escribir", "escribe", "escribime", "tipea", "tipear", "dicta", "dictar")
+
+    private val INDIRECT = Regex("^(?:decirle|decile|deciles|le |les |a [a-z]+ que|un mensaje|una respuesta|en whatsapp|por whatsapp)")
 
     private val V_TOCA = "(?:toca|tocar|tocame|presiona|presionar|apreta|apretar|pulsa|selecciona|seleccionar|clic en|click en|clickea|cliquea|dale a|dale click a)"
     private val V_MANTENE = "(?:mantene|mantener|mantenes|deja|dejar|hace) (?:apretado|presionado|pulsado|una pulsacion larga en|click largo en)"
@@ -173,8 +180,9 @@ object DirectCommands {
         rule("$V_TOCA (?:en )?(?:el |la |los |las )?(?:boton (?:de |del )?|opcion )?(.+)") { m, _ -> TapLabel(m.groupValues[1]) },
 
         // Escribir
-        rule("(?:${TYPE_VERBS.joinToString("|")})(?: que)? (.+)") { _, original ->
-            textAfterVerb(original)?.let { Type(it) }
+        rule("(?:${TYPE_VERBS.joinToString("|")})(?: que)? (.+)") { m, original ->
+            // "Escribí decirle que…", "escribí a Juan que…": es un mensaje, va al modelo.
+            if (INDIRECT.containsMatchIn(m.groupValues[1])) null else textAfterVerb(original)?.let { Type(it) }
         },
         rule("(?:borra|borrar|limpia|limpiar)(?: todo)?(?: el)? (?:texto|campo|lo escrito)|borra todo|borrar todo") { ClearText },
         rule("(?:enter|intro|apreta enter|dale enter|toca enter)") { Enter },
@@ -188,6 +196,13 @@ object DirectCommands {
         rule("(?:empeza|empezar|empeza a|inicia|iniciar|comenza|comenzar|arranca|arrancar|activa)(?: a)? (?:grabar|filmar)(?: (?:un )?video)?|(?:empeza|empezar|inicia|iniciar|comenza|comenzar|arranca|arrancar) (?:un |el |la )?(?:video|grabacion|filmacion)|(?:graba|grabar|grabame|filma|filmar|filmame) (?:un )?video|empezar video|grabar|filmar") { Camera(CameraAction.START_VIDEO) },
         rule("(?:termina|terminar|deten|detene|detener|corta|cortar|finaliza|finalizar|frena|frenar)(?: el| la)? (?:video|grabacion|filmacion)|(?:para|parar|termina|terminar|deja|dejar) de (?:grabar|filmar)|terminar video|cortar video") { Camera(CameraAction.STOP_VIDEO) },
         rule("(?:cambia|cambiar|gira|girar|da vuelta|dale vuelta|vuelta|rota|rotar|invertir|invierte)(?: de| a)?(?: la)? camara") { Camera(CameraAction.SWITCH) },
+
+        // Llamadas
+        rule("(?:atende|atender|atendela|contesta|contestar|contestala)(?: la llamada| el telefono)?") { AnswerCall },
+        rule("(?:colga|colgar|corta la llamada|cortar la llamada|rechaza|rechazar|rechazala|termina la llamada|terminar la llamada|corta el telefono)(?: la llamada)?") { HangUp },
+        rule("(?:llama|llamar|llamame a|llamale|llamala|llamalo|marca|marcar|marcale) (?:a |al |a la |al numero )?(.+)") { m, _ ->
+            Call(m.groupValues[1]).takeIf { !Regex("\\b(?:y|despues|para)\\b").containsMatchIn(m.groupValues[1]) }
+        },
 
         // Abrir una app por su nombre (corto: "abrí mercado libre", no "abrí el chat de Juan").
         rule("(?:abri|abrir|abrime|abre|lanza|inicia|entra a|entra en|anda a) (?:la app |la aplicacion |el |la )?([a-z0-9ñ]+(?: [a-z0-9ñ]+){0,2})") { m, _ ->

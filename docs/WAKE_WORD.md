@@ -70,4 +70,4 @@ Por defecto el modelo no viaja en el APK (queda en ~25-45 MB según arquitectura
 ./gradlew assembleDebug -Pcontrolxia.bundleVoskModel=true
 ```
 
-Gradle descarga el zip una vez y lo cachea en `.gradle/vosk/` (o copialo ahí a mano). Para un APK más liviano se pueden limitar las arquitecturas: `-Pcontrolxia.abis=arm64-v8a`.
+Gradle descarga el zip una vez y lo cachea en `.gradle/vosk/` (o copialo ahí a mano). Para un APK más liviano se pueden limitar las arquitecturas: `-Pcontrolxia.abis=arm64-v8a` (así se arma el APK que se manda al teléfono desde la 0.6.0).

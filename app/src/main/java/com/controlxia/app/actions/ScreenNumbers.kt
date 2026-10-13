@@ -108,6 +108,11 @@ object ScreenNumbers {
             ?: candidates.firstOrNull { wanted in it.second }?.first
     }
 
+    /** Si hay un campo de texto con el foco (el teclado abierto), para dictar ahí. */
+    fun hasFocusedField(): Boolean =
+        XiaAccessibilityService.instance?.rootInActiveWindow
+            ?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.isEditable == true
+
     /** Escribe [text] en el campo con el foco (o el primero de la pantalla). */
     fun type(text: String, replace: Boolean = false): String? {
         val field = focusedField() ?: return "No hay ningún campo de texto para escribir."

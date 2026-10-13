@@ -38,6 +38,7 @@ import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.ListeningOverlay
 import com.controlxia.app.voice.RecentCommandsStore
 import com.controlxia.app.voice.SpeechToText
+import com.controlxia.app.voice.VoiceBridge
 import com.controlxia.app.voice.VoiceSettings
 import com.controlxia.app.voice.VoskModelStore
 import com.controlxia.app.voice.VoskWakeWordEngine
@@ -50,9 +51,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.coroutines.resume
 
 /**
  * Servicio de escucha persistente. Corre como Foreground Service de tipo
@@ -126,12 +129,28 @@ class WakeWordService : Service() {
      */
     private var stopEngine: WakeWordEngine? = null
 
+    /** Una herramienta está usando el micrófono (grabando un audio): no escuchar "pará". */
+    private var micLent = false
+
+    /** Quién espera que termine de hablar una frase (por id de la frase). */
+    private val utteranceWaiters = mutableMapOf<String, () -> Unit>()
+
     override fun onCreate() {
         super.onCreate()
         overlay = ListeningOverlay(this).apply { onTap = { main.post { stopCurrent("tocaste el aviso") } } }
         // Mientras la cámara graba, el motor de voz escucha "terminá el video".
         CameraControl.onRecordingChanged = {
             main.post { if (listeningCommand) reloadPending = true else startListeningFresh() }
+        }
+        VoiceBridge.speaker = { text -> speakAndWait(text) }
+        VoiceBridge.micClaim = { busy ->
+            micLent = busy
+            if (busy) {
+                stopStopListener()
+                showProgress("🎙 Grabando… hablá ahora")
+            } else if (processingJob?.isActive == true) {
+                startStopListener()
+            }
         }
         agentName = WakeWordSettings(this).agentName
         tts = TextToSpeech(this) { status -> main.post { onTtsInit(status) } }
@@ -179,6 +198,11 @@ class WakeWordService : Service() {
         if (intent?.action == ACTION_STOP) {
             stopFromUser()
             return START_NOT_STICKY
+        }
+        // Levantaste las dos manos mirando un video: ya está en pausa, preguntar.
+        if (intent?.action == ACTION_HANDS_UP) {
+            if (inForeground) main.post { if (!listeningCommand) startInteraction("¿Qué necesitás?") }
+            return START_STICKY
         }
         // Frenar lo que está haciendo (aviso, pantalla de bloqueo), sin apagar la escucha.
         if (intent?.action == ACTION_INTERRUPT) {
@@ -400,37 +424,43 @@ class WakeWordService : Service() {
                 wakeEngine?.let { startEngine(it) }
                 return@post
             }
-            listeningCommand = true
-            followUps = 0
-            followUpPending = false
-            transcriptionStarted = false
-
-            voiceWakeLock.acquire(INTERACTION_MAX_MS)
-            vibrate()
-
-            val settings = WakeWordSettings(this)
-            agentName = settings.agentName
-            lockedSession = isLockedOrScreenOff()
-            showContentLocked = settings.showContentWhenLocked
-            AssistantState.begin(agentName, lockedSession)
-            if (lockedSession) {
-                // Bloqueado / pantalla apagada: prender la pantalla y responder
-                // sobre el bloqueo (requiere permiso de overlay para lanzarla).
-                if (overlay?.canShow() == true) launchAssistantScreen()
-            } else {
-                // Desbloqueado: pill flotante sobre la app actual.
-                overlay?.show(agentName, "Escuchando…")
-            }
-            wakeEngine?.stop() // liberar el micrófono para el ASR
-
-            // Transcribir al terminar el "Te escucho" (así no se transcribe a sí
-            // mismo). Tope por si el TTS no avisa; sin TTS listo, enseguida.
-            main.postDelayed(afterAck, if (ttsReady) ACK_MAX_WAIT_MS else ACK_NO_TTS_MS)
-            speakOut("Te escucho", UTT_ACK, queueIfNotReady = false)
+            startInteraction("Te escucho")
         }
     }
 
+    /** Empieza a atender: confirma con [ack] en voz alta y transcribe el pedido. */
+    private fun startInteraction(ack: String) {
+        listeningCommand = true
+        followUps = 0
+        followUpPending = false
+        transcriptionStarted = false
+
+        voiceWakeLock.acquire(INTERACTION_MAX_MS)
+        vibrate()
+
+        val settings = WakeWordSettings(this)
+        agentName = settings.agentName
+        lockedSession = isLockedOrScreenOff()
+        showContentLocked = settings.showContentWhenLocked
+        AssistantState.begin(agentName, lockedSession)
+        if (lockedSession) {
+            // Bloqueado / pantalla apagada: prender la pantalla y responder
+            // sobre el bloqueo (requiere permiso de overlay para lanzarla).
+            if (overlay?.canShow() == true) launchAssistantScreen()
+        } else {
+            // Desbloqueado: pill flotante sobre la app actual.
+            overlay?.show(agentName, "Escuchando…")
+        }
+        wakeEngine?.stop() // liberar el micrófono para el ASR
+
+        // Transcribir al terminar el "Te escucho" (así no se transcribe a sí
+        // mismo). Tope por si el TTS no avisa; sin TTS listo, enseguida.
+        main.postDelayed(afterAck, if (ttsReady) ACK_MAX_WAIT_MS else ACK_NO_TTS_MS)
+        speakOut(ack, UTT_ACK, queueIfNotReady = false)
+    }
+
     private fun onUtteranceFinished(id: String?) {
+        utteranceWaiters.remove(id)?.invoke()
         when (id) {
             UTT_ACK -> if (listeningCommand && !transcriptionStarted) {
                 main.removeCallbacks(afterAck)
@@ -530,9 +560,23 @@ class WakeWordService : Service() {
         }
     }
 
+    /** Para las herramientas: dice [text] y vuelve cuando terminó de hablar. */
+    private suspend fun speakAndWait(text: String) = suspendCancellableCoroutine<Unit> { cont ->
+        main.post {
+            if (!ttsReady) {
+                if (cont.isActive) cont.resume(Unit)
+                return@post
+            }
+            val id = "bridge_${SystemClock.uptimeMillis()}"
+            utteranceWaiters[id] = { if (cont.isActive) cont.resume(Unit) }
+            showProgress(text)
+            speakOut(text, id)
+        }
+    }
+
     /** Escucha "pará", "basta"… y el nombre mientras trabaja y mientras responde. */
     private fun startStopListener() {
-        if (stopEngine != null || !PermissionManager.hasRecordAudio(this)) return
+        if (stopEngine != null || micLent || !PermissionManager.hasRecordAudio(this)) return
         val settings = WakeWordSettings(this)
         var engine: WakeWordEngine? = null
         engine = VoskWakeWordEngine(
@@ -812,6 +856,9 @@ class WakeWordService : Service() {
     }
 
     override fun onDestroy() {
+        VoiceBridge.speaker = null
+        VoiceBridge.micClaim = null
+        CameraControl.onRecordingChanged = null
         running = false
         wakeWordActive = false
         inForeground = false
@@ -832,6 +879,7 @@ class WakeWordService : Service() {
         const val ACTION_STOP = "com.controlxia.app.action.STOP"
         const val ACTION_RELOAD = "com.controlxia.app.action.RELOAD"
         const val ACTION_INTERRUPT = "com.controlxia.app.action.INTERRUPT"
+        const val ACTION_HANDS_UP = "com.controlxia.app.action.HANDS_UP"
 
         private const val UTT_ACK = "ack"
         private const val UTT_REPLY = "reply"
@@ -909,6 +957,11 @@ class WakeWordService : Service() {
         /** Dispara la prueba de voz ("son las HH:mm") sobre el servicio activo. */
         fun speakTime(context: Context) {
             tryStart(context, ACTION_SPEAK_TIME)
+        }
+
+        /** Levantaste las dos manos: preguntar qué necesitás. */
+        fun handsUp(context: Context) {
+            if (running) tryStart(context, ACTION_HANDS_UP)
         }
 
         /** Frena lo que el asistente esté haciendo o diciendo (sin apagar la escucha). */

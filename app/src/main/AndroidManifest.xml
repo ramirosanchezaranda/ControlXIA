@@ -6,6 +6,12 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- "Pausa con las manos": la cámara frontal mira si levantás las dos manos
+         mientras se reproduce un video. Opcional y solo si el usuario la activa. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -19,6 +25,9 @@
          de que el usuario confirma por voz). -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- Llamar, atender y cortar por voz. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <!-- El SMS es opcional: la app se instala igual en equipos sin telefonía. -->
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
@@ -113,6 +122,23 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- Pausa con las manos: servicio en primer plano de tipo cámara. -->
+        <service
+            android:name=".service.HandsWatchService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
+
+        <!-- Para pasarle a WhatsApp los audios que graba o genera el asistente. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_files" />
+        </provider>
 
         <!-- Watchdog: alarma periódica que revive el servicio si el sistema lo mató. -->
         <receiver

@@ -81,7 +81,7 @@ fun DashboardScreen(
     val screenControlOk = remember(tick, bump) { XiaAccessibilityService.isEnabled(context) }
     val messagesOk = remember(tick, bump) { XiaNotificationListener.isEnabled(context) }
     val contactsOk = remember(tick, bump) {
-        PermissionManager.hasContacts(context) && PermissionManager.hasSendSms(context)
+        PermissionManager.hasPhonePermissions(context)
     }
     val oemNeeded = remember { PermissionManager.needsOemSetup() }
     val llmConfigured = remember(tick, bump) { LlmSettings(context).activeConfig() != null }
@@ -284,12 +284,12 @@ fun DashboardScreen(
                     )
                     Hairline()
                     StatusRow(
-                        label = "Contactos y SMS",
+                        label = "Contactos, SMS y llamadas",
                         ok = if (contactsOk) true else null,
                         actionLabel = "Permitir",
                         onAction = {
                             permissionLauncher.launch(
-                                arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)
+                                PermissionManager.PHONE_PERMISSIONS
                             )
                         },
                     )

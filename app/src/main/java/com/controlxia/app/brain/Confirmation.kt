@@ -38,14 +38,21 @@ object Goodbye {
         "buenisimo gracias", "ok gracias", "dale gracias", "listo nada mas", "nada mas por ahora",
     )
 
-    /** Qué decir al despedirse, o null si [text] no es una despedida ("" = cerrar en silencio). */
-    fun reply(text: String): String? {
-        val normalized = Normalizer.normalize(text.lowercase(Locale("es")), Normalizer.Form.NFD)
-            .replace(Regex("\\p{Mn}+"), "")
-            .replace(Regex("[^a-z ]"), " ")
-            .trim()
-            .replace(Regex("\\s+"), " ")
-        if (normalized !in PHRASES) return null
+    /** Muletillas de arranque que no cambian la despedida: "bueno, gracias". */
+    private val FILLERS = Regex("^(?:(?:bueno|ok|okey|dale|che|ah|ya|joya|buenisimo) )+")
+
+    /**
+     * Qué decir al despedirse, o null si [text] no es una despedida ("" =
+     * cerrar en silencio). Acepta el nombre del asistente ("gracias, Beto") y
+     * muletillas al principio ("bueno, gracias").
+     */
+    fun reply(text: String, agentName: String = ""): String? {
+        val name = plain(agentName)
+        val words = plain(text).split(' ').filter { it.isNotEmpty() && it != name }
+        val full = words.joinToString(" ")
+        val normalized = full.takeIf { it in PHRASES }
+            ?: FILLERS.replace(full, "").takeIf { it in PHRASES }
+            ?: return null
         return when {
             "gracias" in normalized -> "De nada."
             normalized.startsWith("ch") || normalized == "adios" -> "Chau."
@@ -87,6 +94,13 @@ object StopWords {
 }
 
 /** Interpreta la respuesta hablada a una pregunta de confirmación. */
+private fun plain(text: String): String =
+    Normalizer.normalize(text.lowercase(Locale("es")), Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .replace(Regex("[^a-zñ ]"), " ")
+        .trim()
+        .replace(Regex("\\s+"), " ")
+
 object Confirmation {
 
     enum class Answer { YES, NO, OTHER }
@@ -100,6 +114,26 @@ object Confirmation {
         "no", "nop", "cancela", "cancelar", "cancelalo", "deja", "dejalo", "negativo", "frena",
         "espera",
     )
+
+    /**
+     * "No, mandale este otro mensaje": dice que no a lo que se preguntó, pero
+     * trae un pedido nuevo. Devuelve ese pedido, o null si es solo un no ("no",
+     * "no gracias", "no, dejá").
+     */
+    fun correction(text: String): String? {
+        val original = text.trim().split(Regex("\\s+"))
+        val words = original.map { plain(it) }
+        if (words.firstOrNull() !in NO) return null
+        // Saltea "no, no", "no, mejor…", "no, pará…".
+        val skip = words.indexOfFirst { it.isNotEmpty() && it !in NO && it !in SOFTENERS }
+        if (skip < 0) return null
+        val rest = original.drop(skip).joinToString(" ").trim()
+        val restWords = words.drop(skip).filter { it.isNotEmpty() }
+        if (restWords.size < 2 || Goodbye.reply(rest) != null) return null
+        return rest
+    }
+
+    private val SOFTENERS = setOf("mejor", "che", "espera", "para", "perdon", "pera")
 
     fun classify(text: String): Answer {
         val words = Normalizer.normalize(text.lowercase(Locale("es")), Normalizer.Form.NFD)

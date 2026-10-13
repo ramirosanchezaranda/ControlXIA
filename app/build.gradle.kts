@@ -105,8 +105,8 @@ android {
         applicationId = "com.controlxia.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.5.0"
+        versionCode = 7
+        versionName = "0.6.0"
 
         buildConfigField("String", "VOSK_MODEL_NAME", "\"$voskModelName\"")
         buildConfigField("String", "VOSK_MODEL_URL", "\"$voskModelUrl\"")
@@ -179,6 +179,12 @@ dependencies {
     // claves y sin internet. Necesita JNA para llamar a la librería nativa.
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
     implementation("net.java.dev.jna:jna:5.18.1@aar")
+    // "Pausa con las manos": cámara frontal (CameraX) + reconocedor de gestos de
+    // MediaPipe (Apache 2.0). El modelo (8 MB) se descarga desde la app.
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation("androidx.lifecycle:lifecycle-service:2.8.7")
+    implementation("com.google.mediapipe:tasks-vision:0.10.35")
 }
 
 // Con -Pcontrolxia.bundleVoskModel=true el modelo entra como asset generado.

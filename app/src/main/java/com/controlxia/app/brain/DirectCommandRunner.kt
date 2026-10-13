@@ -3,11 +3,15 @@ package com.controlxia.app.brain
 import android.content.Context
 import com.controlxia.app.actions.AppLauncher
 import com.controlxia.app.actions.CameraControl
+import com.controlxia.app.actions.Contacts
 import com.controlxia.app.actions.DeviceControl
+import com.controlxia.app.actions.PhoneCalls
 import com.controlxia.app.actions.ScreenNumbers
 import com.controlxia.app.brain.DirectCommands.CameraAction
 import com.controlxia.app.brain.DirectCommands.Command
 import com.controlxia.app.diagnostics.AgentLog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Ejecuta los comandos directos ([DirectCommands]). Como el Acceso por voz,
@@ -20,6 +24,8 @@ class DirectCommandRunner(private val context: Context) {
     private val device by lazy { DeviceControl(context) }
     private val camera by lazy { CameraControl(context) }
     private val apps by lazy { AppLauncher(context) }
+    private val calls by lazy { PhoneCalls(context) }
+    private val contacts by lazy { Contacts(context) }
 
     /** Ejecuta [command]. null = no se pudo resolver acá: que lo intente el modelo. */
     suspend fun run(command: Command): Reply? {
@@ -83,7 +89,11 @@ class DirectCommandRunner(private val context: Context) {
                 if (ScreenNumbers.findByLabel(command.label) == null) return null
                 done(ScreenNumbers.tapLabel(command.label, command.long), "Toqué «${command.label}»")
             }
-            is DirectCommands.Type -> done(ScreenNumbers.type(command.text), "Escribí: ${command.text}")
+            // Dictar solo con un campo abierto; si no, "escribí…" es un pedido para el modelo.
+            is DirectCommands.Type -> {
+                if (!ScreenNumbers.hasFocusedField()) return null
+                done(ScreenNumbers.type(command.text), "Escribí: ${command.text}")
+            }
             DirectCommands.ClearText -> done(ScreenNumbers.type("", replace = true), "Borré el texto")
             DirectCommands.Enter -> done(ScreenNumbers.enter(), "Enter")
             is DirectCommands.Camera -> camera(command.action)
@@ -94,6 +104,9 @@ class DirectCommandRunner(private val context: Context) {
                 if (result.startsWith("Abriendo")) Reply("", shown = result) else Reply(result)
             }
             DirectCommands.Help -> Reply(HELP)
+            is DirectCommands.Call -> call(command.who)
+            DirectCommands.AnswerCall -> done(calls.answer(), "Llamada atendida")
+            DirectCommands.HangUp -> done(calls.hangUp(), "Llamada cortada")
         }
     }
 
@@ -115,6 +128,20 @@ class DirectCommandRunner(private val context: Context) {
             }
         }
         CameraAction.STOP_VIDEO -> stopVideo()
+    }
+
+    /**
+     * "Llamá a mamá": si el contacto es uno solo, llama; si hay dudas (varios
+     * parecidos, no está), que lo resuelva el modelo preguntando.
+     */
+    private suspend fun call(who: String): Reply? {
+        val digits = who.filter { it.isDigit() }
+        if (digits.length >= 6 && digits.length >= who.count { !it.isWhitespace() } - 2) {
+            return calls.call(digits)?.let { Reply(it) } ?: Reply("", shown = "Llamando al $digits")
+        }
+        val found = withContext(Dispatchers.IO) { contacts.find(who) }
+        val contact = (found as? Contacts.Lookup.Found)?.contact ?: return null
+        return calls.call(contact.phone)?.let { Reply(it) } ?: Reply("", shown = "Llamando a ${contact.name}")
     }
 
     private suspend fun stopVideo(): Reply {
@@ -151,7 +178,8 @@ class DirectCommandRunner(private val context: Context) {
         )
         const val HELP = "Podés decir: atrás, inicio, bajá o subí, mostrá los números y tocá uno, " +
             "tocá y el nombre de un botón, escribí algo, subí o bajá el volumen, pausa, siguiente " +
-            "canción, prendé la linterna, activá el wifi, abrí una app, sacá una foto, empezá a " +
+            "canción, prendé la linterna, activá el wifi, abrí una app, llamá a alguien, atendé o " +
+            "colgá, sacá una foto, empezá a " +
             "grabar y terminá el video. Para frenarme, decí pará. Y cualquier otra cosa, pedímela."
     }
 }

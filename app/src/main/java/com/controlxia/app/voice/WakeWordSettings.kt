@@ -51,6 +51,14 @@ class WakeWordSettings(context: Context) {
         get() = prefs.getInt(KEY_CONVERSATION_SECONDS, 8).coerceIn(MIN_WAIT_S, MAX_WAIT_S)
         set(value) = prefs.edit().putInt(KEY_CONVERSATION_SECONDS, value.coerceIn(MIN_WAIT_S, MAX_WAIT_S)).apply()
 
+    /**
+     * "Pausa con las manos": mientras se reproduce algo, la cámara frontal mira
+     * si levantás las dos manos para pausar y preguntar qué necesitás.
+     */
+    var handsPause: Boolean
+        get() = prefs.getBoolean(KEY_HANDS, false)
+        set(value) = prefs.edit().putBoolean(KEY_HANDS, value).apply()
+
     /** 0f = menos sensible (menos falsos positivos), 1f = más sensible. */
     var sensitivity: Float
         get() = prefs.getFloat(KEY_SENS, 0.5f)
@@ -63,6 +71,7 @@ class WakeWordSettings(context: Context) {
         const val MIN_WAIT_S = 4
         const val MAX_WAIT_S = 20
 
+        private const val KEY_HANDS = "hands_pause"
         private const val KEY_CONVERSATION = "conversation_mode"
         private const val KEY_CONVERSATION_SECONDS = "conversation_seconds"
         private const val KEY_AGENT = "agent_name"
