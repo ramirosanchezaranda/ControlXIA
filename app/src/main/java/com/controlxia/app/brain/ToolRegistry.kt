@@ -5,6 +5,7 @@ import com.controlxia.app.actions.AlarmActions
 import com.controlxia.app.actions.AppDeepLinks
 import com.controlxia.app.actions.AppLauncher
 import com.controlxia.app.actions.AudioMessage
+import com.controlxia.app.actions.CalendarActions
 import com.controlxia.app.actions.Contacts
 import com.controlxia.app.actions.MessageSender
 import com.controlxia.app.actions.MessageStore
@@ -216,6 +217,15 @@ class ToolRegistry(private val context: Context) {
             },
         ),
         ToolSpec(
+            name = "calendar_event",
+            description = "Agenda un evento o recordatorio en el calendario.",
+            parameters = schema(required = listOf("title", "date", "time")) {
+                put("title", str("Qué es"))
+                put("date", str("AAAA-MM-DD"))
+                put("time", str("HH:MM, 24 h"))
+            },
+        ),
+        ToolSpec(
             name = "set_timer",
             description = "Temporizador en segundos.",
             parameters = schema(required = listOf("seconds")) {
@@ -282,6 +292,15 @@ class ToolRegistry(private val context: Context) {
         "send_audio" -> sendAudio(args)
         "call" -> call(args)
         "phone" -> phone(args)
+        "calendar_event" -> {
+            val date = runCatching { java.time.LocalDate.parse(args.strArg("date")) }.getOrNull()
+            val time = runCatching { java.time.LocalTime.parse(args.strArg("time")) }.getOrNull()
+            if (date == null || time == null) {
+                ToolOutcome("Falta la fecha o la hora del evento.")
+            } else {
+                ToolOutcome(CalendarActions(context).addEvent(args.strArg("title").ifBlank { "Evento" }, date, time), terminal = true)
+            }
+        }
         "camera" -> {
             val action = CAMERA_ACTIONS[args.strArg("action")]
             if (action == null) {

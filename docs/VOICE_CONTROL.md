@@ -2,6 +2,30 @@
 
 Objetivo: que todo el teléfono se pueda usar sin tocarlo. La referencia es el **Acceso por voz** de Google (Voice Access); encima de eso, el agente con LLM resuelve los pedidos complejos.
 
+## Sin el modelo (sin créditos ni cupo)
+
+Casi todo lo cotidiano anda **sin LLM**, y cuando hace falta el modelo el asistente pasa solo por los gratis antes de rendirse:
+
+1. **Comandos directos** (tabla de abajo) y **habilidades locales** (`brain/LocalSkills`): reglas en español rioplatense, como Dicio. No gastan cupo.
+2. **Cadena de modelos**: si el modelo elegido se queda sin cupo ("tokens per day", créditos, o un límite que pide esperar más de 30 s), sigue solo con el siguiente: los otros modelos gratis del mismo proveedor (en Groq y Gemini **cada modelo tiene su propio cupo diario**: gpt-oss-120b → qwen3.8-27b → gpt-oss-20b) y después los otros proveedores con clave cargada. Los que se quedaron sin cupo se saltean hasta que se renuevan (`brain/QuotaTracker`). Si se termina a mitad de un pedido, el siguiente sigue desde lo ya hecho.
+3. Si no queda ningún modelo, lo dice y recuerda qué se puede pedir igual.
+
+Un pedido con varias partes ("buscá zapatillas y mandale el link a Juan") lo resuelve el modelo si hay; sin modelo, las reglas hacen lo que pueden.
+
+| Habilidad local | Ejemplos |
+|---|---|
+| Mensajes | "mandale a Juan que llego tarde", "decile a mi pareja que la quiero", "mandale un sms a mamá que ya salgo", "mandale al grupo fútbol 2 que hoy no voy", "preguntale a Juan si viene a cenar" |
+| Audios | "mandale un audio a Rebeca", "mandale un audio a Juan que diga feliz cumpleaños" |
+| Leer y responder | "leeme los mensajes", "leeme los mensajes de Juan", "¿tengo mensajes?", "respondele que sí", "contestale a Juan que en 10 llego" |
+| Alarmas y temporizadores | "poneme una alarma a las 7 y media de la tarde", "despertame mañana a las 6 y cuarto", "temporizador de 5 minutos", "avisame en media hora" |
+| Calendario | "agendá dentista el jueves a las 4 de la tarde", "recordame comprar pan mañana a las 10", "anotá reunión con Juan el 25 de octubre a las 9" |
+| Cuentas | "cuánto es 25 por 4", "el 15 por ciento de 2000", "raíz de 81", "7 al cuadrado" |
+| Buscar | "buscá zapatillas nike más baratas en Mercado Libre", "buscá en YouTube recetas de pizza", "poné música de Queen en Spotify", "buscá el clima en Buenos Aires" |
+| Secciones y chats | "abrí los reels", "mostrame mis compras", "llevame a casa", "abrí el chat de Juan", "abrí el grupo fútbol 2" |
+| Otros | "¿qué hora es?", "¿qué día es hoy?", "mi pareja es Lucía", "repetí" |
+
+Si el reconocimiento de voz entiende mal el nombre ("che Beto" → "chevetó"), se reconoce por cómo suena y responde "¿Sí? ¿Qué necesitás?" en vez de mandárselo al modelo.
+
 ## Cómo está armado
 
 Hay dos caminos, y el asistente elige solo:
@@ -27,6 +51,11 @@ Solo entra como comando directo la **frase entera**: "subí el volumen" sí, "su
 | Apps | "abrí Instagram", "entrá a YouTube" |
 | Cámara | "abrí la cámara", "cámara frontal", "sacá una foto", "sacame una selfie", "empezá a grabar", "terminá el video", "cambiá de cámara" |
 | Llamadas | "llamá a mamá", "llamá al 11 5555 4444", "atendé", "colgá", "rechazá la llamada" |
+| Ajustes rápidos | Cualquier botón por su nombre: "activá no molestar", "desactivá la rotación automática", "activá el ahorro de batería", "activá la zona wi-fi". Mira si ya estaba como se pidió antes de tocarlo |
+| Ajustes | "abrí los ajustes de batería / wifi / sonido / pantalla / ubicación / almacenamiento / seguridad / aplicaciones…", "configuración" |
+| Batería | "¿cuánta batería me queda?" |
+| Editar texto | "copiá todo", "pegá", "cortá el texto", "seleccioná todo" |
+| Apps | "volvé a la app anterior", "apagá la pantalla" (bloquea) |
 | Frenarlo | "pará", "basta", "cancelá" (ver [WAKE_WORD.md](WAKE_WORD.md#frenarlo-pará)) |
 | Ayuda | "¿qué puedo decir?" |
 

@@ -22,6 +22,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Modo conversación**: después de responder sigue escuchando unos segundos (configurable) para el próximo pedido, sin repetir el nombre; "gracias" o "listo" la cierran.
 - ✅ **Groq como proveedor**: `openai/gpt-oss-120b` recomendado; el agente se adapta al plan gratis (pedidos livianos, espera y reintenta solo si Groq pide esperar).
 - ✅ **Control de que hizo todo**: si el modelo dice haber hecho algo sin hacerlo, o hace una parte de un pedido de varias cosas, se le muestra lo hecho de verdad y completa lo que falta; después de confirmar un mensaje sigue con el resto del pedido.
+- ✅ **Anda sin créditos**: lo cotidiano (mensajes, audios, llamadas, alarmas, calendario, cuentas, búsquedas, leer y responder mensajes) se entiende con reglas, sin el modelo; y si un modelo gratis se queda sin cupo, sigue solo con otro (en Groq cada modelo tiene su propio cupo diario).
 - ✅ **Manejar el teléfono solo con la voz** (como el Acceso por voz de Google, sin pasar por el modelo): "atrás", "inicio", "bajá", "mostrá los números" + "tocá 5", "tocá Guardar", "escribí…", volumen, música y videos, linterna, Wi-Fi, Bluetooth, brillo, "abrí Instagram". Ver [docs/VOICE_CONTROL.md](docs/VOICE_CONTROL.md).
 - ✅ **Cámara por voz**: abrir, foto, selfie, empezar y terminar un video ("terminá el video" se escucha sin internet mientras graba), cambiar de cámara.
 - ✅ **Audios de WhatsApp**: graba tu voz hasta que te callás, o lo dice la voz del asistente; confirma y lo manda (también a grupos).

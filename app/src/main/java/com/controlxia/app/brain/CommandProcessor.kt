@@ -1,10 +1,14 @@
 package com.controlxia.app.brain
 
 import android.content.Context
+import com.controlxia.app.actions.MessageStore
 import com.controlxia.app.actions.ScreenNumbers
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.voice.WakeWordSettings
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -100,8 +104,29 @@ class CommandProcessor(context: Context) {
             AgentLog.add("DIRECTO no resuelto acá: lo intenta el modelo")
         }
 
-        val provider = createProvider()
-            ?: return Reply("Necesito que configures el cerebro en la app para poder entenderte.")
+        // "Mandale a Juan que llego tarde", "poné una alarma a las 7": también sin el modelo.
+        // Si el pedido tiene varias partes y hay modelo, mejor que lo resuelva él.
+        LocalSkills.parse(command, agentName)?.takeIf { skill ->
+            !LocalSkills.isCompound(command, skill) || !modelAvailable()
+        }?.let { skill ->
+            runSkill(skill, command)?.let { reply ->
+                AgentLog.add("LOCAL ${reply.text.ifBlank { reply.shown.orEmpty() }}")
+                lastSpoken = reply.text.ifBlank { lastSpoken }
+                return reply
+            }
+        }
+
+        val configs = settings.chain()
+        if (configs.isEmpty()) {
+            lastError = "Falta configurar el proveedor, la API key o el modelo"
+            AgentLog.add("ERROR $lastError")
+            return Reply("Eso necesita el cerebro y todavía no está configurado en la app. $OFFLINE_HINT")
+        }
+        val brain = Brain(configs)
+        if (brain.provider == null) {
+            AgentLog.add("SIN CUPO en ningún modelo")
+            return Reply(NO_QUOTA)
+        }
 
         // El pedido entra a la memoria recién cuando hay respuesta: si la
         // llamada falla, no queda un turno suelto que rompa el próximo pedido.
@@ -111,7 +136,106 @@ class CommandProcessor(context: Context) {
             addAll(memory.history())
             add(ChatMessage(ChatRole.USER, command))
         }
-        return track(AgentTask(command)) { task -> runAgent(task, provider, messages, command, onProgress) }
+        return track(AgentTask(command)) { task -> runAgent(task, brain, messages, command, onProgress) }
+    }
+
+    /** Hay algún modelo configurado y con cupo. */
+    private fun modelAvailable(): Boolean =
+        settings.chain().any { !QuotaTracker.isExhausted(appContext, it) }
+
+    /** Lo último que dijo, para "repetí". */
+    @Volatile
+    private var lastSpoken: String? = null
+
+    /**
+     * Ejecuta una habilidad local con la misma herramienta que usaría el
+     * modelo. null = no se pudo resolver acá (que lo intente el modelo).
+     */
+    private suspend fun runSkill(skill: LocalSkills.Skill, command: String): Reply? {
+        val reply = when (skill) {
+            LocalSkills.JustTheName -> Reply("¿Sí? ¿Qué necesitás?", expectsReply = true)
+            LocalSkills.Repeat -> Reply(lastSpoken ?: "Todavía no dije nada.")
+            is LocalSkills.Answer -> Reply(skill.text)
+            is LocalSkills.ReadMessages -> Reply(spokenMessages(skill))
+            is LocalSkills.ReplyLast -> {
+                val message = MessageStore.recent(null, skill.from, 1).firstOrNull()
+                    ?: return Reply("No tengo mensajes para responder.")
+                toolReply(command, "reply_to_message", buildJsonObject {
+                    put("message_id", message.id)
+                    put("text", skill.text)
+                })
+            }
+            is LocalSkills.Tool -> toolReply(command, skill.name, buildJsonObject {
+                skill.args.forEach { (key, value) ->
+                    when (value) {
+                        is Int -> put(key, value)
+                        else -> put(key, value.toString())
+                    }
+                }
+            })
+        } ?: return null
+        if (pending == null || !reply.expectsReply) memory.addExchange(command, reply.text.ifBlank { "[${reply.shown ?: "Hecho"}]" })
+        return reply
+    }
+
+    /** Ejecuta la herramienta [name] como lo haría el modelo, y arma la respuesta hablada. */
+    private suspend fun toolReply(command: String, name: String, args: JsonObject): Reply? {
+        AgentLog.add("LOCAL HERRAMIENTA $name $args")
+        val outcome = try {
+            registry.execute(name, args)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return Reply("No pude hacerlo: ${e.message ?: "error inesperado"}.")
+        }
+        outcome.pending?.let { action ->
+            pending = action
+            pendingTask = AgentTask(command)
+            memory.addExchange(command, action.question)
+            return Reply(action.question, expectsReply = true)
+        }
+        // Los textos de las herramientas a veces le hablan al modelo: se pasan a la voz del usuario.
+        val text = outcome.text
+            .replace("Preguntale al usuario cuál.", "¿A cuál?")
+            .replace(Regex("Decile al usuario que (\\w)")) { "${it.groupValues[1].uppercase()}" }
+            .replace("Proponé mandarlo por SMS.", "¿Lo mando por SMS?")
+        return Reply(text, expectsReply = text.trim().endsWith("?"))
+    }
+
+    /** "Tenés 2 mensajes. Juan por WhatsApp: hola…" */
+    private fun spokenMessages(skill: LocalSkills.ReadMessages): String {
+        if (!com.controlxia.app.service.XiaNotificationListener.isEnabled(appContext)) {
+            return "Para leerte los mensajes necesito el acceso a notificaciones: activalo en ControlXIA."
+        }
+        val list = MessageStore.recent(skill.app, skill.from, 5)
+        if (list.isEmpty()) return if (skill.from != null) "No tengo mensajes de ${skill.from}." else "No tenés mensajes nuevos."
+        val intro = if (list.size == 1) "Tenés un mensaje." else "Tenés ${list.size} mensajes."
+        return intro + " " + list.joinToString(" ") { "${it.sender} por ${it.app}: ${it.text.take(200)}." }
+    }
+
+    /**
+     * El modelo que se está usando y con cuál seguir si se le termina el cupo
+     * ([LlmSettings.chain]). Los que ya se sabe que no tienen cupo se saltean.
+     */
+    private inner class Brain(configs: List<LlmConfig>) {
+        private val queue = ArrayDeque(configs.filterNot { QuotaTracker.isExhausted(appContext, it) })
+        val config: LlmConfig? get() = queue.firstOrNull()
+        var provider: LlmProvider? = config?.let { LlmProviderFactory.create(it) }
+            private set
+
+        init {
+            config?.let { AgentLog.add("MODELO ${it.type.displayName} · ${it.model}") }
+        }
+
+        /** El actual se quedó sin cupo: pasa al siguiente. false si no queda ninguno. */
+        fun exhausted(e: LlmException): Boolean {
+            val gone = queue.removeFirstOrNull() ?: return false
+            QuotaTracker.markExhausted(appContext, gone, e.retryAfterSeconds)
+            provider = config?.let { LlmProviderFactory.create(it) }
+            val next = config ?: return false
+            AgentLog.add("SIN CUPO en ${gone.type.displayName} · ${gone.model}: sigo con ${next.type.displayName} · ${next.model}")
+            return true
+        }
     }
 
     /**
@@ -143,17 +267,6 @@ class CommandProcessor(context: Context) {
         }
     }
 
-    private fun createProvider(): LlmProvider? {
-        val config = settings.activeConfig()
-        if (config == null) {
-            lastError = "Falta configurar el proveedor, la API key o el modelo"
-            AgentLog.add("ERROR $lastError")
-            return null
-        }
-        AgentLog.add("MODELO ${config.type.displayName} · ${config.model}")
-        return LlmProviderFactory.create(config)
-    }
-
     /**
      * El bucle del agente. [userTurn] es lo que dijo el usuario en este turno
      * (para la memoria). [prefix]: al retomar un pedido después de una
@@ -161,7 +274,7 @@ class CommandProcessor(context: Context) {
      */
     private suspend fun runAgent(
         task: AgentTask,
-        provider: LlmProvider,
+        brain: Brain,
         initial: List<ChatMessage>,
         userTurn: String,
         onProgress: (String) -> Unit,
@@ -184,10 +297,32 @@ class CommandProcessor(context: Context) {
         }
 
         repeat(MAX_STEPS) {
+            val provider = brain.provider ?: return Reply(withPrefix(NO_QUOTA))
             val response = try {
                 completeWithRetry(provider, messages, tools, compact(steps, provider), onProgress)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: LlmException) {
+                if (!QuotaTracker.isQuotaError(e, MAX_RATE_WAIT_S)) {
+                    lastError = e.message
+                    AgentLog.add("ERROR del modelo: $lastError")
+                    return Reply(withPrefix(spokenError(e)))
+                }
+                // Sin cupo: se sigue con el próximo modelo, contándole lo ya hecho
+                // (lo que pidió el anterior no le sirve a otro proveedor).
+                if (!brain.exhausted(e)) {
+                    lastError = e.message
+                    return Reply(withPrefix(NO_QUOTA))
+                }
+                onProgress("Sin cupo en ese modelo: sigo con ${brain.config?.model}…")
+                if (steps.isNotEmpty() || task.done.isNotEmpty()) {
+                    messages = initial + listOf(
+                        ChatMessage(ChatRole.ASSISTANT, "[Hecho hasta ahora: ${task.done.joinToString("; ").ifEmpty { "nada" }}]"),
+                        ChatMessage(ChatRole.USER, "Seguí con lo que falte de mi pedido."),
+                    )
+                }
+                steps.clear()
+                return@repeat
             } catch (e: Exception) {
                 lastError = e.message ?: e.javaClass.simpleName
                 AgentLog.add("ERROR del modelo: $lastError")
@@ -315,7 +450,11 @@ class CommandProcessor(context: Context) {
             AgentLog.add("CONFIRMACIÓN vencida: «${action.question}»")
             return null
         }
-        val answer = Confirmation.classify(command)
+        // "Respondele que sí" o "poné una alarma" no son respuestas a la pregunta: son pedidos nuevos.
+        val name = WakeWordSettings(appContext).agentName
+        val isCommand = DirectCommands.parse(command, name) != null ||
+            LocalSkills.parse(command, name).let { it != null && it !is LocalSkills.JustTheName }
+        val answer = if (isCommand) Confirmation.Answer.OTHER else Confirmation.classify(command)
         AgentLog.add("CONFIRMACIÓN $answer para «${action.question}»")
         return when (answer) {
             Confirmation.Answer.YES -> {
@@ -333,7 +472,7 @@ class CommandProcessor(context: Context) {
                 if (task != null && TaskCheck.isMultiAction(task.command)) {
                     task.done += "${action.question} → confirmado → $result"
                     task.reviewed = true
-                    createProvider()?.let { provider ->
+                    Brain(settings.chain()).takeIf { it.provider != null }?.let { brain ->
                         AgentLog.add("SIGO con el resto de «${task.command}»")
                         val messages = buildList {
                             add(ChatMessage(ChatRole.SYSTEM, systemPrompt()))
@@ -341,7 +480,7 @@ class CommandProcessor(context: Context) {
                             add(ChatMessage(ChatRole.USER, TaskCheck.continueRequest(task.command, task.done)))
                         }
                         return track(task) {
-                            runAgent(it, provider, messages, command, onProgress, prefix = result)
+                            runAgent(it, brain, messages, command, onProgress, prefix = result)
                         }
                     }
                 }
@@ -441,6 +580,10 @@ class CommandProcessor(context: Context) {
         const val MAX_STEPS = 15
         const val MAX_AGENT_MS = 150_000L
         const val MAX_RATE_WAIT_S = 30.0
+
+        const val OFFLINE_HINT = "Sin él igual puedo mandar mensajes y audios, llamar, poner alarmas, " +
+            "buscar, abrir apps, usar la cámara y manejar la pantalla: decí «qué puedo decir»."
+        const val NO_QUOTA = "No me queda cupo en ningún modelo por ahora. $OFFLINE_HINT"
         const val MAX_RATE_RETRIES = 3
     }
 }

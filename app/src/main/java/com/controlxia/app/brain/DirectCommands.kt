@@ -52,6 +52,22 @@ object DirectCommands {
 
     data object Help : Command
 
+    /**
+     * "Activá no molestar", "apagá la rotación automática": cualquier botón de
+     * los ajustes rápidos por su nombre. Si no hay uno así, el pedido sigue de largo.
+     */
+    data class QuickTile(val name: String, val on: Boolean) : Command
+
+    /** "Abrí los ajustes de batería". */
+    data class SettingsScreen(val which: String) : Command
+
+    data object Battery : Command
+
+    enum class Edit { COPY, PASTE, CUT, SELECT_ALL }
+    data class TextEdit(val action: Edit) : Command
+
+    data object PreviousApp : Command
+
     /** "Llamá a mamá" / "llamá al 1155554444". */
     data class Call(val who: String) : Command
     data object AnswerCall : Command
@@ -164,6 +180,24 @@ object DirectCommands {
         rule("$V_PRENDE (?:el |la |los )?($SETTING_NAMES)") { m, _ -> SETTINGS[m.groupValues[1]]?.let { Toggle(it, true) } },
         rule("$V_APAGA (?:el |la |los )?($SETTING_NAMES)") { m, _ -> SETTINGS[m.groupValues[1]]?.let { Toggle(it, false) } },
 
+        // "Apagá la pantalla" es bloquear.
+        rule("(?:apaga|apagar|apagame) la pantalla") { Global(GlobalAction.LOCK) },
+
+        // Ajustes del sistema
+        rule("(?:abri|abrime|abrir|mostrame|anda a|ir a)? ?(?:los |las |la )?(?:ajustes|configuracion|opciones)(?: del sistema| del telefono)?(?: (?:de|del|de la|de los) (.+))?") { m, _ ->
+            SettingsScreen(m.groups[1]?.value ?: "")
+        },
+        rule("(?:cuanta|que|cuanto) (?:bateria|carga)(?: (?:tengo|me queda|queda|hay|tiene))?|(?:nivel de )?bateria|como esta la bateria") { Battery },
+
+        // Editar texto
+        rule("(?:copia|copiar|copialo|copiá)(?: (?:todo|el texto|eso))?") { TextEdit(Edit.COPY) },
+        rule("(?:pega|pegar|pegalo|pegá)(?: (?:aca|ahi|el texto))?") { TextEdit(Edit.PASTE) },
+        rule("(?:corta|cortar)(?: (?:el texto|todo))") { TextEdit(Edit.CUT) },
+        rule("(?:selecciona|seleccionar|marca|marcar) todo(?: el texto)?") { TextEdit(Edit.SELECT_ALL) },
+
+        // Volver a la app de antes
+        rule("(?:volve|volver|anda|cambia|cambiar)(?: a)? (?:la )?(?:app|aplicacion) anterior|(?:la )?(?:app|aplicacion) anterior|ultima app") { PreviousApp },
+
         // Brillo
         rule("$V_SUBI (?:el )?brillo(?: de la pantalla)?") { Brightness(up = true) },
         rule("$V_BAJA (?:el )?brillo(?: de la pantalla)?") { Brightness(up = false) },
@@ -209,6 +243,11 @@ object DirectCommands {
             val name = m.groupValues[1]
             if (Regex("\\b(?:y|de|del|para|con|que|a|en)\\b").containsMatchIn(name)) null else OpenApp(name)
         },
+
+        // Al final: cualquier otro botón de los ajustes rápidos por su nombre
+        // ("activá no molestar", "apagá la rotación automática").
+        rule("(?:activa|activar|activame|prende|prender|prendeme|encende|encender) (?:el |la |los |las |modo |el modo )?(.+)") { m, _ -> QuickTile(m.groupValues[1], true) },
+        rule("(?:desactiva|desactivar|desactivame|apaga|apagar|apagame) (?:el |la |los |las |modo |el modo )?(.+)") { m, _ -> QuickTile(m.groupValues[1], false) },
 
         // Ayuda
         rule("(?:que (?:puedo|podes|se puede) (?:decir|hacer|pedir)|ayuda|comandos|que comandos hay|que sabes hacer)") { Help },

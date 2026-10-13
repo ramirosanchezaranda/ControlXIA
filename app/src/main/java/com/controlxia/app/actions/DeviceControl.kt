@@ -256,6 +256,138 @@ class DeviceControl(private val context: Context) {
         return brightness((current + if (up) 25 else -25).toInt())
     }
 
+    /**
+     * Prende o apaga un botón de los ajustes rápidos por su nombre ("no
+     * molestar", "rotación automática", "ahorro de batería", "zona wi-fi"…).
+     * Mira su estado antes, para no apagar lo que se pidió prender. Devuelve
+     * null si salió bien, [TILE_NOT_FOUND] si no hay un botón con ese nombre, o
+     * el motivo del fallo.
+     */
+    suspend fun quickTile(name: String, on: Boolean): String? = withContext(Dispatchers.Default) {
+        val service = XiaAccessibilityService.instance ?: return@withContext NEEDS_A11Y
+        val wanted = normalize(name).replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+        if (wanted.length < 3) return@withContext TILE_NOT_FOUND
+        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
+        delay(700)
+        var tile: AccessibilityNodeInfo? = null
+        // Los ajustes rápidos pueden tener varias páginas: se miran hasta tres.
+        for (page in 0 until 3) {
+            tile = waitFor(1_200) { root -> findTile(root, wanted) }
+            if (tile != null) break
+            val metrics = context.resources.displayMetrics
+            Gestures.swipe(service, metrics.widthPixels * 0.85f, metrics.heightPixels * 0.3f, metrics.widthPixels * 0.15f, metrics.heightPixels * 0.3f, 250)
+            delay(500)
+        }
+        if (tile == null) {
+            closeShade(service)
+            return@withContext TILE_NOT_FOUND
+        }
+        val state = tileState(tile)
+        if (state == on) {
+            AgentLog.add("TELÉFONO «$name» ya estaba ${if (on) "activado" else "desactivado"}")
+        } else {
+            clickNode(service, tile)
+            AgentLog.add("TELÉFONO «$name» → ${if (on) "activado" else "desactivado"}")
+        }
+        delay(500)
+        closeShade(service)
+        null
+    }
+
+    private fun findTile(root: AccessibilityNodeInfo, wanted: String): AccessibilityNodeInfo? {
+        var found: AccessibilityNodeInfo? = null
+        fun visit(node: AccessibilityNodeInfo?, depth: Int) {
+            if (node == null || found != null || depth > 30) return
+            if (node.isVisibleToUser && (node.isClickable || node.isCheckable)) {
+                val label = normalize("${node.text ?: ""} ${node.contentDescription ?: ""}")
+                    .replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ")
+                if (wanted in label) {
+                    found = node
+                    return
+                }
+            }
+            for (i in 0 until node.childCount) visit(node.getChild(i), depth + 1)
+        }
+        visit(root, 0)
+        return found
+    }
+
+    /** true/false si el botón dice si está activado; null si no se sabe. */
+    private fun tileState(tile: AccessibilityNodeInfo): Boolean? {
+        if (tile.isCheckable) return tile.isChecked
+        val state = normalize(
+            "${if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) tile.stateDescription ?: "" else ""} ${tile.contentDescription ?: ""}"
+        )
+        return when {
+            Regex("\\b(desactivad|apagad|off)").containsMatchIn(state) -> false
+            Regex("\\b(activad|encendid|prendid|on)\\b").containsMatchIn(state) -> true
+            else -> null
+        }
+    }
+
+    private fun closeShade(service: XiaAccessibilityService) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+        } else {
+            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+        }
+    }
+
+    /** Abre una pantalla de Ajustes por su nombre ("batería", "wifi", "sonido"…). */
+    fun openSettings(which: String): String? {
+        val key = normalize(which).trim()
+        val action = SETTINGS_SCREENS.entries.firstOrNull { (words, _) -> words.any { it in key } }?.value
+            ?: if (key.isBlank()) Settings.ACTION_SETTINGS else return "No conozco esos ajustes: decí «abrí ajustes» y «tocá» lo que busques."
+        val intent = if (action == APP_DETAILS) {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", context.packageName, null))
+        } else {
+            Intent(action)
+        }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching { context.startActivity(intent); null }.getOrElse {
+            runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            null
+        }
+    }
+
+    /** "Tenés 64 % de batería, cargando." */
+    fun batteryStatus(): String {
+        val battery = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+        val level = battery.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val charging = battery.isCharging
+        return "Tenés $level por ciento de batería" + if (charging) ", y está cargando." else "."
+    }
+
+    enum class Edit { COPY, PASTE, CUT, SELECT_ALL }
+
+    /** Copiar, pegar, cortar o seleccionar todo en el campo de texto con el foco. */
+    fun edit(action: Edit): String? {
+        val root = XiaAccessibilityService.instance?.rootInActiveWindow ?: return NEEDS_A11Y
+        val field = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }
+            ?: return "No hay ningún campo de texto con el cursor."
+        val ok = when (action) {
+            Edit.COPY -> field.performAction(AccessibilityNodeInfo.ACTION_COPY)
+            Edit.PASTE -> field.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            Edit.CUT -> field.performAction(AccessibilityNodeInfo.ACTION_CUT)
+            Edit.SELECT_ALL -> {
+                val length = field.text?.length ?: 0
+                field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 0)
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, length)
+                })
+            }
+        }
+        return if (ok) null else "No pude hacerlo en ese campo."
+    }
+
+    /** Vuelve a la app que se estaba usando antes (dos toques en "recientes"). */
+    suspend fun previousApp(): String? {
+        val service = XiaAccessibilityService.instance ?: return NEEDS_A11Y
+        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
+        delay(350)
+        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
+        return null
+    }
+
     private suspend fun waitFor(
         timeoutMs: Long,
         find: (AccessibilityNodeInfo) -> AccessibilityNodeInfo?,
@@ -330,6 +462,33 @@ class DeviceControl(private val context: Context) {
 
     companion object {
         const val NEEDS_A11Y = "Para eso necesito el control de apps activado (ControlXIA → Sistema)."
+        const val TILE_NOT_FOUND = "no-tile"
+        private const val APP_DETAILS = "app_details"
+
+        /** Pantallas de Ajustes por lo que se dice. */
+        private val SETTINGS_SCREENS = linkedMapOf(
+            listOf("wifi", "wi fi", "internet") to Settings.ACTION_WIFI_SETTINGS,
+            listOf("bluetooth") to Settings.ACTION_BLUETOOTH_SETTINGS,
+            listOf("pantalla", "brillo") to Settings.ACTION_DISPLAY_SETTINGS,
+            listOf("sonido", "volumen", "tono") to Settings.ACTION_SOUND_SETTINGS,
+            listOf("bateria", "carga") to Intent.ACTION_POWER_USAGE_SUMMARY,
+            listOf("aplicacion", "apps") to Settings.ACTION_APPLICATION_SETTINGS,
+            listOf("ubicacion", "gps") to Settings.ACTION_LOCATION_SOURCE_SETTINGS,
+            listOf("almacenamiento", "memoria", "espacio") to Settings.ACTION_INTERNAL_STORAGE_SETTINGS,
+            listOf("seguridad", "bloqueo", "huella", "contrasena") to Settings.ACTION_SECURITY_SETTINGS,
+            listOf("privacidad", "permiso") to Settings.ACTION_PRIVACY_SETTINGS,
+            listOf("accesibilidad") to Settings.ACTION_ACCESSIBILITY_SETTINGS,
+            listOf("fecha", "hora") to Settings.ACTION_DATE_SETTINGS,
+            listOf("idioma") to Settings.ACTION_LOCALE_SETTINGS,
+            listOf("teclado") to Settings.ACTION_INPUT_METHOD_SETTINGS,
+            listOf("datos", "uso de datos") to Settings.ACTION_DATA_ROAMING_SETTINGS,
+            listOf("nfc", "pago") to Settings.ACTION_NFC_SETTINGS,
+            listOf("no molestar") to Settings.ACTION_ZEN_MODE_PRIORITY_SETTINGS,
+            listOf("red", "redes", "conexion", "avion") to Settings.ACTION_WIRELESS_SETTINGS,
+            listOf("informacion", "acerca", "telefono") to Settings.ACTION_DEVICE_INFO_SETTINGS,
+            listOf("cuenta") to Settings.ACTION_SYNC_SETTINGS,
+            listOf("esta app", "controlxia", "asistente") to APP_DETAILS,
+        )
 
         /** Lo último que se pidió: el sistema no dice si la linterna está prendida. */
         @Volatile

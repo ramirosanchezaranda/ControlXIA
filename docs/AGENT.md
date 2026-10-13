@@ -42,6 +42,10 @@ Además:
 - Si en medio de un pedido de varias cosas hace falta confirmar ("mandale hola a Juan y poneme una alarma"), después del "sí" **sigue con lo que falta** (la alarma) en vez de terminar ahí.
 - Todo queda en el **Registro del agente** (líneas `CONTROL:` y `SIGO`).
 
+## Cuando se termina el cupo
+
+Antes del modelo se prueban los comandos directos y las habilidades locales (sin LLM). Si el modelo se queda sin cupo, sigue solo con el próximo de la cadena: los otros modelos gratis del mismo proveedor y después los otros proveedores con clave (ver [VOICE_CONTROL.md](VOICE_CONTROL.md#sin-el-modelo-sin-créditos-ni-cupo)). En el registro aparece `SIN CUPO en … : sigo con …`.
+
 ## Comandos directos
 
 Antes de llamar al modelo, las frases cortas y fijas ("atrás", "tocá 5", "subí el volumen", "sacá una foto", "llamá a mamá") se resuelven en el teléfono: al instante, sin tokens. Lista completa en [VOICE_CONTROL.md](VOICE_CONTROL.md).

@@ -104,6 +104,19 @@ class DirectCommandRunner(private val context: Context) {
                 if (result.startsWith("Abriendo")) Reply("", shown = result) else Reply(result)
             }
             DirectCommands.Help -> Reply(HELP)
+            is DirectCommands.QuickTile -> {
+                val result = device.quickTile(command.name, command.on)
+                // No hay un botón así: puede ser otra cosa ("activá el modo oscuro de WhatsApp").
+                if (result == DeviceControl.TILE_NOT_FOUND) return null
+                done(result, "${command.name.replaceFirstChar { it.uppercase() }} ${if (command.on) "activado" else "desactivado"}")
+            }
+            is DirectCommands.SettingsScreen -> done(device.openSettings(command.which), "Ajustes")
+            DirectCommands.Battery -> Reply(device.batteryStatus())
+            is DirectCommands.TextEdit -> done(
+                device.edit(DeviceControl.Edit.valueOf(command.action.name)),
+                EDIT_LABELS.getValue(command.action),
+            )
+            DirectCommands.PreviousApp -> done(device.previousApp(), "App anterior")
             is DirectCommands.Call -> call(command.who)
             DirectCommands.AnswerCall -> done(calls.answer(), "Llamada atendida")
             DirectCommands.HangUp -> done(calls.hangUp(), "Llamada cortada")
@@ -170,16 +183,23 @@ class DirectCommandRunner(private val context: Context) {
             DirectCommands.Direction.LEFT to "←",
             DirectCommands.Direction.RIGHT to "→",
         )
+        val EDIT_LABELS = mapOf(
+            DirectCommands.Edit.COPY to "Copiado",
+            DirectCommands.Edit.PASTE to "Pegado",
+            DirectCommands.Edit.CUT to "Cortado",
+            DirectCommands.Edit.SELECT_ALL to "Todo seleccionado",
+        )
         val SETTING_NAMES = mapOf(
             DirectCommands.Setting.WIFI to "Wi-Fi",
             DirectCommands.Setting.BLUETOOTH to "Bluetooth",
             DirectCommands.Setting.AIRPLANE to "Modo avión",
             DirectCommands.Setting.MOBILE_DATA to "Datos",
         )
-        const val HELP = "Podés decir: atrás, inicio, bajá o subí, mostrá los números y tocá uno, " +
-            "tocá y el nombre de un botón, escribí algo, subí o bajá el volumen, pausa, siguiente " +
-            "canción, prendé la linterna, activá el wifi, abrí una app, llamá a alguien, atendé o " +
-            "colgá, sacá una foto, empezá a " +
-            "grabar y terminá el video. Para frenarme, decí pará. Y cualquier otra cosa, pedímela."
+        const val HELP = "Sin internet para el modelo podés decir: mandale a Juan que llego tarde, " +
+            "mandale un audio a Juan, llamá a mamá, leeme los mensajes, respondele que sí, poné una " +
+            "alarma a las 7, temporizador de 5 minutos, agendá dentista el jueves a las 4, cuánto es " +
+            "25 por 4, buscá zapatillas en Mercado Libre, abrí los reels, abrí una app, sacá una foto, " +
+            "activá no molestar o el wifi, subí el volumen, pausa, y para cualquier pantalla: mostrá " +
+            "los números y tocá uno, bajá, atrás, inicio. Para frenarme, decí pará."
     }
 }

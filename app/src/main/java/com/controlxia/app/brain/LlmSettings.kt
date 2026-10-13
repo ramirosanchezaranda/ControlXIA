@@ -52,8 +52,28 @@ class LlmSettings(context: Context) {
         prefs.edit().putString("${type.name}_base_url", url).apply()
 
     /** Config resuelta del proveedor activo, o null si falta completar datos. */
-    fun activeConfig(): LlmConfig? {
-        val type = activeProvider
+    fun activeConfig(): LlmConfig? = config(activeProvider)
+
+    /**
+     * El proveedor activo y, detrás, con qué seguir si se queda sin cupo: los
+     * otros modelos gratis del mismo proveedor (en Groq y Gemini cada modelo
+     * tiene su propio cupo diario) y los demás proveedores con clave cargada.
+     */
+    fun chain(): List<LlmConfig> {
+        val order = listOf(activeProvider) + LlmProviderType.entries.filter { it != activeProvider }
+        return buildList {
+            for (type in order) {
+                val base = config(type) ?: continue
+                add(base)
+                if (type in FREE_PER_MODEL) {
+                    type.suggestedModels.filter { it != base.model }.forEach { add(base.copy(model = it)) }
+                }
+            }
+        }
+    }
+
+    /** Config resuelta de [type], o null si falta completar datos. */
+    fun config(type: LlmProviderType): LlmConfig? {
         val model = model(type)
         val key = apiKey(type)
         val baseUrl = baseUrl(type).ifBlank { null }
@@ -65,6 +85,9 @@ class LlmSettings(context: Context) {
 
     private companion object {
         const val KEY_ACTIVE = "active_provider"
+
+        /** Proveedores con plan gratis y cupo separado por modelo. */
+        val FREE_PER_MODEL = setOf(LlmProviderType.GROQ, LlmProviderType.GEMINI)
 
         /** Modelos que los proveedores apagaron y que pudieron quedar guardados. */
         val RETIRED_MODELS = setOf(
