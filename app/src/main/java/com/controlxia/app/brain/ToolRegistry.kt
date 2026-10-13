@@ -52,6 +52,7 @@ class ToolRegistry(private val context: Context) {
     private val contacts by lazy { Contacts(context) }
     private val sender by lazy { MessageSender(context) }
     private val whatsApp by lazy { WhatsAppUi(context) }
+    private val direct by lazy { DirectCommandRunner(context) }
 
     // Descripciones cortas a propósito: el catálogo viaja en cada paso del
     // agente y con Groq gratis (8K tokens por minuto) cada palabra cuenta.
@@ -172,6 +173,21 @@ class ToolRegistry(private val context: Context) {
             parameters = schema(),
         ),
         ToolSpec(
+            name = "phone",
+            description = "Botones y ajustes del teléfono.",
+            parameters = schema(required = listOf("action")) {
+                put("action", enumProp("Qué hacer", PHONE_ACTIONS.keys.toList()))
+                put("value", intProp("0-100 para volume_set y brightness_set"))
+            },
+        ),
+        ToolSpec(
+            name = "camera",
+            description = "Cámara del teléfono.",
+            parameters = schema(required = listOf("action")) {
+                put("action", enumProp("Qué hacer", CAMERA_ACTIONS.keys.toList()))
+            },
+        ),
+        ToolSpec(
             name = "set_alarm",
             description = "Pone una alarma (24 h).",
             parameters = schema(required = listOf("hour", "minute")) {
@@ -197,6 +213,7 @@ class ToolRegistry(private val context: Context) {
             "open_app" -> "Abriendo ${args.strArg("app_name")}…"
             "search_in_app" -> "Buscando «${args.strArg("query")}»…"
             "open_app_section" -> "Abriendo ${args.strArg("app")}…"
+            "phone", "camera" -> "Listo…"
             "whatsapp_open_chat" -> "Buscando «${WhatsAppUi.chatName(args.strArg("name"))}» en WhatsApp…"
             "screen_read" -> "Mirando la pantalla…"
             "screen_tap" -> "Tocando…"
@@ -242,6 +259,15 @@ class ToolRegistry(private val context: Context) {
         "read_messages" -> readMessages(args)
         "reply_to_message" -> replyToMessage(args)
         "send_message" -> sendMessage(args)
+        "phone" -> phone(args)
+        "camera" -> {
+            val action = CAMERA_ACTIONS[args.strArg("action")]
+            if (action == null) {
+                ToolOutcome("Acción de cámara desconocida.")
+            } else {
+                directOutcome(direct.run(DirectCommands.Camera(action)))
+            }
+        }
         "save_contact_alias" -> ToolOutcome(
             withContext(Dispatchers.IO) { contacts.saveAlias(args.strArg("alias"), args.strArg("contact")) },
             terminal = true,
@@ -270,6 +296,19 @@ class ToolRegistry(private val context: Context) {
         }
         else -> ToolOutcome("No existe la herramienta $name.")
     }
+
+    private suspend fun phone(args: JsonObject): ToolOutcome {
+        val value = args.intArgOrNull("value") ?: 50
+        val command = when (val action = args.strArg("action")) {
+            "volume_set" -> DirectCommands.Volume(DirectCommands.VolumeChange.SET, value)
+            "brightness_set" -> DirectCommands.Brightness(up = value >= 50, percent = value)
+            else -> PHONE_ACTIONS[action] ?: return ToolOutcome("Acción desconocida: $action.")
+        }
+        return directOutcome(direct.run(command))
+    }
+
+    private fun directOutcome(reply: Reply?): ToolOutcome =
+        ToolOutcome(reply?.let { it.text.ifBlank { it.shown ?: "Hecho." } } ?: "No se pudo.", terminal = true)
 
     /** Tocar botones que mandan, compran o borran algo requiere el "sí" del usuario. */
     private suspend fun tap(args: JsonObject): ToolOutcome {
@@ -414,6 +453,45 @@ class ToolRegistry(private val context: Context) {
         put("enum", values.toJsonArray())
     }
 }
+
+private val PHONE_ACTIONS: Map<String, DirectCommands.Command?> = mapOf(
+    "back" to DirectCommands.Global(DirectCommands.GlobalAction.BACK),
+    "home" to DirectCommands.Global(DirectCommands.GlobalAction.HOME),
+    "recents" to DirectCommands.Global(DirectCommands.GlobalAction.RECENTS),
+    "notifications" to DirectCommands.Global(DirectCommands.GlobalAction.NOTIFICATIONS),
+    "quick_settings" to DirectCommands.Global(DirectCommands.GlobalAction.QUICK_SETTINGS),
+    "lock" to DirectCommands.Global(DirectCommands.GlobalAction.LOCK),
+    "screenshot" to DirectCommands.Global(DirectCommands.GlobalAction.SCREENSHOT),
+    "volume_up" to DirectCommands.Volume(DirectCommands.VolumeChange.UP),
+    "volume_down" to DirectCommands.Volume(DirectCommands.VolumeChange.DOWN),
+    "volume_set" to null,
+    "mute" to DirectCommands.Volume(DirectCommands.VolumeChange.MUTE),
+    "unmute" to DirectCommands.Volume(DirectCommands.VolumeChange.UNMUTE),
+    "play" to DirectCommands.Media(DirectCommands.MediaAction.PLAY),
+    "pause" to DirectCommands.Media(DirectCommands.MediaAction.PAUSE),
+    "next" to DirectCommands.Media(DirectCommands.MediaAction.NEXT),
+    "previous" to DirectCommands.Media(DirectCommands.MediaAction.PREVIOUS),
+    "flashlight_on" to DirectCommands.Flashlight(true),
+    "flashlight_off" to DirectCommands.Flashlight(false),
+    "wifi_on" to DirectCommands.Toggle(DirectCommands.Setting.WIFI, true),
+    "wifi_off" to DirectCommands.Toggle(DirectCommands.Setting.WIFI, false),
+    "bluetooth_on" to DirectCommands.Toggle(DirectCommands.Setting.BLUETOOTH, true),
+    "bluetooth_off" to DirectCommands.Toggle(DirectCommands.Setting.BLUETOOTH, false),
+    "airplane_on" to DirectCommands.Toggle(DirectCommands.Setting.AIRPLANE, true),
+    "airplane_off" to DirectCommands.Toggle(DirectCommands.Setting.AIRPLANE, false),
+    "brightness_set" to null,
+)
+
+private val CAMERA_ACTIONS = mapOf(
+    "open" to DirectCommands.CameraAction.OPEN,
+    "open_video" to DirectCommands.CameraAction.OPEN_VIDEO,
+    "selfie_mode" to DirectCommands.CameraAction.SELFIE,
+    "take_photo" to DirectCommands.CameraAction.PHOTO,
+    "take_selfie" to DirectCommands.CameraAction.SELFIE_PHOTO,
+    "start_video" to DirectCommands.CameraAction.START_VIDEO,
+    "stop_video" to DirectCommands.CameraAction.STOP_VIDEO,
+    "switch" to DirectCommands.CameraAction.SWITCH,
+)
 
 private val GROUP = Regex("^\\s*(el |al |a |en el )?grupo\\b", RegexOption.IGNORE_CASE)
 

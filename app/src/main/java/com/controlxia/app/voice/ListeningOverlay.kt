@@ -59,6 +59,7 @@ class ListeningOverlay(private val context: Context) {
         runCatching {
             windowManager?.addView(root, params)
             view = root
+            shown = java.lang.ref.WeakReference(this)
         }
     }
 
@@ -68,6 +69,7 @@ class ListeningOverlay(private val context: Context) {
     }
 
     fun hide() {
+        if (shown?.get() === this) shown = null
         dotAnimator?.cancel()
         dotAnimator = null
         view?.let { v -> runCatching { windowManager?.removeView(v) } }
@@ -154,4 +156,15 @@ class ListeningOverlay(private val context: Context) {
 
     private fun dp(v: Int): Int =
         (v * context.resources.displayMetrics.density).toInt()
+
+    companion object {
+        @Volatile
+        private var shown: java.lang.ref.WeakReference<ListeningOverlay>? = null
+
+        /** Saca la píldora de la pantalla (para que no salga en una captura). */
+        fun hideAll() {
+            val overlay = shown?.get() ?: return
+            android.os.Handler(android.os.Looper.getMainLooper()).post { overlay.hide() }
+        }
+    }
 }

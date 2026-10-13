@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
+import com.controlxia.app.actions.ScreenNumbers
 
 /**
  * Servicio de accesibilidad: le da al asistente "ojos y manos" dentro de las
@@ -24,11 +25,16 @@ class XiaAccessibilityService : AccessibilityService() {
         instance = this
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    /** Con los números a la vista, se actualizan cuando cambia la pantalla. */
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.packageName == packageName) return
+        ScreenNumbers.onScreenChanged()
+    }
 
     override fun onInterrupt() {}
 
     override fun onUnbind(intent: Intent?): Boolean {
+        ScreenNumbers.hide()
         instance = null
         return super.onUnbind(intent)
     }

@@ -25,6 +25,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
+import com.controlxia.app.actions.CameraControl
 import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.brain.Reply
 import com.controlxia.app.brain.StopWords
@@ -128,6 +129,10 @@ class WakeWordService : Service() {
     override fun onCreate() {
         super.onCreate()
         overlay = ListeningOverlay(this).apply { onTap = { main.post { stopCurrent("tocaste el aviso") } } }
+        // Mientras la cámara graba, el motor de voz escucha "terminá el video".
+        CameraControl.onRecordingChanged = {
+            main.post { if (listeningCommand) reloadPending = true else startListeningFresh() }
+        }
         agentName = WakeWordSettings(this).agentName
         tts = TextToSpeech(this) { status -> main.post { onTtsInit(status) } }
     }
@@ -322,10 +327,15 @@ class WakeWordService : Service() {
         }
         val settings = WakeWordSettings(this)
         agentName = settings.agentName
+        val recording = CameraControl.recording
         val engine = VoskWakeWordEngine(
             context = applicationContext,
             phrase = settings.spokenWakeWord(),
             sensitivity = settings.sensitivity,
+            // Grabando, el reconocedor de Google no recibe audio: "terminá el video" se oye acá.
+            commands = if (recording) CameraControl.STOP_VIDEO_PHRASES else emptyList(),
+            echoCancel = recording,
+            onCommand = { phrase -> main.post { onStopVideoHeard(phrase) } },
         )
         wakeEngine = engine
         setWakeStatus(false, "Preparando el reconocimiento de voz…")
@@ -383,6 +393,13 @@ class WakeWordService : Service() {
     private fun onWakeWordDetected() {
         main.post {
             if (listeningCommand) return@post
+            if (CameraControl.recording) {
+                // Grabando: no hablar (se grabaría) ni transcribir (no llega audio).
+                AgentLog.add("GRABANDO: para terminar decí «terminá el video»")
+                vibrate(40)
+                wakeEngine?.let { startEngine(it) }
+                return@post
+            }
             listeningCommand = true
             followUps = 0
             followUpPending = false
@@ -599,6 +616,17 @@ class WakeWordService : Service() {
         transcribeCommand()
     }
 
+    /** "Terminá el video" mientras la cámara graba (lo oye el motor de voz, sin internet). */
+    private fun onStopVideoHeard(phrase: String) {
+        AgentLog.add("ESCUCHÉ «$phrase» mientras grababa")
+        vibrate(60)
+        scope.launch {
+            val error = CameraControl(applicationContext).stopVideo()
+            speakOut(error ?: "Listo, el video quedó guardado.", UTT_TIME)
+            if (!listeningCommand) startListeningFresh()
+        }
+    }
+
     private fun showProgress(step: String) {
         if (!listeningCommand) return
         updateNotification(step)
@@ -618,9 +646,16 @@ class WakeWordService : Service() {
         followUpWindowMs = if (answer.expectsReply) maxOf(window, QUESTION_WINDOW_MS) else window
         lastBrainError = error
         if (reply.isBlank()) {
-            // Despedida en silencio ("listo", "nada más"): volver a esperar el nombre.
+            // Sin hablar: despedidas ("listo", "nada más") o comandos que se ven
+            // ("atrás", "bajá", "tocá 5"), que muestran un texto y siguen escuchando.
+            answer.shown?.let { shown ->
+                vibrate(30)
+                updateNotification(maskedStatus(shown, "Listo"))
+                AssistantState.update(AssistantState.Phase.REPLYING, maskedStatus(shown, "Listo"))
+                if (!lockedSession) overlay?.updateStatus(shown)
+            }
             main.removeCallbacks(resumeAfterReply)
-            main.post(resumeAfterReply)
+            main.postDelayed(resumeAfterReply, if (answer.shown != null) 400L else 0L)
             return
         }
         lastReply = reply

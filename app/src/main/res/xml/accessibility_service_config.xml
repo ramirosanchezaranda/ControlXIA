@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Control de apps: leer la pantalla y tocar/escribir/desplazar cuando el
-     usuario lo pide por voz. No reacciona a eventos por su cuenta. -->
+     usuario lo pide por voz. Los eventos solo sirven para mover los números
+     de "mostrá los números" cuando la pantalla cambia. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/a11y_description"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewScrolled"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
