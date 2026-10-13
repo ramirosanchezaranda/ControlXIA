@@ -1,5 +1,6 @@
 package com.controlxia.app.ui
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +20,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,10 +33,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.ui.components.SectionLabel
+import com.controlxia.app.ui.components.StatusDot
 import com.controlxia.app.ui.components.TechTopBar
 import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
+import com.controlxia.app.voice.VoskModelDownloader
+import com.controlxia.app.voice.VoskModelStore
+import com.controlxia.app.voice.WakePhraseDetector
+import com.controlxia.app.voice.WakePhraseResolver
 import com.controlxia.app.voice.WakeWordSettings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 /**
@@ -64,6 +76,9 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            SectionLabel("Modelo de voz")
+            VoiceModelContent()
+
             AgentNameContent(settings)
 
             Column {
@@ -129,8 +144,23 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
  */
 @Composable
 fun AgentNameContent(settings: WakeWordSettings, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     var agentName by remember { mutableStateOf(settings.agentName) }
     var wakeWord by remember { mutableStateOf(settings.wakeWord) }
+
+    // Verificación en vivo: ¿el modelo de voz va a reconocer este nombre?
+    val modelState by VoskModelDownloader.state.collectAsState()
+    val phrase = wakeWord.trim().ifBlank { agentName.trim().ifBlank { "Xia" } }
+    var check by remember { mutableStateOf<NameCheck?>(null) }
+    LaunchedEffect(phrase, modelState is VoskModelDownloader.State.Done) {
+        if (!VoskModelStore.isAvailable(context)) {
+            check = NameCheck(null, "Cuando esté el modelo de voz se verifica si reconoce «$phrase».")
+            return@LaunchedEffect
+        }
+        check = NameCheck(null, "Verificando «$phrase»…")
+        delay(600) // esperar a que termine de escribir
+        check = withContext(Dispatchers.IO) { checkName(context, phrase) }
+    }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionLabel("Nombre del asistente")
@@ -148,6 +178,14 @@ fun AgentNameContent(settings: WakeWordSettings, modifier: Modifier = Modifier) 
             modifier = Modifier.fillMaxWidth(),
         )
 
+        check?.let { result ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusDot(result.ok)
+                Spacer(Modifier.width(10.dp))
+                Text(result.message, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
         SectionLabel("Cómo suena (opcional)")
         OutlinedTextField(
             value = wakeWord,
@@ -160,8 +198,8 @@ fun AgentNameContent(settings: WakeWordSettings, modifier: Modifier = Modifier) 
             singleLine = true,
             supportingText = {
                 Text(
-                    "Si no te reconoce, escribila como la decís (ej. «sia»). También " +
-                        "acepta una frase corta, como «oye xia»."
+                    "Solo si no te reconoce: escribí el nombre como lo decís (ej. «sia»). " +
+                        "También acepta una frase corta, como «oye xia»."
                 )
             },
             modifier = Modifier.fillMaxWidth(),
@@ -173,5 +211,25 @@ fun AgentNameContent(settings: WakeWordSettings, modifier: Modifier = Modifier) 
             style = MaterialTheme.typography.bodySmall,
             color = Muted,
         )
+    }
+}
+
+private class NameCheck(val ok: Boolean?, val message: String)
+
+/** Carga el modelo (si hace falta) y prueba si [phrase] se puede reconocer. */
+private fun checkName(context: Context, phrase: String): NameCheck {
+    val result = runCatching {
+        val model = VoskModelStore.get(context)
+        WakePhraseResolver.resolve(phrase) { VoskModelStore.hasWord(model, it) }
+    }
+    // Sin la escucha encendida no tiene sentido dejar el modelo en memoria.
+    if (!WakeWordService.running) VoskModelStore.releaseIfIdle()
+    val words = result.getOrElse { return NameCheck(false, it.message ?: "No se pudo verificar") }
+        ?: return NameCheck(false, "No reconozco «$phrase». Escribí abajo cómo suena.")
+    val heard = words.joinToString(" ")
+    return if (heard == WakePhraseDetector.normalize(phrase).joinToString(" ")) {
+        NameCheck(true, "Va a responder cuando digas «$phrase».")
+    } else {
+        NameCheck(true, "Va a responder a «$phrase» (lo reconoce como «$heard»).")
     }
 }

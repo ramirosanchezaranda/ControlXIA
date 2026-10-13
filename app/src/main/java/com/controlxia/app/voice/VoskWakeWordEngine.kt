@@ -10,17 +10,17 @@ import android.media.MediaRecorder
  * Palabra de activación con Vosk, 100 % en el teléfono y sin cuentas.
  *
  * Lee el micrófono en un hilo propio y le pasa el audio a
- * [WakePhraseDetector], que decide si se dijo el nombre. La primera vez el
- * hilo también prepara el modelo de voz ([VoskModelStore]).
+ * [WakePhraseDetector], que decide si se dijo el nombre. Antes, el hilo carga
+ * el modelo de voz ([VoskModelStore]) y traduce el nombre elegido a palabras
+ * que el modelo conoce ([WakePhraseResolver]).
  */
 class VoskWakeWordEngine(
     context: Context,
-    phrase: String,
+    private val phrase: String,
     private val sensitivity: Float,
 ) : WakeWordEngine {
 
     private val appContext = context.applicationContext
-    private val words: List<String> = WakePhraseDetector.normalize(phrase)
 
     @Volatile
     private var listener: Listener? = null
@@ -70,7 +70,7 @@ class VoskWakeWordEngine(
             var recorder: AudioRecord? = null
             var detector: WakePhraseDetector? = null
             try {
-                if (words.isEmpty()) return fail("Falta la palabra de activación", false)
+                if (phrase.isBlank()) return fail("Falta el nombre del asistente", false)
                 val model = try {
                     VoskModelStore.get(appContext)
                 } catch (e: Exception) {
@@ -78,14 +78,11 @@ class VoskWakeWordEngine(
                 }
                 if (!active) return
 
-                val missing = words.filterNot { VoskModelStore.hasWord(model, it) }
-                if (missing.isNotEmpty()) {
-                    return fail(
-                        "“${missing.joinToString(" ")}” no está en el vocabulario. " +
-                            "Escribila como suena (ej. «sia»)",
+                val words = WakePhraseResolver.resolve(phrase) { VoskModelStore.hasWord(model, it) }
+                    ?: return fail(
+                        "No reconozco “$phrase”. En Ajustar, escribí cómo suena (ej. «sia»)",
                         false,
                     )
-                }
 
                 detector = WakePhraseDetector(model, words, sensitivity)
                 recorder = openRecorder() ?: return fail("No se pudo abrir el micrófono", true)

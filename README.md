@@ -30,7 +30,7 @@ Requiere Android Studio (o SDK de Android 35 + JDK 17):
 
 El APK queda en `app/build/outputs/apk/debug/`. Instalar en un **dispositivo real** (el emulador no sirve para probar micrófono continuo ni Doze).
 
-La primera compilación descarga el modelo de voz en español de Vosk (`vosk-model-small-es-0.42`, 39 MB) desde alphacephei.com y lo guarda en `.gradle/vosk/`. Para compilar sin internet, copiá ese zip ahí a mano. El modelo y las librerías nativas suman ~60 MB al APK.
+El modelo de voz en español de Vosk (39 MB) no viaja en el APK: la app lo descarga la primera vez. Para incluirlo igual, compilá con `-Pcontrolxia.bundleVoskModel=true` (ver [docs/WAKE_WORD.md](docs/WAKE_WORD.md)).
 
 ## Probar la confiabilidad (en dispositivo real)
 
@@ -52,11 +52,11 @@ En la app: ⚙️ → elegir proveedor → pegar API key → elegir modelo → *
 
 ## Configurar la palabra de activación
 
-No hace falta configurar nada: la palabra de activación es el **nombre del asistente** (por defecto "Xia") y se reconoce en el teléfono con Vosk.
+La palabra de activación es el **nombre que le pongas** (por defecto "Xia") y se reconoce en el teléfono con Vosk.
 
-1. Encendé la escucha en el panel. La primera vez prepara el modelo de voz (unos segundos; el panel muestra "Preparando el reconocimiento de voz…").
-2. Decí el nombre → sentís la vibración y "Te escucho" → decí el pedido.
-3. En panel → **Palabra de activación → Ajustar** podés cambiar el nombre, escribir cómo suena si no te reconoce (ej. "sia") y la sensibilidad.
+1. Tocá **Descargar modelo de voz (39 MB)** (en el onboarding o en el panel). Es una sola vez.
+2. Poné el nombre: debajo te confirma si lo va a reconocer.
+3. Encendé la escucha, decí el nombre → sentís la vibración y "Te escucho" → decí el pedido.
 
 ## Estructura
 

@@ -282,6 +282,8 @@ fun DashboardScreen(
                             else -> null
                         },
                     )
+                    // Sin el modelo de voz no hay palabra de activación: botón para bajarlo.
+                    VoiceModelContent(Modifier.padding(top = 8.dp), showWhenReady = false)
                     Spacer(Modifier.height(8.dp))
                     TechButton(
                         text = "Ajustar nombre y sensibilidad",

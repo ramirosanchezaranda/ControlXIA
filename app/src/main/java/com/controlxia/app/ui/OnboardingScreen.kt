@@ -242,12 +242,14 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     Text("Ponele nombre.", style = MaterialTheme.typography.headlineMedium)
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "Para despertarla, decí su nombre. Se reconoce en el teléfono, " +
-                            "sin internet ni cuentas. La primera vez prepara el modelo " +
-                            "de voz y tarda unos segundos.",
+                        "Para despertarla, decí su nombre: el que vos quieras. Se " +
+                            "reconoce en el teléfono, sin cuentas y sin mandar audio a " +
+                            "ningún lado. Solo hace falta bajar una vez el modelo de voz.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = Muted,
                     )
+                    Spacer(Modifier.height(24.dp))
+                    VoiceModelContent()
                     Spacer(Modifier.height(24.dp))
                     AgentNameContent(wakeSettings)
                 }

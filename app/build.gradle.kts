@@ -21,11 +21,24 @@ val keystoreProps = Properties().apply {
 val hasReleaseSigning =
     keystoreProps.getProperty("storeFile") != null || System.getenv("KEYSTORE_FILE") != null
 
+// Modelo de voz en español de Vosk. Por defecto NO viaja dentro del APK: la
+// app lo descarga la primera vez (39 MB) y el APK queda chico. Para un APK que
+// funcione sin internet desde el primer uso, compilar con
+// -Pcontrolxia.bundleVoskModel=true.
+val voskModelName = "vosk-model-small-es-0.42"
+val voskModelUrl = "https://alphacephei.com/vosk/models/$voskModelName.zip"
+val bundleVoskModel = (findProperty("controlxia.bundleVoskModel") as String?)?.toBoolean() ?: false
+
+// Arquitecturas con librerías nativas de Vosk (~10 MB cada una). Se pueden
+// limitar con -Pcontrolxia.abis=arm64-v8a para un APK más liviano.
+val nativeAbis = (findProperty("controlxia.abis") as String?)
+    ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
+    ?: listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+
 /**
- * Descarga (una sola vez) el modelo de voz en español de Vosk y lo deja como
- * asset de la app en `vosk-model-es/`. El zip queda cacheado en
- * `.gradle/vosk/` (no se commitea); para compilar sin internet, copiá el zip
- * ahí a mano.
+ * Descarga (una sola vez) el modelo de voz y lo deja como asset de la app en
+ * `vosk-model-es/`. Solo corre con -Pcontrolxia.bundleVoskModel=true. El zip
+ * queda cacheado en `.gradle/vosk/` (no se commitea).
  */
 abstract class PrepareVoskModel : DefaultTask() {
     @get:Input abstract val modelName: Property<String>
@@ -79,8 +92,8 @@ abstract class PrepareVoskModel : DefaultTask() {
 }
 
 val prepareVoskModel = tasks.register<PrepareVoskModel>("prepareVoskModel") {
-    modelName.set("vosk-model-small-es-0.42")
-    modelUrl.set("https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip")
+    modelName.set(voskModelName)
+    modelUrl.set(voskModelUrl)
     cacheDir.set(rootProject.layout.projectDirectory.dir(".gradle/vosk"))
 }
 
@@ -92,13 +105,15 @@ android {
         applicationId = "com.controlxia.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
-        // Vosk trae librerías nativas para cada arquitectura (~10 MB cada una):
-        // teléfonos (arm64 y arm de 32 bits) y el emulador de la PC (x86_64).
+        buildConfigField("String", "VOSK_MODEL_NAME", "\"$voskModelName\"")
+        buildConfigField("String", "VOSK_MODEL_URL", "\"$voskModelUrl\"")
+
+        // Teléfonos (arm64 y arm de 32 bits) y el emulador de la PC (x86_64).
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += nativeAbis
         }
     }
 
@@ -143,6 +158,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -165,9 +181,11 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.18.1@aar")
 }
 
-// El modelo de voz descargado entra como asset generado en cada variante.
-androidComponents {
-    onVariants { variant ->
-        variant.sources.assets?.addGeneratedSourceDirectory(prepareVoskModel, PrepareVoskModel::outputDir)
+// Con -Pcontrolxia.bundleVoskModel=true el modelo entra como asset generado.
+if (bundleVoskModel) {
+    androidComponents {
+        onVariants { variant ->
+            variant.sources.assets?.addGeneratedSourceDirectory(prepareVoskModel, PrepareVoskModel::outputDir)
+        }
     }
 }
