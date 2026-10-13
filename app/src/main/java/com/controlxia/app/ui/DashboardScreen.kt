@@ -1,6 +1,9 @@
 package com.controlxia.app.ui
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.brain.LlmSettings
+import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.ServicePrefs
 import com.controlxia.app.service.WakeWordService
@@ -105,6 +109,7 @@ fun DashboardScreen(
     var wakeFailed by remember { mutableStateOf(WakeWordService.wakeWordFailed) }
     var brainError by remember { mutableStateOf(WakeWordService.lastBrainError) }
     var lastReply by remember { mutableStateOf(WakeWordService.lastReply) }
+    var logVersion by remember { mutableIntStateOf(AgentLog.version) }
     LaunchedEffect(Unit) {
         while (true) {
             running = WakeWordService.running
@@ -113,6 +118,7 @@ fun DashboardScreen(
             wakeFailed = WakeWordService.wakeWordFailed
             brainError = WakeWordService.lastBrainError
             lastReply = WakeWordService.lastReply
+            logVersion = AgentLog.version
             delay(1_000)
         }
     }
@@ -375,6 +381,45 @@ fun DashboardScreen(
                 }
             }
 
+            // Registro del agente: para entender qué pasó en un pedido que falló.
+            Column(Modifier.staggerReveal(4)) {
+                SectionLabel("Registro del agente")
+                Spacer(Modifier.height(12.dp))
+                TechPanel {
+                    val lines = remember(logVersion) { AgentLog.recent(14) }
+                    if (lines.isEmpty()) {
+                        Text(
+                            "Acá vas a ver paso a paso qué hizo el asistente en cada pedido.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Muted,
+                        )
+                    } else {
+                        lines.forEach { entry ->
+                            Text(
+                                "${formatSeconds(entry.time)}  ${entry.text}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(vertical = 2.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row {
+                            TextButton(onClick = {
+                                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                clipboard?.setPrimaryClip(
+                                    ClipData.newPlainText("Registro ControlXIA", AgentLog.asText())
+                                )
+                                Toast.makeText(context, "Registro copiado", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Text("COPIAR REGISTRO", style = MaterialTheme.typography.labelSmall)
+                            }
+                            TextButton(onClick = { AgentLog.clear() }) {
+                                Text("BORRAR", style = MaterialTheme.typography.labelSmall, color = Muted)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Cerebro
             Column(Modifier.staggerReveal(4)) {
                 SectionLabel("Cerebro / LLM")
@@ -442,6 +487,9 @@ fun DashboardScreen(
 
 private fun currentTime(): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+
+private fun formatSeconds(timestamp: Long): String =
+    SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
 
 private fun formatClock(timestamp: Long): String =
     SimpleDateFormat("dd.MM  HH:mm", Locale.getDefault()).format(Date(timestamp))

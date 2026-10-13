@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.telephony.SmsManager
 import android.view.accessibility.AccessibilityNodeInfo
+import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.XiaAccessibilityService
 import kotlinx.coroutines.delay
@@ -35,6 +36,7 @@ class MessageSender(private val context: Context) {
             }
             val parts = sms.divideMessage(text)
             sms.sendMultipartTextMessage(contact.phone, null, parts, null, null)
+            AgentLog.add("SMS enviado a ${contact.name} (${contact.phone})")
             "Listo, le mandé un SMS a ${contact.name}."
         } catch (e: Exception) {
             "No pude mandar el SMS: ${e.message ?: "error del sistema"}."
@@ -47,29 +49,49 @@ class MessageSender(private val context: Context) {
         if (!PermissionManager.canLaunchActivities(context)) {
             return "Para abrir WhatsApp necesito el permiso Mostrar sobre otras apps."
         }
-        val uri = Uri.parse("https://api.whatsapp.com/send?phone=$number&text=${Uri.encode(text)}")
-        val opened = WHATSAPP_PACKAGES.any { pkg ->
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, uri).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }.isSuccess
+        AgentLog.add("WHATSAPP abrir chat de ${contact.name} (${contact.phone} → $number)")
+        val query = "phone=$number&text=${Uri.encode(text)}"
+        // El esquema propio de WhatsApp abre el chat directo en todas las
+        // versiones; el enlace web queda de respaldo.
+        val links = listOf("whatsapp://send?$query", "https://api.whatsapp.com/send?$query")
+        val opened = links.any { link ->
+            WHATSAPP_PACKAGES.any { pkg ->
+                runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(link))
+                            .setPackage(pkg)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }.onFailure { AgentLog.add("WHATSAPP $pkg no abrió ${link.substringBefore('?')}: ${it.javaClass.simpleName}") }
+                    .isSuccess
+            }
         }
-        if (!opened) return "No encontré WhatsApp instalado."
+        if (!opened) return "No pude abrir WhatsApp en este teléfono."
 
         // Con el control de apps activo, tocar "Enviar" cuando aparezca el chat.
         val service = XiaAccessibilityService.instance
-            ?: return "Te dejé el mensaje para ${contact.name} escrito en WhatsApp: tocá enviar."
-        repeat(12) {
+        if (service == null) {
+            AgentLog.add("WHATSAPP sin control de apps: el usuario tiene que tocar enviar")
+            return "Te dejé el mensaje para ${contact.name} escrito en WhatsApp: tocá enviar."
+        }
+        var lastPackage: String? = null
+        repeat(16) {
             delay(500)
-            val root = service.rootInActiveWindow
-            if (root != null && root.packageName?.toString() in WHATSAPP_PACKAGES) {
-                val send = findSendButton(root)
-                if (send != null && send.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    return "Listo, le mandé el WhatsApp a ${contact.name}."
-                }
+            val root = service.rootInActiveWindow ?: return@repeat
+            lastPackage = root.packageName?.toString()
+            if (lastPackage !in WHATSAPP_PACKAGES) return@repeat
+            if (INVALID.any { root.findAccessibilityNodeInfosByText(it).isNotEmpty() }) {
+                AgentLog.add("WHATSAPP dice que el número $number no es válido")
+                return "WhatsApp dice que el número de ${contact.name} (${contact.phone}) no es " +
+                    "válido. ¿Querés que lo mande por SMS?"
+            }
+            val send = findSendButton(root)
+            if (send != null && send.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                AgentLog.add("WHATSAPP enviado")
+                return "Listo, le mandé el WhatsApp a ${contact.name}."
             }
         }
+        AgentLog.add("WHATSAPP no encontré el botón Enviar (app en pantalla: $lastPackage)")
         return "Abrí el chat de ${contact.name} con el mensaje escrito, pero no encontré el botón " +
             "de enviar: tocalo vos."
     }
@@ -87,5 +109,8 @@ class MessageSender(private val context: Context) {
 
     private companion object {
         val WHATSAPP_PACKAGES = listOf("com.whatsapp", "com.whatsapp.w4b")
+
+        /** Textos del aviso de WhatsApp cuando el número del enlace no existe. */
+        val INVALID = listOf("no es válido", "no está en WhatsApp", "is invalid", "isn't on WhatsApp")
     }
 }

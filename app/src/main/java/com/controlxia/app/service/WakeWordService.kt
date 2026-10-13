@@ -26,6 +26,7 @@ import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
 import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.brain.Reply
+import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.ui.AssistantActivity
 import com.controlxia.app.ui.MainActivity
@@ -413,6 +414,7 @@ class WakeWordService : Service() {
             onResult = { text ->
                 if (!listeningCommand) return@listen
                 main.removeCallbacks(sttTimeout)
+                AgentLog.add("ESCUCHÉ «$text»")
                 runCatching { RecentCommandsStore(applicationContext).add(text) }
                 lastCommand = text
                 val shown = maskedStatus("“$text”", "Te escuché")
@@ -424,6 +426,7 @@ class WakeWordService : Service() {
             onError = { message ->
                 if (!listeningCommand) return@listen
                 main.removeCallbacks(sttTimeout)
+                AgentLog.add("NO ENTENDÍ: $message")
                 // Mostrar el motivo un instante y volver a esperar la palabra.
                 AssistantState.update(AssistantState.Phase.REPLYING, message)
                 if (!lockedSession) overlay?.updateStatus(message)
@@ -497,6 +500,7 @@ class WakeWordService : Service() {
         }
         followUpPending = false
         followUps++
+        AgentLog.add("ESPERANDO tu respuesta (sin decir el nombre)")
         main.removeCallbacks(resumeAfterReply)
         voiceWakeLock.acquire(INTERACTION_MAX_MS)
         vibrate()

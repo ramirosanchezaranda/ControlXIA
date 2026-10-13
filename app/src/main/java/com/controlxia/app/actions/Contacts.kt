@@ -3,6 +3,7 @@ package com.controlxia.app.actions
 import android.content.Context
 import android.provider.ContactsContract
 import android.telephony.TelephonyManager
+import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.permissions.PermissionManager
 import java.text.Normalizer
 import java.util.Locale
@@ -25,7 +26,7 @@ class Contacts(private val context: Context) {
         .getSharedPreferences("contact_aliases", Context.MODE_PRIVATE)
 
     fun saveAlias(alias: String, contactName: String): String {
-        val key = normalize(alias.removePrefix("mi ").removePrefix("mí "))
+        val key = aliasKey(alias)
         if (key.isBlank() || contactName.isBlank()) return "Falta el apodo o el contacto."
         val found = find(contactName)
         if (found is Lookup.NotFound) return found.reason
@@ -40,8 +41,9 @@ class Contacts(private val context: Context) {
         if (!PermissionManager.hasContacts(context)) {
             return Lookup.NotFound("Necesito permiso para ver los contactos: activalo en ControlXIA.")
         }
-        val alias = normalize(nameOrAlias.removePrefix("mi ").removePrefix("mí "))
-        val query = normalize(aliases.getString(alias, null) ?: nameOrAlias)
+        val saved = aliases.getString(aliasKey(nameOrAlias), null)
+        val query = normalize(saved ?: nameOrAlias)
+        AgentLog.add("CONTACTOS buscar «$nameOrAlias»" + (saved?.let { " (apodo de $it)" } ?: ""))
         if (query.isBlank()) return Lookup.NotFound("No entendí a quién.")
 
         val all = allWithPhone()
@@ -104,6 +106,10 @@ class Contacts(private val context: Context) {
     }
 
     private fun pickMobile(numbers: List<Contact>): Contact = numbers.first()
+
+    /** "Mi Pareja", "mi pareja", "pareja" → "pareja". */
+    private fun aliasKey(alias: String): String =
+        normalize(alias).removePrefix("mi ").trim()
 
     private fun countryIso(): String {
         val telephony = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager

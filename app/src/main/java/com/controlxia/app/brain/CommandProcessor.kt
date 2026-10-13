@@ -1,6 +1,7 @@
 package com.controlxia.app.brain
 
 import android.content.Context
+import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.voice.WakeWordSettings
 import kotlinx.coroutines.CancellationException
 import java.text.SimpleDateFormat
@@ -42,13 +43,16 @@ class CommandProcessor(context: Context) {
      * Nunca lanza: los errores se traducen a una frase para el usuario.
      */
     suspend fun process(command: String, onProgress: (String) -> Unit = {}): Reply {
+        AgentLog.add("PEDIDO «$command»")
         confirmPending(command, onProgress)?.let { return it }
 
         val config = settings.activeConfig()
         if (config == null) {
             lastError = "Falta configurar el proveedor, la API key o el modelo"
+            AgentLog.add("ERROR $lastError")
             return Reply("Necesito que configures el cerebro en la app para poder entenderte.")
         }
+        AgentLog.add("MODELO ${config.type.displayName} · ${config.model}")
 
         // El pedido entra a la memoria recién cuando hay respuesta: si la
         // llamada falla, no queda un turno suelto que rompa el próximo pedido.
@@ -71,19 +75,22 @@ class CommandProcessor(context: Context) {
                 throw e
             } catch (e: Exception) {
                 lastError = e.message ?: e.javaClass.simpleName
+                AgentLog.add("ERROR del modelo: $lastError")
                 return Reply(spokenError(e))
             }
 
             when (response) {
                 is LlmResponse.Text -> {
                     val spoken = response.text.trim().ifBlank { "Listo." }
+                    AgentLog.add("RESPUESTA «$spoken»")
                     memory.addExchange(command, spoken)
                     return Reply(spoken, expectsReply = spoken.endsWith("?"))
                 }
                 is LlmResponse.ToolCalls -> {
                     val outcomes = response.calls.map { call ->
                         onProgress(registry.progressLabel(call))
-                        call to try {
+                        AgentLog.add("HERRAMIENTA ${call.name} ${call.arguments}")
+                        val outcome = try {
                             registry.execute(call.name, call.arguments)
                         } catch (e: CancellationException) {
                             throw e
@@ -91,6 +98,8 @@ class CommandProcessor(context: Context) {
                             lastError = "Falló ${call.name}: ${e.message}"
                             ToolOutcome("Falló la herramienta: ${e.message ?: e.javaClass.simpleName}")
                         }
+                        AgentLog.add("  → ${outcome.pending?.let { "ESPERA CONFIRMACIÓN" } ?: outcome.text}")
+                        call to outcome
                     }
 
                     // Algo necesita el "sí" del usuario: se pregunta y se espera.
@@ -127,8 +136,13 @@ class CommandProcessor(context: Context) {
     private suspend fun confirmPending(command: String, onProgress: (String) -> Unit): Reply? {
         val action = pending ?: return null
         pending = null
-        if (action.isExpired()) return null
-        return when (Confirmation.classify(command)) {
+        if (action.isExpired()) {
+            AgentLog.add("CONFIRMACIÓN vencida: «${action.question}»")
+            return null
+        }
+        val answer = Confirmation.classify(command)
+        AgentLog.add("CONFIRMACIÓN $answer para «${action.question}»")
+        return when (answer) {
             Confirmation.Answer.YES -> {
                 onProgress(action.progress)
                 val result = try {
@@ -139,8 +153,9 @@ class CommandProcessor(context: Context) {
                     lastError = e.message
                     "No pude hacerlo: ${e.message ?: "error inesperado"}."
                 }
+                AgentLog.add("RESULTADO «$result»")
                 memory.addExchange(command, result)
-                Reply(result)
+                Reply(result, expectsReply = result.endsWith("?"))
             }
             Confirmation.Answer.NO -> {
                 memory.addExchange(command, "Listo, no lo hago.")
