@@ -27,16 +27,26 @@ class PorcupineWakeWordEngine(
 
     private var manager: PorcupineManager? = null
 
-    override fun start(onDetected: () -> Unit) {
+    // Callbacks vigentes: el manager se construye una sola vez, pero cada
+    // start() puede traer callbacks nuevos.
+    @Volatile private var detected: () -> Unit = {}
+    @Volatile private var failed: (String) -> Unit = {}
+
+    override fun start(onDetected: () -> Unit, onError: (String) -> Unit) {
         if (accessKey.isBlank()) {
             throw WakeWordException("Falta el AccessKey de Picovoice")
         }
+        detected = onDetected
+        failed = onError
         try {
             if (manager == null) {
-                val callback = PorcupineManagerCallback { onDetected() }
+                val callback = PorcupineManagerCallback { detected() }
                 val builder = PorcupineManager.Builder()
                     .setAccessKey(accessKey)
                     .setSensitivity(sensitivity.coerceIn(0f, 1f))
+                    .setErrorCallback { error ->
+                        failed(error.message ?: "Se cortó la escucha del micrófono")
+                    }
                 if (customKeywordAsset != null) {
                     // Modelo entrenado propio (ej. "Xia") + modelo de idioma es.
                     builder.setKeywordPath(customKeywordAsset)

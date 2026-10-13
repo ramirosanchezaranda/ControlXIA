@@ -39,6 +39,7 @@ import com.controlxia.app.brain.LlmProviderFactory
 import com.controlxia.app.brain.LlmProviderType
 import com.controlxia.app.brain.LlmResponse
 import com.controlxia.app.brain.LlmSettings
+import com.controlxia.app.brain.ToolRegistry
 import com.controlxia.app.ui.components.SectionLabel
 import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.components.TechTopBar
@@ -225,13 +226,17 @@ fun LlmSettingsContent(modifier: Modifier = Modifier) {
                 testResult = null
                 scope.launch {
                     testResult = try {
+                        // Se prueba con las mismas tools que usa el asistente:
+                        // así un esquema que el proveedor rechace aparece acá
+                        // y no recién al hablarle.
                         val response = LlmProviderFactory.create(config).complete(
                             listOf(
                                 ChatMessage(
                                     ChatRole.USER,
                                     "Respondé únicamente con la palabra OK"
                                 )
-                            )
+                            ),
+                            ToolRegistry(context).specs,
                         )
                         when (response) {
                             is LlmResponse.Text ->

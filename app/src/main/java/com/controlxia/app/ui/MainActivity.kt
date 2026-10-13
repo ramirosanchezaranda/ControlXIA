@@ -12,7 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.ServicePrefs
+import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.ui.theme.XiaTheme
 import com.controlxia.app.ui.theme.screenTransition
 
@@ -66,6 +68,20 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Si la escucha quedó encendida pero Android la frenó (reinicio en
+        // Android 15, arranque bloqueado desde segundo plano, proceso matado),
+        // se relanza ahora que la app está en primer plano y está permitido.
+        if (ServicePrefs.isOnboarded(this) &&
+            ServicePrefs.isEnabled(this) &&
+            !WakeWordService.running &&
+            PermissionManager.hasRecordAudio(this)
+        ) {
+            WakeWordService.tryStart(this)
         }
     }
 

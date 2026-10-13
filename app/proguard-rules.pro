@@ -28,3 +28,8 @@
 
 # --- Modelos de datos que se serializan/deserializan por reflexión ---
 -keepclassmembers class com.controlxia.app.brain.** { <fields>; }
+
+# --- Tink (lo usa androidx.security:security-crypto para cifrar las claves) ---
+# Referencia anotaciones de Error Prone que no viajan en el APK; sin esto R8
+# corta el build release con "Missing class".
+-dontwarn com.google.errorprone.annotations.**

@@ -161,7 +161,11 @@ fun VoiceSettingsScreen(onBack: () -> Unit) {
             // Presets
             SectionLabel("Presets")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                fun preset(label: String, p: Float, r: Float) {
+                listOf(
+                    Triple("Grave", 0.7f, 0.98f),
+                    Triple("Neutra", 1.0f, 1.0f),
+                    Triple("Aguda", 1.45f, 1.05f),
+                ).forEach { (label, p, r) ->
                     TechButton(
                         text = label,
                         filled = false,
@@ -173,9 +177,6 @@ fun VoiceSettingsScreen(onBack: () -> Unit) {
                         },
                     )
                 }
-                preset("Grave", 0.7f, 0.98f)
-                preset("Neutra", 1.0f, 1.0f)
-                preset("Aguda", 1.45f, 1.05f)
             }
 
             // Tono

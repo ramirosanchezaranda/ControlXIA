@@ -78,18 +78,35 @@ fun DashboardScreen(
         "${settings.activeProvider.displayName} · ${settings.model(settings.activeProvider).ifBlank { "sin modelo" }}"
     }
     val wakeReady = remember(tick, bump) { WakeWordSettings(context).isReady() }
-    val wakeActive = WakeWordService.wakeWordActive
-    val wakeStatus = WakeWordService.wakeWordStatus
-    val recentCommands = remember(tick, bump) { RecentCommandsStore(context).all() }
+    val agentName = remember(tick, bump) { WakeWordSettings(context).agentName }
     val voiceSummary = remember(tick, bump) {
         val vs = VoiceSettings(context)
         val name = vs.voiceName?.substringBefore("#")?.take(22) ?: "Voz por defecto"
         "$name · tono ${(vs.pitch * 100).toInt()}%"
     }
 
-    var serviceOn by remember(tick, bump) {
-        mutableStateOf(ServicePrefs.isEnabled(context) || WakeWordService.running)
+    // Lo que decidió el usuario (encendido/apagado), separado de si el
+    // servicio realmente está corriendo: Android puede haberlo frenado.
+    var serviceOn by remember(tick, bump) { mutableStateOf(ServicePrefs.isEnabled(context)) }
+
+    // Estado en vivo del servicio: se refresca cada segundo para que el panel
+    // muestre al instante si el wake word arrancó, falló o hubo un error.
+    var running by remember { mutableStateOf(WakeWordService.running) }
+    var wakeActive by remember { mutableStateOf(WakeWordService.wakeWordActive) }
+    var wakeStatus by remember { mutableStateOf(WakeWordService.wakeWordStatus) }
+    var brainError by remember { mutableStateOf(WakeWordService.lastBrainError) }
+    var lastReply by remember { mutableStateOf(WakeWordService.lastReply) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            running = WakeWordService.running
+            wakeActive = WakeWordService.wakeWordActive
+            wakeStatus = WakeWordService.wakeWordStatus
+            brainError = WakeWordService.lastBrainError
+            lastReply = WakeWordService.lastReply
+            delay(1_000)
+        }
     }
+    val recentCommands = remember(tick, bump, lastReply) { RecentCommandsStore(context).all() }
 
     // Reloj del encabezado, como los "LOCAL TIME" de la referencia.
     var now by remember { mutableStateOf(currentTime()) }
@@ -124,16 +141,19 @@ fun DashboardScreen(
             Column(Modifier.staggerReveal(0)) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    if (serviceOn) "Xia está\nescuchando." else "Xia está\nen pausa.",
+                    if (serviceOn) "$agentName está\nescuchando." else "$agentName está\nen pausa.",
                     style = MaterialTheme.typography.headlineLarge,
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusDot(if (serviceOn) true else null)
+                    StatusDot(if (serviceOn && running) true else null)
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        if (serviceOn) "SERVICIO ACTIVO — SOBREVIVE BLOQUEO Y REINICIO"
-                        else "SERVICIO INACTIVO",
+                        when {
+                            serviceOn && running -> "SERVICIO ACTIVO — SOBREVIVE BLOQUEO Y REINICIO"
+                            serviceOn -> "INICIANDO…"
+                            else -> "SERVICIO INACTIVO"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = Muted,
                     )
@@ -145,9 +165,12 @@ fun DashboardScreen(
                     enabled = micOk && notifOk,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
-                        serviceOn = !serviceOn
-                        if (serviceOn) WakeWordService.start(context)
-                        else WakeWordService.stop(context)
+                        if (serviceOn) {
+                            WakeWordService.stop(context)
+                            serviceOn = false
+                        } else {
+                            serviceOn = WakeWordService.start(context)
+                        }
                     },
                 )
                 Spacer(Modifier.height(8.dp))
@@ -246,13 +269,21 @@ fun DashboardScreen(
                 SectionLabel("Palabra de activación")
                 Spacer(Modifier.height(12.dp))
                 TechPanel {
+                    // Con el servicio corriendo y el wake word inactivo, el
+                    // estado trae el motivo real (AccessKey inválido, etc.).
+                    val wakeFailed = running && !wakeActive && wakeStatus != null
                     StatusRow(
                         label = when {
                             wakeActive -> wakeStatus ?: "Escuchando"
+                            wakeFailed -> wakeStatus.orEmpty()
                             wakeReady -> "Configurado — se activa con la escucha"
                             else -> "Falta el AccessKey de Picovoice"
                         },
-                        ok = if (wakeActive) true else if (wakeReady) null else false,
+                        ok = when {
+                            wakeActive -> true
+                            wakeFailed || !wakeReady -> false
+                            else -> null
+                        },
                     )
                     Spacer(Modifier.height(8.dp))
                     TechButton(
@@ -307,6 +338,14 @@ fun DashboardScreen(
                 Spacer(Modifier.height(12.dp))
                 TechPanel {
                     StatusRow(label = llmSummary, ok = llmConfigured)
+                    brainError?.let { error ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Último error: $error",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     TechButton(
                         text = if (llmConfigured) "Cambiar" else "Configurar",

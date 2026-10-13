@@ -2,8 +2,7 @@ package com.controlxia.app.brain
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import com.controlxia.app.SecurePrefs
 
 /**
  * Configuración del LLM persistida cifrada en el dispositivo
@@ -13,16 +12,7 @@ import androidx.security.crypto.MasterKey
 class LlmSettings(context: Context) {
 
     private val prefs: SharedPreferences by lazy {
-        val masterKey = MasterKey.Builder(context.applicationContext)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
-            context.applicationContext,
-            "llm_settings",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+        SecurePrefs.get(context, "llm_settings")
     }
 
     var activeProvider: LlmProviderType
@@ -37,9 +27,20 @@ class LlmSettings(context: Context) {
     fun setApiKey(type: LlmProviderType, key: String) =
         prefs.edit().putString("${type.name}_api_key", key).apply()
 
-    fun model(type: LlmProviderType): String =
-        prefs.getString("${type.name}_model", null)
-            ?: type.suggestedModels.firstOrNull().orEmpty()
+    /**
+     * Modelo guardado, o el primero sugerido. Si el guardado es uno que el
+     * proveedor ya dio de baja (ej. gemini-2.0-flash), devuelve el sugerido
+     * para que la app no quede respondiendo "modelo inexistente".
+     */
+    fun model(type: LlmProviderType): String {
+        val saved = prefs.getString("${type.name}_model", null)
+        val fallback = type.suggestedModels.firstOrNull().orEmpty()
+        return when {
+            saved == null -> fallback
+            saved in RETIRED_MODELS -> fallback
+            else -> saved
+        }
+    }
 
     fun setModel(type: LlmProviderType, model: String) =
         prefs.edit().putString("${type.name}_model", model).apply()
@@ -64,5 +65,13 @@ class LlmSettings(context: Context) {
 
     private companion object {
         const val KEY_ACTIVE = "active_provider"
+
+        /** Modelos que los proveedores apagaron y que pudieron quedar guardados. */
+        val RETIRED_MODELS = setOf(
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+        )
     }
 }

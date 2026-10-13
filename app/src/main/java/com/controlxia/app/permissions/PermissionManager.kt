@@ -1,6 +1,7 @@
 package com.controlxia.app.permissions
 
 import android.Manifest
+import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -53,6 +54,19 @@ object PermissionManager {
      */
     fun canDrawOverlays(context: Context): Boolean =
         Settings.canDrawOverlays(context)
+
+    /**
+     * true si Android va a dejar abrir una pantalla ahora. Desde segundo plano
+     * (el servicio con el teléfono en otra app) solo se puede con "Mostrar
+     * sobre otras apps"; si no, `startActivity` se ignora en silencio y la app
+     * diría "listo" sin haber hecho nada.
+     */
+    fun canLaunchActivities(context: Context): Boolean {
+        if (canDrawOverlays(context)) return true
+        val info = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(info)
+        return info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    }
 
     fun overlayPermissionIntent(context: Context): Intent =
         Intent(

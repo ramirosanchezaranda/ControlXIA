@@ -7,8 +7,12 @@ package com.controlxia.app.voice
  */
 interface WakeWordEngine {
 
-    /** Empieza a escuchar. [onDetected] se invoca en un hilo del motor. */
-    fun start(onDetected: () -> Unit)
+    /**
+     * Empieza a escuchar. [onDetected] se invoca en un hilo del motor.
+     * [onError] avisa si la escucha se cae después de arrancar (por ejemplo,
+     * otra app o una llamada tomó el micrófono).
+     */
+    fun start(onDetected: () -> Unit, onError: (String) -> Unit = {})
 
     /** Pausa la escucha y libera el micrófono (p. ej. para pasarle el mic al ASR). */
     fun stop()

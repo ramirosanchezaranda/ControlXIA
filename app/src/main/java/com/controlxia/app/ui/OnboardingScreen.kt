@@ -38,6 +38,7 @@ import com.controlxia.app.ui.components.rememberResumeTick
 import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
 import com.controlxia.app.ui.theme.screenTransition
+import com.controlxia.app.voice.WakeWordSettings
 import java.util.Locale
 
 /**
@@ -57,7 +58,9 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     val micOk = remember(tick, bump) { PermissionManager.hasRecordAudio(context) }
     val notifOk = remember(tick, bump) { PermissionManager.hasPostNotifications(context) }
     val batteryOk = remember(tick, bump) { PermissionManager.isIgnoringBatteryOptimizations(context) }
+    val overlayOk = remember(tick, bump) { PermissionManager.canDrawOverlays(context) }
     val oemNeeded = remember { PermissionManager.needsOemSetup() }
+    val wakeSettings = remember { WakeWordSettings(context) }
 
     // Un paso de permiso: estado (null = no verificable por API) + acción.
     class PermStep(
@@ -103,6 +106,22 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                 }
             },
         ))
+        add(PermStep(
+            label = "SOBRE OTRAS APPS",
+            title = "Que aparezca donde estés.",
+            description = "Con este permiso Xia muestra el aviso de escucha encima de " +
+                "cualquier app, responde sobre la pantalla bloqueada y puede abrir apps " +
+                "y poner alarmas aunque no estés en ControlXIA. Sin él, solo responde por voz.",
+            granted = overlayOk,
+            actionLabel = "Permitir mostrar sobre otras apps",
+            action = {
+                runCatching {
+                    context.startActivity(PermissionManager.overlayPermissionIntent(context))
+                }.onFailure {
+                    context.startActivity(PermissionManager.appDetailsIntent(context))
+                }
+            },
+        ))
         if (oemNeeded) {
             add(PermStep(
                 label = "FABRICANTE / ${PermissionManager.oemName().uppercase()}",
@@ -123,8 +142,10 @@ fun OnboardingFlow(onFinished: () -> Unit) {
         }
     }
 
-    // Páginas: 0 = bienvenida · 1..n = permisos · n+1 = LLM · n+2 = final
-    val llmPage = 1 + permSteps.size
+    // Páginas: 0 = bienvenida · 1..n = permisos · n+1 = palabra de activación
+    // · n+2 = LLM · n+3 = final
+    val wakePage = 1 + permSteps.size
+    val llmPage = wakePage + 1
     val donePage = llmPage + 1
     val totalPages = donePage + 1
     var page by rememberSaveable { mutableIntStateOf(0) }
@@ -171,9 +192,10 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     )
                     Spacer(Modifier.height(20.dp))
                     Text(
-                        "Xia escucha tu nombre de activación, entiende pedidos en " +
-                            "lenguaje natural y ejecuta acciones reales: leer mensajes, " +
-                            "escribir, abrir apps, decirte la hora.\n\n" +
+                        "Xia escucha tu palabra de activación, entiende pedidos en " +
+                            "lenguaje natural y ejecuta acciones reales: abrir apps, " +
+                            "poner alarmas y temporizadores, decirte la hora y " +
+                            "responder preguntas.\n\n" +
                             "Antes de empezar, vamos a configurar los permisos que la " +
                             "mantienen despierta incluso con la pantalla bloqueada.",
                         style = MaterialTheme.typography.bodyLarge,
@@ -213,6 +235,30 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                         )
                     }
                 }
+                p == wakePage -> {
+                    Spacer(Modifier.height(32.dp))
+                    SectionLabel("Palabra de activación")
+                    Spacer(Modifier.height(16.dp))
+                    Text("Elegí cómo despertarla.", style = MaterialTheme.typography.headlineMedium)
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "La palabra de activación se detecta en el teléfono, sin " +
+                            "internet, con Picovoice. Necesita un AccessKey gratuito: " +
+                            "creá una cuenta, copiá la clave y pegala acá. Sin esto, " +
+                            "Xia no puede escucharte en segundo plano.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Muted,
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    AccessKeyContent(wakeSettings)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Por defecto se despierta con “${wakeSettings.keyword.label}”. " +
+                            "Podés cambiar la palabra y el nombre desde el panel.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                }
                 p == llmPage -> {
                     Spacer(Modifier.height(32.dp))
                     SectionLabel("Cerebro / LLM")
@@ -237,7 +283,8 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     Spacer(Modifier.height(20.dp))
                     Text(
                         "Encendé la escucha y Xia queda disponible incluso con el " +
-                            "teléfono bloqueado. Lo que haya quedado pendiente lo vas " +
+                            "teléfono bloqueado. Decí “${wakeSettings.spokenWakeWord()}” " +
+                            "y después tu pedido. Lo que haya quedado pendiente lo vas " +
                             "a ver marcado en el panel.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = Muted,
@@ -289,7 +336,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                         }
                     }
                 }
-                p == llmPage -> TechButton(
+                p == wakePage || p == llmPage -> TechButton(
                     text = "Continuar",
                     onClick = { page++ },
                     modifier = Modifier.fillMaxWidth(),

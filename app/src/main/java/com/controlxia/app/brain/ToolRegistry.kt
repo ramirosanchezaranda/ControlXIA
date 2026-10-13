@@ -4,13 +4,16 @@ import android.content.Context
 import com.controlxia.app.actions.AlarmActions
 import com.controlxia.app.actions.AppLauncher
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Catálogo de herramientas que el LLM puede invocar y su ejecución. Cada tool
@@ -80,21 +83,36 @@ class ToolRegistry(private val context: Context) {
         ),
     )
 
-    /** Ejecuta la tool [name] con [args] y devuelve la frase a decir. */
+    /**
+     * Ejecuta la tool [name] con [args] y devuelve la frase a decir. Si falta
+     * un dato obligatorio lo dice, en vez de asumir un 0 (una alarma a la
+     * medianoche o un temporizador vacío).
+     */
     fun execute(name: String, args: JsonObject): String = when (name) {
         "get_time" -> "Son las " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
         "get_date" -> "Hoy es " + SimpleDateFormat("EEEE d 'de' MMMM", Locale("es"))
             .format(Date())
         "open_app" -> appLauncher.open(args.strArg("app_name"))
-        "set_alarm" -> alarms.setAlarm(
-            hour = args.intArg("hour"),
-            minute = args.intArg("minute"),
-            label = args.strArgOrNull("label"),
-        )
-        "set_timer" -> alarms.setTimer(
-            seconds = args.intArg("seconds"),
-            label = args.strArgOrNull("label"),
-        )
+        "set_alarm" -> {
+            val hour = args.intArgOrNull("hour")
+            if (hour == null) {
+                "¿A qué hora querés la alarma?"
+            } else {
+                alarms.setAlarm(
+                    hour = hour,
+                    minute = args.intArgOrNull("minute") ?: 0,
+                    label = args.strArgOrNull("label"),
+                )
+            }
+        }
+        "set_timer" -> {
+            val seconds = args.intArgOrNull("seconds")
+            if (seconds == null) {
+                "¿De cuánto tiempo querés el temporizador?"
+            } else {
+                alarms.setTimer(seconds = seconds, label = args.strArgOrNull("label"))
+            }
+        }
         else -> "No sé cómo hacer eso todavía"
     }
 
@@ -112,11 +130,18 @@ class ToolRegistry(private val context: Context) {
 private fun List<String>.toJsonArray() =
     kotlinx.serialization.json.buildJsonArray { forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }
 
+// Los modelos no siempre respetan el tipo del schema: un número puede llegar
+// como 7, 7.0 o "7", y un texto como null. Nada de esto debe tirar excepción.
+
 private fun JsonObject.strArg(key: String): String =
-    this[key]?.jsonPrimitive?.content.orEmpty()
+    (this[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
 
 private fun JsonObject.strArgOrNull(key: String): String? =
-    this[key]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+    (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
-private fun JsonObject.intArg(key: String): Int =
-    this[key]?.jsonPrimitive?.int ?: 0
+private fun JsonObject.intArgOrNull(key: String): Int? {
+    val p = this[key] as? JsonPrimitive ?: return null
+    return p.intOrNull
+        ?: p.doubleOrNull?.takeIf { it.isFinite() }?.roundToInt()
+        ?: p.contentOrNull?.trim()?.toDoubleOrNull()?.takeIf { it.isFinite() }?.roundToInt()
+}

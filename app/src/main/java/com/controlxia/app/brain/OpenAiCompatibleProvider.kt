@@ -1,16 +1,22 @@
 package com.controlxia.app.brain
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 
 /**
  * Cliente de la API Chat Completions con function calling. Sirve para OpenAI
  * y para cualquier servicio compatible (Groq, OpenRouter, Mistral, Ollama en
  * red local, etc.) cambiando la [baseUrl].
+ *
+ * Los compatibles no siempre respetan el formato al pie de la letra (content
+ * null, arguments como objeto en vez de string, etc.), así que el parseo es
+ * tolerante.
  */
 class OpenAiCompatibleProvider(
     private val apiKey: String,
@@ -18,7 +24,7 @@ class OpenAiCompatibleProvider(
     baseUrl: String,
 ) : LlmProvider {
 
-    private val url = baseUrl.trimEnd('/') + "/chat/completions"
+    private val url = baseUrl.trim().trimEnd('/') + "/chat/completions"
 
     override suspend fun complete(
         messages: List<ChatMessage>,
@@ -61,19 +67,43 @@ class OpenAiCompatibleProvider(
 
         val response = HttpJson.post(url, headers, body)
 
-        val message = response["choices"]?.jsonArray?.firstOrNull()
-            ?.jsonObject?.get("message")?.jsonObject
-            ?: throw LlmException("Respuesta sin choices: $response")
-
-        val toolCalls = message["tool_calls"]?.jsonArray
-        if (!toolCalls.isNullOrEmpty()) {
-            val function = toolCalls.first().jsonObject["function"]!!.jsonObject
-            val rawArgs = function["arguments"]?.jsonPrimitive?.content ?: "{}"
-            return LlmResponse.ToolCall(
-                name = function["name"]!!.jsonPrimitive.content,
-                arguments = HttpJson.json.parseToJsonElement(rawArgs).jsonObject,
+        val message = ((response["choices"] as? JsonArray)?.firstOrNull() as? JsonObject)
+            ?.get("message") as? JsonObject
+            ?: throw LlmException(
+                "Respuesta sin choices: ${response.toString().take(200)}",
+                kind = LlmException.Kind.BAD_RESPONSE,
             )
+
+        val toolCalls = message["tool_calls"] as? JsonArray
+        val function = (toolCalls?.firstOrNull() as? JsonObject)?.get("function") as? JsonObject
+        val name = (function?.get("name") as? JsonPrimitive)?.contentOrNull
+        if (function != null && name != null) {
+            return LlmResponse.ToolCall(name = name, arguments = parseArguments(function["arguments"]))
         }
-        return LlmResponse.Text(message["content"]?.jsonPrimitive?.content.orEmpty())
+
+        // OpenAI informa los rechazos en un campo aparte.
+        (message["refusal"] as? JsonPrimitive)?.contentOrNull?.let { refusal ->
+            if (refusal.isNotBlank()) return LlmResponse.Text(refusal)
+        }
+        return LlmResponse.Text(textContent(message["content"]))
+    }
+
+    /** "arguments" suele ser un string con JSON; algunos compatibles mandan el objeto. */
+    private fun parseArguments(raw: JsonElement?): JsonObject = when (raw) {
+        is JsonObject -> raw
+        is JsonPrimitive -> raw.contentOrNull
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { HttpJson.json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+            ?: JsonObject(emptyMap())
+        else -> JsonObject(emptyMap())
+    }
+
+    /** content puede venir null, como string o como lista de partes. */
+    private fun textContent(raw: JsonElement?): String = when (raw) {
+        is JsonPrimitive -> raw.contentOrNull.orEmpty()
+        is JsonArray -> raw.joinToString("") { part ->
+            ((part as? JsonObject)?.get("text") as? JsonPrimitive)?.contentOrNull.orEmpty()
+        }
+        else -> ""
     }
 }

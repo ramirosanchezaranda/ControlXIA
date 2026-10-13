@@ -37,10 +37,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ControlXIA">
 
+        <!-- Sin showWhenLocked: el panel tiene las API keys y no debe abrirse
+             sobre el bloqueo. Lo que se muestra bloqueado es AssistantActivity. -->
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
-            android:showWhenLocked="true">
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -61,11 +63,14 @@
 
         <!-- Servicio de escucha persistente. El tipo "microphone" es obligatorio
              para poder usar el micrófono de forma continua (Android 14+ además
-             exige el permiso FOREGROUND_SERVICE_MICROPHONE de arriba). -->
+             exige el permiso FOREGROUND_SERVICE_MICROPHONE de arriba).
+             "shortService" es solo la salida de emergencia: si Android 14+ no
+             deja usar el micrófono desde segundo plano, el servicio arranca
+             así un instante, avisa y se detiene sin crashear la app. -->
         <service
             android:name=".service.WakeWordService"
             android:exported="false"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="microphone|shortService" />
 
         <!-- Relanza el servicio cuando el teléfono se reinicia. -->
         <receiver

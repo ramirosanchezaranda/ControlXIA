@@ -28,4 +28,15 @@ sealed interface LlmResponse {
     data class ToolCall(val name: String, val arguments: JsonObject) : LlmResponse
 }
 
-class LlmException(message: String, cause: Throwable? = null) : Exception(message, cause)
+/**
+ * Error de una llamada al LLM. [message] es técnico (se muestra en la app para
+ * diagnosticar); [httpCode] y [kind] permiten decir algo entendible en voz alta.
+ */
+class LlmException(
+    message: String,
+    cause: Throwable? = null,
+    val httpCode: Int? = null,
+    val kind: Kind = Kind.API,
+) : Exception(message, cause) {
+    enum class Kind { API, NETWORK, TIMEOUT, BAD_RESPONSE }
+}

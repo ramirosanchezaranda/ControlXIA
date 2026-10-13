@@ -18,8 +18,9 @@ interface LlmProvider {
 }
 
 /**
- * Proveedores soportados, con sus modelos sugeridos. El usuario también puede
- * escribir a mano cualquier ID de modelo nuevo sin actualizar la app.
+ * Proveedores soportados, con sus modelos sugeridos (el primero es el que se
+ * usa si no se eligió ninguno). El usuario también puede escribir a mano
+ * cualquier ID de modelo nuevo sin actualizar la app.
  */
 enum class LlmProviderType(
     val displayName: String,
@@ -28,15 +29,17 @@ enum class LlmProviderType(
 ) {
     ANTHROPIC(
         displayName = "Anthropic (Claude)",
-        suggestedModels = listOf("claude-haiku-4-5", "claude-sonnet-5"),
+        // Haiku 5.5 es el más rápido y barato: buena opción si la respuesta tarda.
+        suggestedModels = listOf("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"),
     ),
     OPENAI(
         displayName = "OpenAI (GPT)",
-        suggestedModels = listOf("gpt-4o-mini", "gpt-4o"),
+        suggestedModels = listOf("gpt-5.4-mini", "gpt-5.5", "gpt-4o-mini"),
     ),
     GEMINI(
         displayName = "Google (Gemini)",
-        suggestedModels = listOf("gemini-2.0-flash"),
+        // gemini-2.0-flash se apagó en junio de 2026.
+        suggestedModels = listOf("gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash"),
     ),
     OPENAI_COMPATIBLE(
         displayName = "Compatible OpenAI (Groq, OpenRouter, Ollama…)",

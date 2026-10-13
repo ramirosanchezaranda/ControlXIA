@@ -30,20 +30,36 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                 return@post
             }
             cancelInternal()
-            val sr = SpeechRecognizer.createSpeechRecognizer(context)
+            val sr = try {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            } catch (e: Exception) {
+                onError("No se pudo iniciar el reconocimiento de voz")
+                return@post
+            }
             recognizer = sr
+            // Algunos reconocedores llaman onError después de onResults (o dos
+            // veces onError). Solo cuenta el primer final de cada escucha.
+            var finished = false
+            fun finish(block: () -> Unit) {
+                if (finished || recognizer !== sr) return
+                finished = true
+                block()
+                cancelInternal()
+            }
             sr.setRecognitionListener(object : RecognitionListener {
                 override fun onResults(results: Bundle?) {
                     val text = results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
                         .orEmpty()
-                    if (text.isBlank()) onError("No se entendió el comando")
-                    else onResult(text)
-                    cancelInternal()
+                    finish {
+                        if (text.isBlank()) onError("No se entendió el comando")
+                        else onResult(text)
+                    }
                 }
 
                 override fun onPartialResults(partial: Bundle?) {
+                    if (finished || recognizer !== sr) return
                     partial?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
                         ?.takeIf { it.isNotBlank() }
@@ -51,8 +67,7 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                 }
 
                 override fun onError(error: Int) {
-                    onError(errorMessage(error))
-                    cancelInternal()
+                    finish { onError(errorMessage(error)) }
                 }
 
                 override fun onReadyForSpeech(params: Bundle?) {}
@@ -62,7 +77,11 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                 override fun onEndOfSpeech() {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
-            sr.startListening(buildIntent())
+            try {
+                sr.startListening(buildIntent())
+            } catch (e: Exception) {
+                finish { onError("No se pudo iniciar el reconocimiento de voz") }
+            }
         }
     }
 

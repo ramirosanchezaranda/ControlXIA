@@ -29,6 +29,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.voice.WakeKeyword
 import com.controlxia.app.voice.WakeWordSettings
 import com.controlxia.app.ui.components.SectionLabel
@@ -52,8 +54,8 @@ import kotlin.math.roundToInt
 
 /**
  * Ajustes de la palabra de activación: AccessKey de Picovoice (cifrado), palabra
- * de fábrica y sensibilidad. Los cambios se aplican al reiniciar la escucha
- * (apagar/encender el servicio desde el panel).
+ * de fábrica y sensibilidad. Los cambios se aplican solos al salir de la
+ * pantalla, sin apagar el servicio.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,13 +64,17 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { WakeWordSettings(context) }
 
+    // Al salir, el servicio (si está corriendo) recarga el wake word con los
+    // ajustes nuevos.
+    DisposableEffect(Unit) {
+        onDispose { WakeWordService.reload(context) }
+    }
+
     var agentName by remember { mutableStateOf(settings.agentName) }
-    var accessKey by remember { mutableStateOf(settings.accessKey) }
     var keyword by remember { mutableStateOf(settings.keyword) }
     var sensitivity by remember { mutableFloatStateOf(settings.sensitivity) }
     var useCustom by remember { mutableStateOf(settings.useCustomKeyword) }
     var showLockedContent by remember { mutableStateOf(settings.showContentWhenLocked) }
-    var showKey by remember { mutableStateOf(false) }
     var keywordMenu by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -102,44 +108,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = Muted,
             )
-            TechButton(
-                text = "Obtener AccessKey gratis",
-                filled = false,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = {
-                    runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("https://console.picovoice.ai"))
-                        )
-                    }
-                },
-            )
-
-            OutlinedTextField(
-                value = accessKey,
-                onValueChange = {
-                    accessKey = it
-                    settings.accessKey = it.trim()
-                },
-                label = { Text("AccessKey") },
-                singleLine = true,
-                visualTransformation = if (showKey) {
-                    VisualTransformation.None
-                } else {
-                    PasswordVisualTransformation()
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    IconButton(onClick = { showKey = !showKey }) {
-                        Icon(
-                            if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (showKey) "Ocultar" else "Mostrar"
-                        )
-                    }
-                },
-                supportingText = { Text("Se guarda cifrada en el dispositivo") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            AccessKeyContent(settings)
 
             // Wake word custom (modelo entrenado propio, ej. "Xia")
             Row(
@@ -256,11 +225,62 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
             }
 
             Text(
-                "Los cambios de wake word se aplican al reiniciar la escucha: apagá " +
-                    "y encendé el servicio desde el panel.",
+                "Los cambios se aplican solos al volver al panel.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Muted,
             )
         }
+    }
+}
+
+/**
+ * Botón para sacar el AccessKey gratis + campo para pegarlo (se guarda cifrado
+ * al instante). Lo usan los ajustes y el onboarding.
+ */
+@Composable
+fun AccessKeyContent(settings: WakeWordSettings, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var accessKey by remember { mutableStateOf(settings.accessKey) }
+    var showKey by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        TechButton(
+            text = "Obtener AccessKey gratis",
+            filled = false,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+                runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse("https://console.picovoice.ai"))
+                    )
+                }
+            },
+        )
+
+        OutlinedTextField(
+            value = accessKey,
+            onValueChange = {
+                accessKey = it
+                settings.accessKey = it.trim()
+            },
+            label = { Text("AccessKey") },
+            singleLine = true,
+            visualTransformation = if (showKey) {
+                VisualTransformation.None
+            } else {
+                PasswordVisualTransformation()
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { showKey = !showKey }) {
+                    Icon(
+                        if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = if (showKey) "Ocultar" else "Mostrar"
+                    )
+                }
+            },
+            supportingText = { Text("Se guarda cifrada en el dispositivo") },
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

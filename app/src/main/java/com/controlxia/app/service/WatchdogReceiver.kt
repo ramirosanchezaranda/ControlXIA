@@ -20,8 +20,10 @@ class WatchdogReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (!ServicePrefs.isEnabled(context)) return
-        if (!WakeWordService.running) {
-            WakeWordService.start(context)
+        // Si Android no deja arrancarlo desde segundo plano, en vez de crashear
+        // se avisa para reactivarlo con un toque.
+        if (!WakeWordService.running && !WakeWordService.tryStart(context)) {
+            ReactivationNotifier.show(context)
         }
         schedule(context)
     }
@@ -42,11 +44,13 @@ class WatchdogReceiver : BroadcastReceiver() {
             // setAndAllowWhileIdle funciona también durante Doze (con la
             // granularidad que el sistema permita) y no requiere el permiso
             // de alarmas exactas.
-            alarmManager.setAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + INTERVAL_MS,
-                pendingIntent(context)
-            )
+            runCatching {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + INTERVAL_MS,
+                    pendingIntent(context)
+                )
+            }
         }
 
         fun cancel(context: Context) {

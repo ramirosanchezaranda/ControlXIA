@@ -24,9 +24,19 @@ class XiaApplication : Application() {
                 NotificationManager.IMPORTANCE_LOW
             )
         )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ALERTS,
+                getString(R.string.notif_channel_alerts),
+                // Avisos que requieren una acción del usuario (ej. reactivar la
+                // escucha cuando Android no dejó arrancarla en segundo plano).
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+        )
     }
 
     companion object {
         const val CHANNEL_SERVICE = "xia_service"
+        const val CHANNEL_ALERTS = "xia_alerts"
     }
 }
