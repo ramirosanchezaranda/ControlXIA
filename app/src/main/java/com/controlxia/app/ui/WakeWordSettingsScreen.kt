@@ -66,6 +66,8 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
 
     var sensitivity by remember { mutableFloatStateOf(settings.sensitivity) }
     var showLockedContent by remember { mutableStateOf(settings.showContentWhenLocked) }
+    var conversation by remember { mutableStateOf(settings.conversationMode) }
+    var waitSeconds by remember { mutableFloatStateOf(settings.conversationSeconds.toFloat()) }
 
     Column(Modifier.fillMaxSize()) {
         TechTopBar(title = "Asistente y activación", onBack = onBack)
@@ -102,6 +104,54 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
+            }
+
+            // Modo conversación: seguir escuchando sin repetir el nombre.
+            SectionLabel("Conversación")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Seguir escuchando", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Después de responder, espera tu próximo pedido sin que tengas que " +
+                            "decir el nombre. Si no decís nada, vuelve a esperar el nombre. " +
+                            "Decí «gracias» o «listo» para terminar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                }
+                Switch(
+                    checked = conversation,
+                    onCheckedChange = {
+                        conversation = it
+                        settings.conversationMode = it
+                    },
+                )
+            }
+            if (conversation) {
+                Column {
+                    Row(Modifier.fillMaxWidth()) {
+                        Text(
+                            "Cuánto espera",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            "${waitSeconds.roundToInt()} s",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Accent,
+                        )
+                    }
+                    Slider(
+                        value = waitSeconds,
+                        onValueChange = { waitSeconds = it },
+                        valueRange = WakeWordSettings.MIN_WAIT_S.toFloat()..WakeWordSettings.MAX_WAIT_S.toFloat(),
+                        steps = WakeWordSettings.MAX_WAIT_S - WakeWordSettings.MIN_WAIT_S - 1,
+                        onValueChangeFinished = { settings.conversationSeconds = waitSeconds.roundToInt() },
+                    )
+                }
             }
 
             // Privacidad con el teléfono bloqueado

@@ -62,6 +62,8 @@ class LlmException(
     cause: Throwable? = null,
     val httpCode: Int? = null,
     val kind: Kind = Kind.API,
+    /** Cuánto pide esperar el proveedor antes de reintentar (429), si lo dice. */
+    val retryAfterSeconds: Double? = null,
 ) : Exception(message, cause) {
     enum class Kind { API, NETWORK, TIMEOUT, BAD_RESPONSE }
 }

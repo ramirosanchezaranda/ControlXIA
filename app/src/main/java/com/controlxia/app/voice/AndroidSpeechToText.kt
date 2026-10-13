@@ -22,18 +22,18 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
     override fun listen(
         onPartial: (String) -> Unit,
         onResult: (String) -> Unit,
-        onError: (String) -> Unit,
+        onError: (message: String, noSpeech: Boolean) -> Unit,
     ) {
         main.post {
             if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-                onError("No hay reconocimiento de voz disponible en este equipo")
+                onError("No hay reconocimiento de voz disponible en este equipo", false)
                 return@post
             }
             cancelInternal()
             val sr = try {
                 SpeechRecognizer.createSpeechRecognizer(context)
             } catch (e: Exception) {
-                onError("No se pudo iniciar el reconocimiento de voz")
+                onError("No se pudo iniciar el reconocimiento de voz", false)
                 return@post
             }
             recognizer = sr
@@ -53,7 +53,7 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                         ?.firstOrNull()
                         .orEmpty()
                     finish {
-                        if (text.isBlank()) onError("No se entendió el comando")
+                        if (text.isBlank()) onError("No se entendió el comando", true)
                         else onResult(text)
                     }
                 }
@@ -67,7 +67,9 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                 }
 
                 override fun onError(error: Int) {
-                    finish { onError(errorMessage(error)) }
+                    val noSpeech = error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                        error == SpeechRecognizer.ERROR_NO_MATCH
+                    finish { onError(errorMessage(error), noSpeech) }
                 }
 
                 override fun onReadyForSpeech(params: Bundle?) {}
@@ -80,7 +82,7 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
             try {
                 sr.startListening(buildIntent())
             } catch (e: Exception) {
-                finish { onError("No se pudo iniciar el reconocimiento de voz") }
+                finish { onError("No se pudo iniciar el reconocimiento de voz", false) }
             }
         }
     }
@@ -106,6 +108,10 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-AR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // Un poco más de margen para las pausas al hablar, así no corta a
+            // mitad de frase. Algunos reconocedores lo ignoran.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1_500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1_500L)
         }
 
     private fun errorMessage(error: Int): String = when (error) {

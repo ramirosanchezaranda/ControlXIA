@@ -19,7 +19,10 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Respuesta sobre el bloqueo (modo Alexa)**: con el teléfono bloqueado o la pantalla apagada, al decir la palabra se **prende la pantalla y responde sobre el candado** sin desbloquear (`ui/AssistantActivity` con show-when-locked/turn-screen-on, estado en vivo vía `voice/AssistantState`). No usa el botón home: la escucha es siempre activa. Toggle de **privacidad** para mostrar u ocultar el contenido en pantalla estando bloqueado. Abrir apps de terceros bloqueado avisa "desbloqueá para abrir X" (límite de seguridad de Android).
 - ✅ **Build release**: `signingConfig` (keystore por `keystore.properties`/env) + minify/shrink con reglas ProGuard (`app/proguard-rules.pro`).
 - ✅ **Agente que usa tus apps**: resuelve pedidos en varios pasos (`brain/CommandProcessor`). Abre apps directo en búsquedas o secciones (Mercado Libre ordenado por precio, Instagram Reels…), lee y maneja la pantalla de cualquier app con el control de apps (accesibilidad), y lee, responde y manda mensajes (WhatsApp, SMS) a contactos o apodos. Antes de enviar, comprar o pagar siempre pide confirmación por voz. Ver [docs/AGENT.md](docs/AGENT.md).
-- ✅ **Groq como proveedor**: `openai/gpt-oss-120b` recomendado; el agente se adapta a su límite de tokens por minuto.
+- ✅ **Modo conversación**: después de responder sigue escuchando unos segundos (configurable) para el próximo pedido, sin repetir el nombre; "gracias" o "listo" la cierran.
+- ✅ **Groq como proveedor**: `openai/gpt-oss-120b` recomendado; el agente se adapta al plan gratis (pedidos livianos, espera y reintenta solo si Groq pide esperar).
+- ✅ **Control de que hizo todo**: si el modelo dice haber hecho algo sin hacerlo, o hace una parte de un pedido de varias cosas, se le muestra lo hecho de verdad y completa lo que falta; después de confirmar un mensaje sigue con el resto del pedido.
+- ✅ **WhatsApp por nombre**: abre chats y grupos buscándolos en WhatsApp, aunque el reconocimiento de voz entienda mal el nombre ("fulgo 2" → «Fútbol 2 ⚽»), y confirma con el nombre real antes de enviar.
 - ⏳ Próximo: llamadas, recordatorios, activación con botón home (rol de asistente).
 
 ## Compilar

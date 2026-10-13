@@ -268,8 +268,8 @@ class ScreenControl(private val context: Context) {
         const val MAX_ELEMENTS = 90
         // Las pantallas viajan al modelo en cada paso: con Groq hay límite de
         // tokens por minuto, así que se mantienen compactas.
-        const val MAX_CHARS = 3_500
-        const val MAX_LABEL = 140
+        const val MAX_CHARS = 2_500
+        const val MAX_LABEL = 90
         const val SETTLE_MS = 1_200L
 
         /** Botones que mandan, compran, pagan o borran algo: piden confirmación. */

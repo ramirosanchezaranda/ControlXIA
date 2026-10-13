@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -100,9 +101,17 @@ class WakeWordService : Service() {
     private val sttTimeout = Runnable { onTranscriptionTimeout() }
     private val resumeAfterReply = Runnable { afterReply() }
 
-    /** El asistente hizo una pregunta: al terminar de hablar, escuchar la respuesta. */
+    /**
+     * Seguir escuchando sin wake word al terminar de hablar: porque hizo una
+     * pregunta o por el modo conversación. Mientras dura la ventana
+     * ([followUpDeadline]), el silencio no es un error: se sigue escuchando
+     * hasta que se cumple el tiempo y ahí vuelve a esperar el nombre.
+     */
     private var followUpPending = false
     private var followUps = 0
+    private var inFollowUp = false
+    private var followUpWindowMs = 0L
+    private var followUpDeadline = 0L
     private val retryWakeWord = Runnable { if (!listeningCommand) startListening() }
 
     override fun onCreate() {
@@ -414,6 +423,7 @@ class WakeWordService : Service() {
             onResult = { text ->
                 if (!listeningCommand) return@listen
                 main.removeCallbacks(sttTimeout)
+                inFollowUp = false
                 AgentLog.add("ESCUCHÉ «$text»")
                 runCatching { RecentCommandsStore(applicationContext).add(text) }
                 lastCommand = text
@@ -423,9 +433,19 @@ class WakeWordService : Service() {
                 if (!lockedSession) overlay?.updateStatus(shown)
                 processAndRespond(text)
             },
-            onError = { message ->
+            onError = { message, noSpeech ->
                 if (!listeningCommand) return@listen
                 main.removeCallbacks(sttTimeout)
+                if (inFollowUp && noSpeech) {
+                    if (SystemClock.elapsedRealtime() < followUpDeadline - 1_000L) {
+                        // Silencio, pero todavía hay tiempo: seguir escuchando.
+                        main.postDelayed({ if (listeningCommand && inFollowUp) transcribeCommand() }, 150L)
+                    } else {
+                        AgentLog.add("FIN de la conversación (no dijiste nada)")
+                        resumeListening()
+                    }
+                    return@listen
+                }
                 AgentLog.add("NO ENTENDÍ: $message")
                 // Mostrar el motivo un instante y volver a esperar la palabra.
                 AssistantState.update(AssistantState.Phase.REPLYING, message)
@@ -476,8 +496,20 @@ class WakeWordService : Service() {
     private fun deliverReply(answer: Reply, error: String?) {
         if (!listeningCommand) return
         val reply = answer.text
-        // Si preguntó algo (ej. "¿Le mando…?"), seguir escuchando sin wake word.
-        followUpPending = answer.expectsReply && followUps < MAX_FOLLOW_UPS
+        val settings = WakeWordSettings(this)
+        // Seguir escuchando sin wake word si preguntó algo ("¿Le mando…?") o
+        // en modo conversación, salvo que el usuario se haya despedido.
+        followUpPending = !answer.endsConversation && followUps < MAX_FOLLOW_UPS &&
+            (answer.expectsReply || settings.conversationMode)
+        val window = settings.conversationSeconds * 1_000L
+        followUpWindowMs = if (answer.expectsReply) maxOf(window, QUESTION_WINDOW_MS) else window
+        lastBrainError = error
+        if (reply.isBlank()) {
+            // Despedida en silencio ("listo", "nada más"): volver a esperar el nombre.
+            main.removeCallbacks(resumeAfterReply)
+            main.post(resumeAfterReply)
+            return
+        }
         lastReply = reply
         lastBrainError = error
         runCatching { RecentCommandsStore(applicationContext).addReply(reply) }
@@ -500,10 +532,12 @@ class WakeWordService : Service() {
         }
         followUpPending = false
         followUps++
-        AgentLog.add("ESPERANDO tu respuesta (sin decir el nombre)")
+        inFollowUp = true
+        followUpDeadline = SystemClock.elapsedRealtime() + followUpWindowMs
+        AgentLog.add("ESPERANDO otro pedido ${followUpWindowMs / 1_000} s (sin decir el nombre)")
         main.removeCallbacks(resumeAfterReply)
         voiceWakeLock.acquire(INTERACTION_MAX_MS)
-        vibrate()
+        vibrate(40)
         AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
         if (!lockedSession) overlay?.updateStatus("Te escucho…")
         transcriptionStarted = true
@@ -520,6 +554,7 @@ class WakeWordService : Service() {
         listeningCommand = false
         transcriptionStarted = false
         followUpPending = false
+        inFollowUp = false
         overlay?.hide()
         AssistantState.idle()
         if (voiceWakeLock.isHeld) runCatching { voiceWakeLock.release() }
@@ -587,14 +622,14 @@ class WakeWordService : Service() {
         if (lockedSession && !showContentLocked) generic else text
 
     @Suppress("DEPRECATION")
-    private fun vibrate() {
+    private fun vibrate(millis: Long = 120) {
         runCatching {
             val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
             } else {
                 getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             }
-            vibrator.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE))
+            vibrator.vibrate(VibrationEffect.createOneShot(millis, VibrationEffect.DEFAULT_AMPLITUDE))
         }
     }
 
@@ -652,7 +687,11 @@ class WakeWordService : Service() {
         private const val ACK_NO_TTS_MS = 300L
         private const val STT_MAX_MS = 20_000L
         private const val INTERACTION_MAX_MS = 180_000L
-        private const val MAX_FOLLOW_UPS = 2
+        /** Tope de turnos seguidos sin wake word (por si la tele "conversa" sola). */
+        private const val MAX_FOLLOW_UPS = 15
+
+        /** Tiempo mínimo para contestar una pregunta ("¿Le mando…?"). */
+        private const val QUESTION_WINDOW_MS = 10_000L
         private const val ENGINE_RETRY_MS = 10_000L
 
         /** Estado observable simple para la UI. */

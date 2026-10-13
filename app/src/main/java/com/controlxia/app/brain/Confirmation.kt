@@ -24,6 +24,36 @@ class PendingAction(
     }
 }
 
+/**
+ * Frases que cierran la conversación ("gracias", "listo", "chau"). Solo
+ * cuentan si son la frase entera: "gracias, ahora poné una alarma" es un pedido.
+ */
+object Goodbye {
+
+    private val PHRASES = setOf(
+        "gracias", "muchas gracias", "mil gracias", "listo", "listo gracias", "nada", "nada mas",
+        "nada mas gracias", "no", "no gracias", "no nada", "chau", "chao", "adios", "chau gracias",
+        "eso es todo", "eso era todo", "eso nomas", "ya esta", "basta", "esta bien",
+        "esta bien gracias", "perfecto", "perfecto gracias", "genial gracias", "buenisimo",
+        "buenisimo gracias", "ok gracias", "dale gracias", "listo nada mas", "nada mas por ahora",
+    )
+
+    /** Qué decir al despedirse, o null si [text] no es una despedida ("" = cerrar en silencio). */
+    fun reply(text: String): String? {
+        val normalized = Normalizer.normalize(text.lowercase(Locale("es")), Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z ]"), " ")
+            .trim()
+            .replace(Regex("\\s+"), " ")
+        if (normalized !in PHRASES) return null
+        return when {
+            "gracias" in normalized -> "De nada."
+            normalized.startsWith("ch") || normalized == "adios" -> "Chau."
+            else -> ""
+        }
+    }
+}
+
 /** Interpreta la respuesta hablada a una pregunta de confirmación. */
 object Confirmation {
 

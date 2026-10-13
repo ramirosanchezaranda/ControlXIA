@@ -54,6 +54,8 @@ internal object HttpJson {
                     throw LlmException(
                         "HTTP ${response.code}: $detail",
                         httpCode = response.code,
+                        retryAfterSeconds = response.header("retry-after")?.toDoubleOrNull()
+                            ?: retryHint(detail),
                     )
                 }
                 val parsed = runCatching { json.parseToJsonElement(text) }.getOrNull()
@@ -70,6 +72,14 @@ internal object HttpJson {
         } catch (e: Exception) {
             throw LlmException("Error de red: ${e.message}", e, kind = LlmException.Kind.NETWORK)
         }
+    }
+
+    /** "Please try again in 1m2.5s" / "in 7.66s" → segundos. */
+    private fun retryHint(message: String): Double? {
+        val match = Regex("try again in (?:(\\d+)m)?([\\d.]+)s").find(message) ?: return null
+        val minutes = match.groupValues[1].toDoubleOrNull() ?: 0.0
+        val seconds = match.groupValues[2].toDoubleOrNull() ?: return null
+        return minutes * 60 + seconds
     }
 
     /**

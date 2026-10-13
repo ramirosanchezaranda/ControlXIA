@@ -17,6 +17,12 @@ En el panel → **Palabra de activación → Ajustar**:
 - **Cómo suena (opcional)**: solo si no te reconoce, escribí el nombre como lo decís (por ejemplo "sia"). También acepta una frase corta ("oye xia").
 - **Sensibilidad**: más alta acepta detecciones con menos confianza.
 
+## Modo conversación
+
+Activo por defecto (Ajustar → Conversación). Después de cada respuesta el asistente sigue escuchando unos segundos (8 por defecto, de 4 a 20) para el próximo pedido, sin decir el nombre de nuevo. Si no decís nada, vuelve en silencio a esperar el nombre. Cuando hace una pregunta ("¿Le mando…?") espera al menos 10 segundos.
+
+Para cerrar antes: "gracias" (responde "De nada"), "chau", "listo", "nada más", "eso es todo". Tiene que ser la frase entera: "gracias, ahora poné una alarma" sigue siendo un pedido. Hay un tope de 15 turnos seguidos sin el nombre, por si la tele o una charla de fondo lo mantienen escuchando.
+
 ## Resultados de las pruebas
 
 Se probó el mismo código Kotlin de la app (`WakePhraseDetector`) con el modelo real y voz sintetizada (espeak-ng) a tres velocidades:

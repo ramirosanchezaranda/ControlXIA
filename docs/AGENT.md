@@ -12,8 +12,33 @@ Desde la versión 0.3.0 el asistente resuelve los pedidos en **varios pasos**: e
 |---|---|---|
 | Atajos | `search_in_app`, `open_app_section` | Abren una app en una búsqueda o sección con enlaces directos (Mercado Libre con orden por precio, Instagram Reels/mensajes/perfil, YouTube, Spotify, Maps, TikTok, Netflix, Play Store). Rápido y sin tocar la pantalla. |
 | Pantalla | `screen_read`, `screen_tap`, `screen_type`, `screen_scroll`, `screen_back` | Con el **control de apps** (accesibilidad) lee la pantalla como una lista numerada y toca, escribe o desplaza. Cada acción devuelve la pantalla nueva. |
-| Mensajes | `read_messages`, `reply_to_message`, `send_message`, `save_contact_alias` | Lee los mensajes desde las notificaciones, los responde con la acción "Responder" de la notificación, manda mensajes nuevos por WhatsApp o SMS a contactos o apodos ("mi pareja"). |
-| Básicas | `get_time`, `get_date`, `open_app`, `set_alarm`, `set_timer` | Como antes; se responden sin volver al modelo. |
+| Mensajes | `read_messages`, `reply_to_message`, `send_message`, `save_contact_alias` | Lee los mensajes desde las notificaciones, los responde con la acción "Responder" de la notificación, manda mensajes nuevos por WhatsApp o SMS a contactos, apodos ("mi pareja") o grupos. |
+| WhatsApp por nombre | `whatsapp_open_chat` | Abre un chat o **grupo** buscándolo por nombre dentro de WhatsApp, en un solo paso (`actions/WhatsAppUi`). |
+| Básicas | `get_time`, `get_date`, `open_app`, `set_alarm`, `set_timer` | En pedidos de una sola cosa se responden sin volver al modelo. |
+
+## WhatsApp: grupos y nombres mal entendidos
+
+Los grupos no tienen número, así que `send_message` a "el grupo Fútbol 2" (o a alguien que no está en la agenda, o cuyo número no se puede armar) busca el chat por nombre en WhatsApp con el control de apps:
+
+1. Busca el nombre tal cual, sin importar tildes ni emojis ("futbol 2" encuentra «Fútbol 2 ⚽»).
+2. Si no aparece, busca por las primeras letras y elige el chat **más parecido** (distancia de edición, con los números dichos en palabras pasados a cifras). Así "fulgo 2", como lo entendió el reconocimiento de voz, encuentra «Fútbol 2 ⚽». Por debajo de 60 % de parecido no elige ninguno.
+3. Abre el chat y **recién ahí pregunta, con el nombre real**: "¿Le mando a «Fútbol 2 ⚽» por WhatsApp: «hola»?". Si eligió mal, decís que no y no se manda nada.
+4. Con el "sí" escribe y toca Enviar. Si mientras tanto el chat dejó de estar en pantalla, lo vuelve a abrir.
+
+## Control de que hizo todo lo pedido
+
+Los modelos chicos (sobre todo `openai/gpt-oss-20b`) a veces dicen "listo, te lo mandé" sin haber usado ninguna herramienta, o hacen la primera parte de "abrí WhatsApp y mandale hola a Juan" y cortan. Por eso el código (`brain/TaskCheck`) lleva el registro de lo que se hizo **de verdad** (según las herramientas, no según lo que dice el modelo) y, antes de responder:
+
+- Si el modelo **dice haber hecho algo** ("mandé", "abrí", "puse"…) sin haber usado ninguna herramienta, o
+- si el pedido tenía **varias acciones** (se cuentan los verbos: "buscá… y después poneme…") y se hicieron menos,
+
+le muestra al modelo el pedido, lo que se hizo de verdad y lo que iba a responder, y le pide que complete lo que falte (o que conteste "OK" si no falta nada). Se hace **una sola vez por pedido** y solo en esos casos: si el modelo hizo todo, no hay llamada extra.
+
+Además:
+
+- El atajo de "decir el resultado sin volver al modelo" (abrir una app, poner una alarma) solo se usa en pedidos de **una sola cosa**; en "abrí WhatsApp y mandale…" el modelo sigue después de abrir.
+- Si en medio de un pedido de varias cosas hace falta confirmar ("mandale hola a Juan y poneme una alarma"), después del "sí" **sigue con lo que falta** (la alarma) en vez de terminar ahí.
+- Todo queda en el **Registro del agente** (líneas `CONTROL:` y `SIGO`).
 
 ## Seguridad
 
@@ -31,17 +56,21 @@ Desde la versión 0.3.0 el asistente resuelve los pedidos en **varios pasos**: e
 
 ## Con Groq
 
-Groq usa la API compatible con OpenAI y tiene límite de tokens por minuto. El agente:
+Groq usa la API compatible con OpenAI. El plan gratis tiene límites bajos para un agente: para `gpt-oss-120b` y `gpt-oss-20b`, **8.000 tokens por minuto**, 200.000 por día, 30 pedidos por minuto y 1.000 por día. Cada paso del agente reenvía el prompt, las herramientas y lo hecho hasta ahí, así que un pedido de varios pasos puede pasar los 8.000 por minuto. El agente:
 
-- recorta las lecturas de pantalla viejas en cada paso (con Anthropic no se puede: exige el historial sin cambios),
-- limita cada lectura a ~3500 caracteres,
-- reintenta una vez cuando Groq responde `tool_use_failed`.
+- usa un prompt y descripciones de herramientas cortos, y recuerda solo los últimos 4 intercambios,
+- recorta las lecturas de pantalla viejas en cada paso (con Anthropic no se puede: exige el historial sin cambios) y limita cada lectura a ~2500 caracteres,
+- prefiere herramientas que hacen todo en un paso (`search_in_app`, `open_app_section`, `whatsapp_open_chat`) en vez de leer y tocar la pantalla,
+- si Groq responde 429 con "esperá N segundos" (hasta 30 s), **espera y reintenta solo** (hasta 3 veces) mostrando "El proveedor pide esperar N s…",
+- reintenta una vez cuando Groq responde `tool_use_failed`,
+- distingue en voz alta el límite por minuto ("probá de nuevo en un minuto") del cupo diario ("se renueva mañana").
 
-Modelo recomendado: `openai/gpt-oss-120b`. Más rápido: `openai/gpt-oss-20b`. En preview: `qwen/qwen3.8-27b`.
+Modelo recomendado: **`openai/gpt-oss-120b`**: mismo límite gratis que el 20b y bastante más confiable para pedidos de varios pasos. `openai/gpt-oss-20b` es más rápido pero se saltea pasos (la app avisa al elegirlo). En preview: `qwen/qwen3.8-27b`. Si el límite por minuto molesta seguido, el plan Developer de Groq (pago por uso) lo sube mucho.
 
 ## Límites conocidos
 
 - Las apps cambian sus pantallas: el control de pantalla puede necesitar algún paso de más o fallar en apps con interfaces poco accesibles.
 - Los enlaces directos dependen de cada app; si una no abre la sección, el agente sigue con el control de pantalla.
-- El número de WhatsApp se arma desde la agenda; con números argentinos guardados sin "+54 9" se intenta normalizar, y si no se puede, propone mandarlo por SMS.
+- El número de WhatsApp se arma desde la agenda; con números argentinos guardados sin "+54 9" se intenta normalizar, y si no se puede, busca el chat por nombre en WhatsApp.
+- La búsqueda por nombre en WhatsApp depende de su pantalla (ids internos y textos "Buscar"/"Enviar"); si WhatsApp cambia, puede fallar y el registro del agente dice en qué paso.
 - Un pedido largo tiene un tope de 15 pasos y 2 minutos y medio.

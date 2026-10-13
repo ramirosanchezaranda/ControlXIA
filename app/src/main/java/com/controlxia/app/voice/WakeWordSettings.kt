@@ -38,6 +38,19 @@ class WakeWordSettings(context: Context) {
         get() = prefs.getBoolean(KEY_LOCKED_CONTENT, true)
         set(value) = prefs.edit().putBoolean(KEY_LOCKED_CONTENT, value).apply()
 
+    /**
+     * Modo conversación: después de responder, sigue escuchando unos segundos
+     * para el próximo pedido, sin tener que decir el nombre de nuevo.
+     */
+    var conversationMode: Boolean
+        get() = prefs.getBoolean(KEY_CONVERSATION, true)
+        set(value) = prefs.edit().putBoolean(KEY_CONVERSATION, value).apply()
+
+    /** Cuántos segundos espera el próximo pedido en modo conversación. */
+    var conversationSeconds: Int
+        get() = prefs.getInt(KEY_CONVERSATION_SECONDS, 8).coerceIn(MIN_WAIT_S, MAX_WAIT_S)
+        set(value) = prefs.edit().putInt(KEY_CONVERSATION_SECONDS, value.coerceIn(MIN_WAIT_S, MAX_WAIT_S)).apply()
+
     /** 0f = menos sensible (menos falsos positivos), 1f = más sensible. */
     var sensitivity: Float
         get() = prefs.getFloat(KEY_SENS, 0.5f)
@@ -46,10 +59,15 @@ class WakeWordSettings(context: Context) {
     /** La palabra (o frase) que hay que decir para despertarlo. */
     fun spokenWakeWord(): String = wakeWord.ifBlank { agentName }
 
-    private companion object {
-        const val KEY_AGENT = "agent_name"
-        const val KEY_WAKE_WORD = "wake_word"
-        const val KEY_SENS = "sensitivity"
-        const val KEY_LOCKED_CONTENT = "locked_content"
+    companion object {
+        const val MIN_WAIT_S = 4
+        const val MAX_WAIT_S = 20
+
+        private const val KEY_CONVERSATION = "conversation_mode"
+        private const val KEY_CONVERSATION_SECONDS = "conversation_seconds"
+        private const val KEY_AGENT = "agent_name"
+        private const val KEY_WAKE_WORD = "wake_word"
+        private const val KEY_SENS = "sensitivity"
+        private const val KEY_LOCKED_CONTENT = "locked_content"
     }
 }

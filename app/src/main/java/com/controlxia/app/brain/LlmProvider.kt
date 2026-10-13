@@ -68,6 +68,23 @@ enum class LlmProviderType(
     );
 }
 
+/**
+ * Aviso para modelos que andan mal como agente (se saltean pasos o dicen haber
+ * hecho cosas sin hacerlas), o null. Se muestra al elegir el modelo.
+ */
+fun modelWarning(model: String): String? {
+    val id = model.lowercase()
+    return when {
+        "gpt-oss-20b" in id ->
+            "Rápido, pero en pedidos de varias cosas se saltea pasos. Para controlar apps " +
+                "conviene openai/gpt-oss-120b (mismo límite gratis)."
+        // 1b a 9b: "llama-3.1-8b-instant", "qwen3-4b" (no "qwen3.8-27b").
+        Regex("(?<![0-9.])[1-9]b(?![a-z0-9])").containsMatchIn(id) ->
+            "Modelo chico: sirve para charlar, pero falla al controlar apps. Probá uno más grande."
+        else -> null
+    }
+}
+
 /** Configuración resuelta de un proveedor, lista para crear el cliente. */
 data class LlmConfig(
     val type: LlmProviderType,

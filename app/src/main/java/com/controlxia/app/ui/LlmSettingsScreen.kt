@@ -40,6 +40,7 @@ import com.controlxia.app.brain.LlmProviderType
 import com.controlxia.app.brain.LlmResponse
 import com.controlxia.app.brain.LlmSettings
 import com.controlxia.app.brain.ToolRegistry
+import com.controlxia.app.brain.modelWarning
 import com.controlxia.app.ui.components.SectionLabel
 import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.components.TechTopBar
@@ -167,7 +168,9 @@ fun LlmSettingsContent(modifier: Modifier = Modifier) {
                 },
                 label = { Text("Modelo") },
                 singleLine = true,
-                supportingText = { Text("Elegí uno sugerido o escribí cualquier ID") },
+                supportingText = {
+                    Text(modelWarning(model) ?: "Elegí uno sugerido o escribí cualquier ID")
+                },
                 trailingIcon = {
                     if (provider.suggestedModels.isNotEmpty()) {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenu)
