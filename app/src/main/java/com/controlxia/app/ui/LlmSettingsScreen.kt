@@ -1,6 +1,7 @@
 package com.controlxia.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +20,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,12 +41,15 @@ import com.controlxia.app.brain.LlmProviderFactory
 import com.controlxia.app.brain.LlmProviderType
 import com.controlxia.app.brain.LlmResponse
 import com.controlxia.app.brain.LlmSettings
+import com.controlxia.app.brain.RECOMMENDED
+import com.controlxia.app.brain.Recommendation
 import com.controlxia.app.brain.ToolRegistry
-import com.controlxia.app.brain.modelWarning
+import com.controlxia.app.brain.modelHint
 import com.controlxia.app.ui.components.SectionLabel
 import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.components.TechTopBar
 import com.controlxia.app.ui.theme.Accent
+import com.controlxia.app.ui.theme.Muted
 import kotlinx.coroutines.launch
 
 /** Pantalla completa de ajustes del cerebro, con barra y volver. */
@@ -88,6 +93,17 @@ fun LlmSettingsContent(modifier: Modifier = Modifier) {
     var testResult by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        RecommendedModels(
+            current = provider to model,
+            onPick = { pick ->
+                settings.setModel(pick.type, pick.model)
+                settings.activeProvider = pick.type
+                provider = pick.type
+                model = pick.model
+                testResult = null
+            },
+        )
+
         ExposedDropdownMenuBox(
             expanded = providerMenu,
             onExpandedChange = { providerMenu = it }
@@ -110,7 +126,7 @@ fun LlmSettingsContent(modifier: Modifier = Modifier) {
             ) {
                 LlmProviderType.entries.forEach { type ->
                     DropdownMenuItem(
-                        text = { Text(type.displayName) },
+                        text = { TwoLines(type.displayName, type.summary) },
                         onClick = {
                             provider = type
                             settings.activeProvider = type
@@ -169,7 +185,7 @@ fun LlmSettingsContent(modifier: Modifier = Modifier) {
                 label = { Text("Modelo") },
                 singleLine = true,
                 supportingText = {
-                    Text(modelWarning(model) ?: "Elegí uno sugerido o escribí cualquier ID")
+                    Text(modelHint(provider, model) ?: "Elegí uno sugerido o escribí cualquier ID")
                 },
                 trailingIcon = {
                     if (provider.suggestedModels.isNotEmpty()) {
@@ -185,12 +201,12 @@ fun LlmSettingsContent(modifier: Modifier = Modifier) {
                     expanded = modelMenu,
                     onDismissRequest = { modelMenu = false }
                 ) {
-                    provider.suggestedModels.forEach { suggestion ->
+                    provider.models.forEach { option ->
                         DropdownMenuItem(
-                            text = { Text(suggestion) },
+                            text = { TwoLines(option.id, "${option.tag} — ${option.note}") },
                             onClick = {
-                                model = suggestion
-                                settings.setModel(provider, suggestion)
+                                model = option.id
+                                settings.setModel(provider, option.id)
                                 modelMenu = false
                             }
                         )
@@ -263,5 +279,52 @@ fun LlmSettingsContent(modifier: Modifier = Modifier) {
                 color = if (result.startsWith("✔")) Accent else MaterialTheme.colorScheme.error
             )
         }
+    }
+}
+
+/**
+ * Las combinaciones que mejor andan con el asistente, para elegir con un
+ * toque. La API key de cada proveedor se carga aparte.
+ */
+@Composable
+private fun RecommendedModels(
+    current: Pair<LlmProviderType, String>,
+    onPick: (Recommendation) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Recomendados", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Los que mejor manejan el teléfono por voz. Tocá uno y cargá la API key de ese proveedor.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+        )
+        RECOMMENDED.forEach { pick ->
+            val selected = current.first == pick.type && current.second == pick.model
+            OutlinedCard(
+                onClick = { onPick(pick) },
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(
+                    if (selected) 2.dp else 1.dp,
+                    if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                ),
+            ) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        (if (selected) "✓ " else "") + pick.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(pick.detail, style = MaterialTheme.typography.bodySmall, color = Muted)
+                }
+            }
+        }
+    }
+}
+
+/** Título y una línea de detalle, para los menús de proveedor y modelo. */
+@Composable
+private fun TwoLines(title: String, detail: String) {
+    Column(Modifier.padding(vertical = 4.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = Muted)
     }
 }

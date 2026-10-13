@@ -27,6 +27,7 @@ import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
 import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.brain.Reply
+import com.controlxia.app.brain.StopWords
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.ui.AssistantActivity
@@ -44,6 +45,7 @@ import com.controlxia.app.voice.WakeWordSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -114,9 +116,18 @@ class WakeWordService : Service() {
     private var followUpDeadline = 0L
     private val retryWakeWord = Runnable { if (!listeningCommand) startListening() }
 
+    /** El pedido en curso (pensar y actuar), para poder frenarlo. */
+    private var processingJob: Job? = null
+
+    /**
+     * Mientras trabaja o habla escucha "pará", "basta"… y su nombre. Es otra
+     * instancia del motor de voz: en esas etapas el micrófono está libre.
+     */
+    private var stopEngine: WakeWordEngine? = null
+
     override fun onCreate() {
         super.onCreate()
-        overlay = ListeningOverlay(this)
+        overlay = ListeningOverlay(this).apply { onTap = { main.post { stopCurrent("tocaste el aviso") } } }
         agentName = WakeWordSettings(this).agentName
         tts = TextToSpeech(this) { status -> main.post { onTtsInit(status) } }
     }
@@ -163,6 +174,11 @@ class WakeWordService : Service() {
         if (intent?.action == ACTION_STOP) {
             stopFromUser()
             return START_NOT_STICKY
+        }
+        // Frenar lo que está haciendo (aviso, pantalla de bloqueo), sin apagar la escucha.
+        if (intent?.action == ACTION_INTERRUPT) {
+            if (inForeground) main.post { stopCurrent("tocaste Frenar") }
+            return START_STICKY
         }
 
         if (!inForeground) {
@@ -252,7 +268,7 @@ class WakeWordService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val title = if (wakeWordActive) "$agentName está escuchando" else "$agentName en espera"
-        return NotificationCompat.Builder(this, XiaApplication.CHANNEL_SERVICE)
+        val builder = NotificationCompat.Builder(this, XiaApplication.CHANNEL_SERVICE)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(contentText)
@@ -260,9 +276,18 @@ class WakeWordService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .addAction(0, getString(R.string.notif_action_test), speakTime)
-            .addAction(0, getString(R.string.notif_action_stop), stop)
-            .build()
+        if (listeningCommand) {
+            // En plena interacción: frenar lo que está haciendo, sin apagar el servicio.
+            val interrupt = PendingIntent.getService(
+                this, 3,
+                Intent(this, WakeWordService::class.java).setAction(ACTION_INTERRUPT),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(0, getString(R.string.notif_action_interrupt), interrupt)
+        } else {
+            builder.addAction(0, getString(R.string.notif_action_test), speakTime)
+        }
+        return builder.addAction(0, getString(R.string.notif_action_stop), stop).build()
     }
 
     @SuppressLint("MissingPermission")
@@ -474,7 +499,8 @@ class WakeWordService : Service() {
         // Un agente puede tardar (abrir apps, leer pantallas): el wake lock se
         // renueva con tope y la pantalla muestra en qué paso va.
         voiceWakeLock.acquire(INTERACTION_MAX_MS)
-        scope.launch {
+        startStopListener()
+        processingJob = scope.launch {
             val reply = try {
                 processor.process(command) { step -> main.post { showProgress(step) } }
             } catch (e: CancellationException) {
@@ -482,8 +508,95 @@ class WakeWordService : Service() {
             } catch (e: Exception) {
                 Reply("Tuve un problema para procesar eso. Probá de nuevo.")
             }
+            processingJob = null
             deliverReply(reply, processor.lastError)
         }
+    }
+
+    /** Escucha "pará", "basta"… y el nombre mientras trabaja y mientras responde. */
+    private fun startStopListener() {
+        if (stopEngine != null || !PermissionManager.hasRecordAudio(this)) return
+        val settings = WakeWordSettings(this)
+        var engine: WakeWordEngine? = null
+        engine = VoskWakeWordEngine(
+            context = applicationContext,
+            phrase = settings.spokenWakeWord(),
+            sensitivity = settings.sensitivity,
+            commands = StopWords.SPOKEN,
+            echoCancel = true,
+            onCommand = { word -> main.post { if (stopEngine === engine) stopCurrent("dijiste «$word»") } },
+        )
+        stopEngine = engine
+        engine.start(
+            onDetected = { main.post { if (stopEngine === engine) onCalledWhileBusy() } },
+            onError = { message, _ -> AgentLog.add("No puedo escuchar «pará» ahora: $message") },
+        )
+    }
+
+    private fun stopStopListener() {
+        val engine = stopEngine ?: return
+        stopEngine = null
+        engine.release()
+    }
+
+    /**
+     * Frena lo que esté haciendo: pensar, actuar en una app o hablar. Lo que
+     * estaba haciendo no sigue, y el cerebro queda enterado de que lo frenaron
+     * y de qué alcanzó a hacer. Después vuelve a esperar el nombre.
+     */
+    private fun stopCurrent(reason: String) {
+        if (!listeningCommand) return
+        AgentLog.add("FRENAR: $reason")
+        stopStopListener()
+        stt?.cancel()
+        main.removeCallbacks(afterAck)
+        main.removeCallbacks(sttTimeout)
+        main.removeCallbacks(resumeAfterReply)
+        val wasWorking = processingJob?.isActive == true
+        if (wasWorking) {
+            commandProcessor?.interrupt()
+            processingJob?.cancel()
+        }
+        processingJob = null
+        tts?.stop()
+        vibrate(60)
+        followUpPending = false
+        inFollowUp = false
+        if (wasWorking) {
+            // Avisar que frenó: lo que estaba haciendo quedó a medias a propósito.
+            showProgress("Frené")
+            main.postDelayed(resumeAfterReply, 2_500L)
+            speakOut("Listo, paré.", UTT_REPLY)
+        } else {
+            resumeListening()
+        }
+    }
+
+    /**
+     * Lo llamaron por el nombre mientras trabajaba o hablaba: deja lo que estaba
+     * haciendo y escucha el pedido nuevo enseguida (como "Alexa" en medio de una
+     * respuesta).
+     */
+    private fun onCalledWhileBusy() {
+        if (!listeningCommand) return
+        stopStopListener()
+        val wasWorking = processingJob?.isActive == true
+        AgentLog.add("INTERRUMPIDO: me llamaste mientras ${if (wasWorking) "trabajaba" else "hablaba"}")
+        if (wasWorking) {
+            commandProcessor?.interrupt()
+            processingJob?.cancel()
+        }
+        processingJob = null
+        tts?.stop()
+        main.removeCallbacks(resumeAfterReply)
+        followUpPending = false
+        inFollowUp = false
+        followUps = 0
+        vibrate()
+        AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
+        if (!lockedSession) overlay?.updateStatus("Te escucho…")
+        transcriptionStarted = true
+        transcribeCommand()
     }
 
     private fun showProgress(step: String) {
@@ -526,6 +639,7 @@ class WakeWordService : Service() {
     /** Terminó de hablar: o escucha la respuesta a su pregunta, o vuelve a esperar el nombre. */
     private fun afterReply() {
         if (!listeningCommand) return
+        stopStopListener()
         if (!followUpPending) {
             resumeListening()
             return
@@ -548,6 +662,7 @@ class WakeWordService : Service() {
         (2_000L + text.length * 90L).coerceAtMost(45_000L)
 
     private fun resumeListening() {
+        stopStopListener()
         main.removeCallbacks(afterAck)
         main.removeCallbacks(sttTimeout)
         main.removeCallbacks(resumeAfterReply)
@@ -646,6 +761,9 @@ class WakeWordService : Service() {
 
     private fun releaseVoice() {
         main.removeCallbacksAndMessages(null)
+        stopStopListener()
+        processingJob?.cancel()
+        processingJob = null
         listeningCommand = false
         transcriptionStarted = false
         overlay?.hide()
@@ -678,6 +796,7 @@ class WakeWordService : Service() {
         const val ACTION_SPEAK_TIME = "com.controlxia.app.action.SPEAK_TIME"
         const val ACTION_STOP = "com.controlxia.app.action.STOP"
         const val ACTION_RELOAD = "com.controlxia.app.action.RELOAD"
+        const val ACTION_INTERRUPT = "com.controlxia.app.action.INTERRUPT"
 
         private const val UTT_ACK = "ack"
         private const val UTT_REPLY = "reply"
@@ -755,6 +874,11 @@ class WakeWordService : Service() {
         /** Dispara la prueba de voz ("son las HH:mm") sobre el servicio activo. */
         fun speakTime(context: Context) {
             tryStart(context, ACTION_SPEAK_TIME)
+        }
+
+        /** Frena lo que el asistente esté haciendo o diciendo (sin apagar la escucha). */
+        fun interrupt(context: Context) {
+            if (running) tryStart(context, ACTION_INTERRUPT)
         }
 
         /** Aplica cambios de la palabra de activación sin apagar el servicio. */

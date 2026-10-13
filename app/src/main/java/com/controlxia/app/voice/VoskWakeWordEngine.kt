@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
 
 /**
  * Palabra de activación con Vosk, 100 % en el teléfono y sin cuentas.
@@ -13,11 +14,18 @@ import android.media.MediaRecorder
  * [WakePhraseDetector], que decide si se dijo el nombre. Antes, el hilo carga
  * el modelo de voz ([VoskModelStore]) y traduce el nombre elegido a palabras
  * que el modelo conoce ([WakePhraseResolver]).
+ *
+ * Mientras el asistente trabaja o habla, el servicio usa otra instancia con
+ * [commands] ("pará", "basta"…): avisa cuál se dijo con [onCommand]. Con
+ * [echoCancel] se le pide al teléfono que no se oiga a sí mismo.
  */
 class VoskWakeWordEngine(
     context: Context,
     private val phrase: String,
     private val sensitivity: Float,
+    private val commands: List<String> = emptyList(),
+    private val echoCancel: Boolean = false,
+    private val onCommand: (String) -> Unit = {},
 ) : WakeWordEngine {
 
     private val appContext = context.applicationContext
@@ -68,6 +76,7 @@ class VoskWakeWordEngine(
         override fun run() {
             VoskModelStore.enter()
             var recorder: AudioRecord? = null
+            var echo: AcousticEchoCanceler? = null
             var detector: WakePhraseDetector? = null
             try {
                 if (phrase.isBlank()) return fail("Falta el nombre del asistente", false)
@@ -84,8 +93,22 @@ class VoskWakeWordEngine(
                         false,
                     )
 
-                detector = WakePhraseDetector(model, words, sensitivity)
+                // Las palabras de frenar que el modelo no conoce se omiten.
+                val stops = commands
+                    .mapNotNull { word ->
+                        WakePhraseResolver.resolve(word) { VoskModelStore.hasWord(model, it) }
+                            ?.let { word to it }
+                    }
+                    .filter { it.second != words }
+                    .distinctBy { it.second }
+                val phrases = listOf(WakePhraseDetector.Phrase(words)) +
+                    stops.map { WakePhraseDetector.Phrase(it.second, alone = true) }
+                detector = WakePhraseDetector(model, phrases, sensitivity)
                 recorder = openRecorder() ?: return fail("No se pudo abrir el micrófono", true)
+                if (echoCancel && AcousticEchoCanceler.isAvailable()) {
+                    echo = runCatching { AcousticEchoCanceler.create(recorder.audioSessionId) }.getOrNull()
+                    runCatching { echo?.enabled = true }
+                }
                 recorder.startRecording()
                 if (recorder.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
                     return fail("El micrófono está ocupado por otra app", true)
@@ -96,9 +119,10 @@ class VoskWakeWordEngine(
                 while (active) {
                     val n = recorder.read(chunk, 0, chunk.size)
                     if (n < 0) return fail("Se cortó la lectura del micrófono ($n)", true)
-                    if (n > 0 && detector.accept(chunk, n)) {
+                    val index = if (n > 0) detector.detect(chunk, n) else -1
+                    if (index >= 0) {
                         active = false // suelta el micrófono al salir del bucle
-                        onDetected()
+                        if (index == 0) onDetected() else onCommand(stops[index - 1].first)
                     }
                 }
             } catch (e: SecurityException) {
@@ -106,6 +130,7 @@ class VoskWakeWordEngine(
             } catch (e: Exception) {
                 fail(e.message ?: "Se cortó la escucha", true)
             } finally {
+                runCatching { echo?.release() }
                 runCatching { recorder?.stop() }
                 runCatching { recorder?.release() }
                 runCatching { detector?.close() }

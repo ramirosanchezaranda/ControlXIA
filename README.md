@@ -22,6 +22,8 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Modo conversación**: después de responder sigue escuchando unos segundos (configurable) para el próximo pedido, sin repetir el nombre; "gracias" o "listo" la cierran.
 - ✅ **Groq como proveedor**: `openai/gpt-oss-120b` recomendado; el agente se adapta al plan gratis (pedidos livianos, espera y reintenta solo si Groq pide esperar).
 - ✅ **Control de que hizo todo**: si el modelo dice haber hecho algo sin hacerlo, o hace una parte de un pedido de varias cosas, se le muestra lo hecho de verdad y completa lo que falta; después de confirmar un mensaje sigue con el resto del pedido.
+- ✅ **Frenarlo por voz**: "pará", "basta" o "cancelá" mientras trabaja o habla (o su nombre para interrumpirlo); también tocando la píldora o "Frenar" en la notificación. Se entera de que lo frenaron y de qué alcanzó a hacer.
+- ✅ **Modelos recomendados** al elegir proveedor y modelo, con una nota de para qué sirve cada uno (gratis: Groq gpt-oss-120b o Gemini 3.8 Flash; pago y eficiente: Claude Haiku 5.5 o GPT-6 Luna).
 - ✅ **WhatsApp por nombre**: abre chats y grupos buscándolos en WhatsApp, aunque el reconocimiento de voz entienda mal el nombre ("fulgo 2" → «Fútbol 2 ⚽»), y confirma con el nombre real antes de enviar.
 - ⏳ Próximo: llamadas, recordatorios, activación con botón home (rol de asistente).
 
@@ -46,7 +48,7 @@ El modelo de voz en español de Vosk (39 MB) no viaja en el APK: la app lo desca
 
 ## Configurar el LLM
 
-En la app: ⚙️ → elegir proveedor → pegar API key → elegir modelo → **Probar conexión**.
+En la app: ⚙️ → tocar uno de los **Recomendados** (o elegir proveedor y modelo) → pegar API key → **Probar conexión**. Qué modelo conviene y por qué: [docs/AGENT.md](docs/AGENT.md#qué-modelo-elegir).
 
 | Proveedor | Dónde sacar la key |
 |---|---|

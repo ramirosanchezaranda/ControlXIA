@@ -1,17 +1,25 @@
 package com.controlxia.app.brain
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import java.io.IOException
 import java.io.InterruptedIOException
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /** Cliente HTTP y JSON compartidos por todos los proveedores. */
 internal object HttpJson {
@@ -47,7 +55,7 @@ internal object HttpJson {
             .post(body.toString().toRequestBody(JSON_MEDIA))
             .build()
         try {
-            client.newCall(request).execute().use { response ->
+            client.newCall(request).await().use { response ->
                 val text = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     val detail = apiErrorMessage(text) ?: text.take(300)
@@ -66,12 +74,32 @@ internal object HttpJson {
             }
         } catch (e: LlmException) {
             throw e
+        } catch (e: CancellationException) {
+            // El usuario lo frenó: no es un error de red.
+            throw e
         } catch (e: InterruptedIOException) {
             // SocketTimeoutException y el callTimeout de OkHttp.
             throw LlmException("Tiempo de espera agotado", e, kind = LlmException.Kind.TIMEOUT)
         } catch (e: Exception) {
             throw LlmException("Error de red: ${e.message}", e, kind = LlmException.Kind.NETWORK)
         }
+    }
+
+    /**
+     * Espera la respuesta sin bloquear un hilo, y si se cancela la corrutina (el
+     * usuario dijo "pará") corta el pedido HTTP en el acto.
+     */
+    private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+        cont.invokeOnCancellation { runCatching { cancel() } }
+        enqueue(object : Callback {
+            override fun onResponse(call: Call, response: Response) {
+                if (cont.isActive) cont.resume(response) else response.close()
+            }
+
+            override fun onFailure(call: Call, e: IOException) {
+                if (cont.isActive) cont.resumeWithException(e)
+            }
+        })
     }
 
     /** "Please try again in 1m2.5s" / "in 7.66s" → segundos. */

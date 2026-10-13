@@ -56,6 +56,9 @@ class OpenAiCompatibleProvider(
                     }
                 }
             })
+            // GPT-6 solo acepta herramientas en Chat Completions sin razonamiento
+            // (según la documentación de OpenAI); además así responde más rápido.
+            if (tools.isNotEmpty() && model.startsWith("gpt-6")) put("reasoning_effort", "none")
             if (tools.isNotEmpty()) {
                 put("tools", buildJsonArray {
                     tools.forEach { tool ->

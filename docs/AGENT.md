@@ -40,6 +40,10 @@ Además:
 - Si en medio de un pedido de varias cosas hace falta confirmar ("mandale hola a Juan y poneme una alarma"), después del "sí" **sigue con lo que falta** (la alarma) en vez de terminar ahí.
 - Todo queda en el **Registro del agente** (líneas `CONTROL:` y `SIGO`).
 
+## Frenarlo
+
+Decí **"pará"**, "basta" o "cancelá" mientras trabaja o habla, o tocá la píldora flotante / el botón **Frenar** de la notificación. Corta el pedido al modelo y lo que esté haciendo en la app; lo que esperaba confirmación se descarta. Queda en la memoria del asistente qué alcanzó a hacer ("[Me frenaste antes de terminar. Ya había hecho: …]") para que el próximo pedido lo sepa y no lo retome solo. Detalles de cómo se distingue "¡pará!" de "para mí": [WAKE_WORD.md](WAKE_WORD.md#frenarlo-pará).
+
 ## Seguridad
 
 - **Confirmación por voz obligatoria** antes de mandar un mensaje, responder uno o tocar botones como Enviar, Comprar, Pagar, Publicar o Borrar. La decide el código, no el modelo: la acción queda pendiente, el asistente pregunta ("¿Le mando a Lucía por WhatsApp: «llego en 10»?") y se queda escuchando la respuesta. Solo con "sí" / "dale" / "mandalo" se ejecuta.
@@ -66,6 +70,19 @@ Groq usa la API compatible con OpenAI. El plan gratis tiene límites bajos para 
 - distingue en voz alta el límite por minuto ("probá de nuevo en un minuto") del cupo diario ("se renueva mañana").
 
 Modelo recomendado: **`openai/gpt-oss-120b`**: mismo límite gratis que el 20b y bastante más confiable para pedidos de varios pasos. `openai/gpt-oss-20b` es más rápido pero se saltea pasos (la app avisa al elegirlo). En preview: `qwen/qwen3.8-27b`. Si el límite por minuto molesta seguido, el plan Developer de Groq (pago por uso) lo sube mucho.
+
+## Qué modelo elegir
+
+En ⚙️ → Proveedor y modelo, arriba aparecen los **Recomendados** (un toque elige proveedor y modelo; la API key se carga aparte) y cada modelo del menú dice para qué sirve. Revisado en octubre de 2026 en las páginas oficiales de precios; los precios cambian, por eso la app los muestra en comparación y no en dólares.
+
+| Proveedor | Recomendado | Por qué | Alternativas |
+|---|---|---|---|
+| Groq (gratis: 8.000 tokens/min, 1.000 pedidos/día) | `openai/gpt-oss-120b` | El más confiable gratis para manejar el teléfono | `qwen/qwen3.8-27b` (preview, mismo límite); `openai/gpt-oss-20b` (rápido, se saltea pasos) |
+| Google Gemini (gratis con límite diario) | `gemini-3.8-flash` | El Flash más nuevo y capaz; pago: US$0,75 / 3,75 por millón de tokens (precio de lanzamiento hasta el 31/12/2026) | `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite` (más baratos, menos confiables en varios pasos) |
+| Anthropic (pago) | `claude-haiku-5-5` | El más eficiente: US$0,10 / 0,50 por millón; un pedido típico cuesta una fracción de centavo | `claude-sonnet-5-5` (US$2 / 10, más confiable en pedidos largos dentro de apps); `claude-opus-5-5` (US$4 / 20, no hace falta para voz) |
+| OpenAI (pago) | `gpt-6-luna` | El más eficiente: US$0,10 / 0,50 por millón | `gpt-6-sol` (US$2 / 10); `gpt-5.4-mini` (generación anterior) |
+
+Detalle técnico: GPT-6 Luna y Sol solo aceptan herramientas en Chat Completions con `reasoning_effort: "none"` (documentación de OpenAI); la app lo manda sola para los modelos `gpt-6*`. `gemini-3.5-flash`, que estaba en la lista anterior, ya no figura en la página de precios de Google y se sacó.
 
 ## Límites conocidos
 

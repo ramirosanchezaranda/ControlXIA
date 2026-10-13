@@ -54,6 +54,38 @@ object Goodbye {
     }
 }
 
+/**
+ * Pedidos de frenar: "pará", "basta", "cancelá". Mientras trabaja o habla los
+ * escucha el motor de voz ([SPOKEN]); en una respuesta transcripta, [isStop]
+ * reconoce la frase entera (con el nombre del asistente adelante o no).
+ */
+object StopWords {
+
+    /** Palabras sueltas que el motor de voz escucha mientras el asistente trabaja o habla. */
+    val SPOKEN = listOf("pará", "basta", "frená", "cancelá", "stop", "callate", "silencio", "detenete")
+
+    private val PHRASES = setOf(
+        "para", "para para", "para ya", "para por favor", "para un poco", "para todo", "para che",
+        "frena", "frena ahi", "frena frena", "basta", "ya basta", "basta ya", "basta basta",
+        "stop", "cancela", "cancelar", "cancelalo", "cancela todo", "callate", "silencio",
+        "detenete", "deja", "dejalo", "deja de hablar", "olvidalo", "no para", "no no para",
+        "no sigas", "no hagas nada", "alto", "pare", "ya esta para",
+    )
+
+    fun isStop(text: String, agentName: String = ""): Boolean {
+        val name = normalize(agentName)
+        val words = normalize(text).split(' ').filter { it.isNotEmpty() && it != name }
+        return words.joinToString(" ") in PHRASES
+    }
+
+    private fun normalize(text: String): String =
+        Normalizer.normalize(text.lowercase(Locale("es")), Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-zñ ]"), " ")
+            .trim()
+            .replace(Regex("\\s+"), " ")
+}
+
 /** Interpreta la respuesta hablada a una pregunta de confirmación. */
 object Confirmation {
 

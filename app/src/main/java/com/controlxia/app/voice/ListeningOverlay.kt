@@ -31,6 +31,9 @@ class ListeningOverlay(private val context: Context) {
     private var statusView: TextView? = null
     private var dotAnimator: ValueAnimator? = null
 
+    /** Tocar la píldora frena lo que el asistente esté haciendo o diciendo. */
+    var onTap: (() -> Unit)? = null
+
     fun canShow(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
 
@@ -124,8 +127,19 @@ class ListeningOverlay(private val context: Context) {
         texts.addView(title)
         texts.addView(statusView)
 
+        // Botón de frenar: también se puede decir "pará" o "basta".
+        val stop = TextView(context).apply {
+            text = "✕"
+            setTextColor(paper)
+            textSize = 16f
+            contentDescription = "Frenar"
+            setPadding(dp(16), 0, 0, 0)
+        }
+
         pill.addView(dot)
         pill.addView(texts)
+        pill.addView(stop)
+        pill.setOnClickListener { onTap?.invoke() }
         this.statusView = statusView
         return pill
     }

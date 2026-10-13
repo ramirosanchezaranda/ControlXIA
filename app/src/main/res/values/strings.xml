@@ -5,6 +5,7 @@
     <string name="notif_channel_alerts">Avisos</string>
     <string name="notif_action_test">Probar voz</string>
     <string name="notif_action_stop">Apagar</string>
+    <string name="notif_action_interrupt">Frenar</string>
     <string name="notif_reactivate_title">La escucha está en pausa</string>
     <string name="notif_reactivate_text">Android no dejó encenderla en segundo plano. Tocá para reactivarla.</string>
     <string name="a11y_label">ControlXIA · control de apps</string>

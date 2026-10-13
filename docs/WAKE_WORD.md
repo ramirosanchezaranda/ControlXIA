@@ -23,6 +23,32 @@ Activo por defecto (Ajustar → Conversación). Después de cada respuesta el as
 
 Para cerrar antes: "gracias" (responde "De nada"), "chau", "listo", "nada más", "eso es todo". Tiene que ser la frase entera: "gracias, ahora poné una alarma" sigue siendo un pedido. Hay un tope de 15 turnos seguidos sin el nombre, por si la tele o una charla de fondo lo mantienen escuchando.
 
+## Frenarlo ("pará")
+
+Mientras piensa, actúa en una app o habla, el asistente escucha (con otra instancia del mismo motor Vosk, sin internet):
+
+- **"Pará", "basta", "frená", "cancelá", "callate", "silencio", "stop"**: frena lo que esté haciendo. Si estaba trabajando, corta el pedido al modelo y lo que estaba haciendo en la app, dice "Listo, paré" y vuelve a esperar el nombre. Si estaba hablando, se calla.
+- **Su nombre**: lo interrumpe y escucha el pedido nuevo enseguida (como "Alexa" en medio de una respuesta).
+- También se puede **tocar la píldora flotante** (✕), tocar la pantalla del asistente sobre el bloqueo, o el botón **Frenar** de la notificación. **Apagar** sigue apagando la escucha del todo.
+
+El asistente **se entera** de que lo frenaron: en su memoria queda "me frenaste antes de terminar; ya había hecho: …", así "seguí" o "¿qué hiciste?" tienen sentido, y no retoma lo anterior solo. Lo que esperaba confirmación ("¿Le mando…?") se descarta.
+
+"Para" es de las palabras más comunes del español y el teléfono se oye a sí mismo cuando habla, así que una palabra de frenar **solo cuenta dicha sola**: "¡pará!", "basta, basta", "pará ya", "Beto, pará"; no "para mí un café" ni la respuesta del asistente "para mandar mensajes necesito…". Para decidirlo, además de la gramática:
+
+1. espera ~1,2 s de audio después de la palabra (la gramática avisa apenas termina la palabra, antes de saber si la frase sigue),
+2. re-decodifica ese tramo con el vocabulario completo: tiene que oírse algo parecido a la palabra, y no una más larga que la contenga ("silenciosamente", "bastante"),
+3. no puede haber voz pegada antes o después (por energía del audio y por palabras reconocidas), salvo el nombre o muletillas ("ya", "no", "che", "bueno", "por favor").
+
+Prueba con el modelo real y voz sintetizada (2 voces × 2 velocidades, sensibilidad 0,3 / 0,5 / 0,8):
+
+| Caso | Resultado |
+|---|---|
+| Palabras de frenar dichas solas o con muletillas (12 frases × 4) | 44 de 48 frenan; las que no, son la voz sintética lenta |
+| Frases que no tienen que frenar: "para mí un café", "esto es para vos", "Para mandar mensajes necesito…", "Listo, cancelé la alarma", "Bastante bien", "Silenciosamente se fue", "Ya basta de lluvia esta semana"… (14 × 4) | 0 falsas en las tres sensibilidades |
+| El nombre sigue funcionando igual con las palabras de frenar en la gramática | Xia 24/24 y Xiomara 12/12, mismas falsas alarmas que antes |
+
+Mientras habla, el teléfono puede taparse a sí mismo: se activa el cancelador de eco si el equipo lo tiene, pero si "basta" no lo frena, decí su nombre (más tolerante) o tocá la píldora.
+
 ## Resultados de las pruebas
 
 Se probó el mismo código Kotlin de la app (`WakePhraseDetector`) con el modelo real y voz sintetizada (espeak-ng) a tres velocidades:

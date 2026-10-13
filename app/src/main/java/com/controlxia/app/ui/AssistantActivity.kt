@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
 import com.controlxia.app.ui.theme.XiaTheme
@@ -57,10 +58,14 @@ class AssistantActivity : ComponentActivity() {
                     if (ui.phase == AssistantState.Phase.IDLE) finish()
                 }
 
+                // Tocar la pantalla frena lo que esté haciendo o diciendo.
                 Surface(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clickable { finish() },
+                        .clickable {
+                            WakeWordService.interrupt(this@AssistantActivity)
+                            finish()
+                        },
                     color = MaterialTheme.colorScheme.background.copy(alpha = 0.96f),
                 ) {
                     AssistantContent(
@@ -109,6 +114,12 @@ private fun AssistantContent(agentName: String, status: String, listening: Boole
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp),
+        )
+        Text(
+            "Tocá para frenar o decí «pará»",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+            modifier = Modifier.padding(top = 32.dp),
         )
     }
 }
