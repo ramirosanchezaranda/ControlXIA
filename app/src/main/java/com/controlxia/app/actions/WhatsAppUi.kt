@@ -1,7 +1,6 @@
 package com.controlxia.app.actions
 
 import android.accessibilityservice.GestureDescription
-import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Path
@@ -42,8 +41,7 @@ class WhatsAppUi(private val context: Context) {
     suspend fun openChat(name: String, fuzzy: Boolean = true): OpenResult = withContext(Dispatchers.Default) {
         val service = XiaAccessibilityService.instance
             ?: return@withContext OpenResult.Failed("Para entrar a chats de WhatsApp necesito el control de apps activado.")
-        val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-        if (keyguard.isKeyguardLocked) return@withContext OpenResult.Failed("Desbloqueá el teléfono para usar WhatsApp.")
+        if (!UnlockGate.unlock(context, "para usar WhatsApp")) return@withContext OpenResult.Failed(UnlockGate.NOT_UNLOCKED)
         if (!PermissionManager.canLaunchActivities(context)) {
             return@withContext OpenResult.Failed("Para abrir WhatsApp necesito el permiso Mostrar sobre otras apps.")
         }
@@ -124,8 +122,7 @@ class WhatsAppUi(private val context: Context) {
         withContext(Dispatchers.Default) {
             val service = XiaAccessibilityService.instance
                 ?: return@withContext "Para mandarlo necesito el control de apps activado."
-            val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-            if (keyguard.isKeyguardLocked) return@withContext "Desbloqueá el teléfono para usar WhatsApp."
+            if (!UnlockGate.unlock(context, "para mandarlo por WhatsApp")) return@withContext UnlockGate.NOT_UNLOCKED
             val pkg = PACKAGES.firstOrNull { context.packageManager.getLaunchIntentForPackage(it) != null }
                 ?: return@withContext "No encontré WhatsApp instalado."
             val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)

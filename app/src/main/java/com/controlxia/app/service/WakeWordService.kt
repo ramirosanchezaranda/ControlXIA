@@ -8,6 +8,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -26,6 +28,7 @@ import androidx.core.content.ContextCompat
 import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
 import com.controlxia.app.actions.CameraControl
+import com.controlxia.app.actions.UnlockGate
 import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.brain.Reply
 import com.controlxia.app.brain.StopWords
@@ -66,7 +69,7 @@ import kotlin.coroutines.resume
  * Android no deja encender el micrófono desde segundo plano (Android 14+), el
  * servicio no crashea: avisa con una notificación para reactivarlo con un toque.
  *
- * Cadena de voz: wake word (Vosk) → "Te escucho" (vibración + TTS) →
+ * Cadena de voz: wake word (Vosk) → tono corto (o "Te escucho") →
  * transcripción (SpeechRecognizer) → cerebro (LLM + tools) → respuesta hablada
  * → vuelve a esperar la palabra. Vosk y SpeechRecognizer comparten el
  * micrófono, así que el wake word se pausa mientras se transcribe. Cada espera
@@ -135,6 +138,9 @@ class WakeWordService : Service() {
     /** Quién espera que termine de hablar una frase (por id de la frase). */
     private val utteranceWaiters = mutableMapOf<String, () -> Unit>()
 
+    /** El tono de "te escucho": mucho más corto que decirlo, así no se pierde nada. */
+    private var toneGenerator: ToneGenerator? = null
+
     override fun onCreate() {
         super.onCreate()
         overlay = ListeningOverlay(this).apply { onTap = { main.post { stopCurrent("tocaste el aviso") } } }
@@ -152,8 +158,17 @@ class WakeWordService : Service() {
                 startStopListener()
             }
         }
+        // Se desbloqueó en medio de un pedido (para usar una app): seguir con la burbuja.
+        UnlockGate.onUnlocked = { main.post { onPhoneUnlocked() } }
         agentName = WakeWordSettings(this).agentName
         tts = TextToSpeech(this) { status -> main.post { onTtsInit(status) } }
+    }
+
+    private fun onPhoneUnlocked() {
+        if (!listeningCommand || !lockedSession) return
+        lockedSession = false
+        AssistantState.unlocked()
+        overlay?.show(agentName, AssistantState.state.value.status.ifBlank { "Sigo con tu pedido…" })
     }
 
     private fun onTtsInit(status: Int) {
@@ -424,12 +439,17 @@ class WakeWordService : Service() {
                 wakeEngine?.let { startEngine(it) }
                 return@post
             }
-            startInteraction("Te escucho")
+            startInteraction(null)
         }
     }
 
-    /** Empieza a atender: confirma con [ack] en voz alta y transcribe el pedido. */
-    private fun startInteraction(ack: String) {
+    /**
+     * Empieza a atender y transcribe el pedido. Confirma con [ack] en voz alta
+     * (una pregunta, como "¿Qué necesitás?") o, sin [ack], con un tono corto y
+     * escucha enseguida: decir "Te escucho" tarda un segundo y en ese segundo
+     * se perdía el principio del pedido. Se puede volver a la voz en ajustes.
+     */
+    private fun startInteraction(ack: String?) {
         listeningCommand = true
         followUps = 0
         followUpPending = false
@@ -453,10 +473,25 @@ class WakeWordService : Service() {
         }
         wakeEngine?.stop() // liberar el micrófono para el ASR
 
-        // Transcribir al terminar el "Te escucho" (así no se transcribe a sí
-        // mismo). Tope por si el TTS no avisa; sin TTS listo, enseguida.
-        main.postDelayed(afterAck, if (ttsReady) ACK_MAX_WAIT_MS else ACK_NO_TTS_MS)
-        speakOut(ack, UTT_ACK, queueIfNotReady = false)
+        val spoken = ack ?: if (settings.spokenAck) "Te escucho" else null
+        if (spoken == null || !ttsReady) {
+            beep()
+            main.postDelayed(afterAck, TONE_MS)
+            return
+        }
+        // Transcribir al terminar de hablar (así no se transcribe a sí mismo).
+        // Tope por si el TTS no avisa.
+        main.postDelayed(afterAck, ACK_MAX_WAIT_MS)
+        speakOut(spoken, UTT_ACK, queueIfNotReady = false)
+    }
+
+    /** Tono corto de "te escucho" (más suave para seguir una conversación). */
+    private fun beep(soft: Boolean = false) {
+        runCatching {
+            val tone = toneGenerator ?: ToneGenerator(AudioManager.STREAM_MUSIC, TONE_VOLUME)
+                .also { toneGenerator = it }
+            tone.startTone(if (soft) ToneGenerator.TONE_PROP_ACK else ToneGenerator.TONE_PROP_BEEP, TONE_LENGTH_MS)
+        }
     }
 
     private fun onUtteranceFinished(id: String?) {
@@ -468,7 +503,7 @@ class WakeWordService : Service() {
             }
             UTT_REPLY -> if (listeningCommand) {
                 main.removeCallbacks(resumeAfterReply)
-                main.postDelayed(resumeAfterReply, 700L)
+                main.postDelayed(resumeAfterReply, AFTER_SPEECH_MS)
             }
         }
     }
@@ -731,10 +766,11 @@ class WakeWordService : Service() {
         main.removeCallbacks(resumeAfterReply)
         voiceWakeLock.acquire(INTERACTION_MAX_MS)
         vibrate(40)
+        beep(soft = true)
         AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
         if (!lockedSession) overlay?.updateStatus("Te escucho…")
         transcriptionStarted = true
-        transcribeCommand()
+        main.postDelayed({ if (listeningCommand && inFollowUp) transcribeCommand() }, TONE_MS)
     }
 
     private fun estimatedSpeechMs(text: String): Long =
@@ -858,6 +894,7 @@ class WakeWordService : Service() {
     override fun onDestroy() {
         VoiceBridge.speaker = null
         VoiceBridge.micClaim = null
+        UnlockGate.onUnlocked = null
         CameraControl.onRecordingChanged = null
         running = false
         wakeWordActive = false
@@ -868,6 +905,8 @@ class WakeWordService : Service() {
         scope.cancel()
         tts?.shutdown()
         tts = null
+        toneGenerator?.release()
+        toneGenerator = null
         super.onDestroy()
     }
 
@@ -886,11 +925,16 @@ class WakeWordService : Service() {
         private const val UTT_TIME = "speak_time"
 
         private const val ACK_MAX_WAIT_MS = 2_500L
-        private const val ACK_NO_TTS_MS = 300L
-        private const val STT_MAX_MS = 20_000L
+        /** Cuánto después del tono empieza a transcribir (que no se oiga el tono). */
+        private const val TONE_MS = 160L
+        private const val TONE_LENGTH_MS = 90
+        private const val TONE_VOLUME = 60
+        /** Pausa entre que termina de hablar y vuelve a escuchar (sin oírse a sí mismo). */
+        private const val AFTER_SPEECH_MS = 250L
+        private const val STT_MAX_MS = 30_000L
         private const val INTERACTION_MAX_MS = 180_000L
         /** Tope de turnos seguidos sin wake word (por si la tele "conversa" sola). */
-        private const val MAX_FOLLOW_UPS = 15
+        private const val MAX_FOLLOW_UPS = 40
 
         /** Tiempo mínimo para contestar una pregunta ("¿Le mando…?"). */
         private const val QUESTION_WINDOW_MS = 10_000L

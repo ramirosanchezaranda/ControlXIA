@@ -15,12 +15,15 @@ Un pedido con varias partes ("buscá zapatillas y mandale el link a Juan") lo re
 | Habilidad local | Ejemplos |
 |---|---|
 | Mensajes | "mandale a Juan que llego tarde", "decile a mi pareja que la quiero", "mandale un sms a mamá que ya salgo", "mandale al grupo fútbol 2 que hoy no voy", "preguntale a Juan si viene a cenar" |
+| Otras apps de chat | "mandale a Juan por Telegram que llego tarde", "mandale a Juan que llego tarde por Telegram", "decile a Ana por Instagram que ya voy" (también Messenger y Signal) |
 | Audios | "mandale un audio a Rebeca", "mandale un audio a Juan que diga feliz cumpleaños" |
 | Leer y responder | "leeme los mensajes", "leeme los mensajes de Juan", "¿tengo mensajes?", "respondele que sí", "contestale a Juan que en 10 llego" |
+| Notificaciones | "leeme las notificaciones", "leeme las notificaciones de WhatsApp", "¿qué notificaciones tengo?", "¿tengo alguna notificación del banco?", "abrí la notificación de Gmail", "borrá las notificaciones" |
 | Alarmas y temporizadores | "poneme una alarma a las 7 y media de la tarde", "despertame mañana a las 6 y cuarto", "temporizador de 5 minutos", "avisame en media hora" |
 | Calendario | "agendá dentista el jueves a las 4 de la tarde", "recordame comprar pan mañana a las 10", "anotá reunión con Juan el 25 de octubre a las 9" |
 | Cuentas | "cuánto es 25 por 4", "el 15 por ciento de 2000", "raíz de 81", "7 al cuadrado" |
-| Buscar | "buscá zapatillas nike más baratas en Mercado Libre", "buscá en YouTube recetas de pizza", "poné música de Queen en Spotify", "buscá el clima en Buenos Aires" |
+| Buscar | "buscá zapatillas nike más baratas en Mercado Libre", "buscá en YouTube recetas de pizza", "poné música de Queen en Spotify", "buscá el clima" |
+| Cualquier app | "buscá pizza en PedidosYa", "buscá vuelos a Bariloche en Despegar" (abre la app, toca su lupa, escribe y busca; si no hay una app con ese nombre, busca en Google), "en Spotify tocá Biblioteca", "abrí YouTube y andá a Suscripciones" |
 | Secciones y chats | "abrí los reels", "mostrame mis compras", "llevame a casa", "abrí el chat de Juan", "abrí el grupo fútbol 2" |
 | Otros | "¿qué hora es?", "¿qué día es hoy?", "mi pareja es Lucía", "repetí" |
 
@@ -69,6 +72,18 @@ Se toleran el nombre del asistente adelante ("Beto, atrás"), "che", "dale", "po
 - **Música y videos**: las mismas teclas que unos auriculares (play, pausa, siguiente); le llegan a la app que esté reproduciendo.
 - **Números en pantalla**: una ventana del servicio de accesibilidad dibuja los números (no necesita permisos extra, no se puede tocar) y se actualizan cuando cambia la pantalla.
 
+## Con el teléfono bloqueado
+
+Android no deja que ninguna app maneje la pantalla de otras sobre el bloqueo (tampoco el asistente de Google). Así que, cuando un pedido necesita la pantalla —mandar un WhatsApp, abrir una app, buscar en una app, cambiar un ajuste— el asistente **pide desbloquear** ("Desbloqueá el teléfono para mandarlo por WhatsApp"): aparece la huella o el PIN, un toque, y **sigue solo con el pedido**, pasando de la pantalla sobre el bloqueo a la burbuja flotante. Si no se desbloquea en 30 segundos, lo deja ahí.
+
+Anda **sin desbloquear**: SMS, llamadas (y atender o cortar), alarmas, temporizadores, calendario, la hora, cuentas, sacar una foto (cámara segura), volumen, música, linterna, **leer y responder mensajes y notificaciones** (la respuesta va por la propia notificación).
+
+Para abrir la pantalla de desbloqueo desde segundo plano hace falta el permiso **Mostrar sobre otras apps** (el mismo que ya usa para abrir apps).
+
+## Notificaciones
+
+"Leeme las notificaciones" lee las que están en la barra en este momento, agrupadas por app y de la más nueva a la más vieja ("Tenés 4 notificaciones. WhatsApp: Juan, hola; Fútbol 2, Pedro, hoy a las 9. Gmail: Banco, tu resumen está disponible."). Lee hasta 8 y dice cuántas más hay; saltea las fijas (música sonando, descargas, servicios) y los resúmenes de grupo. Se puede filtrar por app o por quién ("las de WhatsApp", "alguna del banco"), abrir la más nueva ("abrí la notificación de Gmail", como si la tocaras) o borrarlas. Usa el mismo acceso a notificaciones que leer mensajes, no guarda nada y anda bloqueado.
+
 ## Cámara
 
 Usa la app de cámara del teléfono, así las fotos y videos quedan en la galería como siempre. El botón de disparo se busca por su nombre o id ("obturador", "shutter", "grabar") y por estar abajo al centro; si la app no lo nombra, se toca ese lugar. Con el teléfono bloqueado, "sacá una foto" abre la cámara sobre el bloqueo.
@@ -113,7 +128,7 @@ Lo que más rinde para "100 % voz" no es otro agente sino **comandos directos si
 
 ## Límites conocidos
 
-- Todo esto se probó con pruebas automáticas (el analizador de comandos: 113 frases; el bucle del agente con un modelo simulado), **no en un teléfono real**. Las partes que tocan otras apps (botón de la cámara, interruptores de Wi-Fi, "Enviar a…" de WhatsApp) dependen de cómo dibuja cada fabricante su pantalla: si algo falla, el **Registro del agente** dice en qué paso.
+- Todo esto se probó con pruebas automáticas (comandos directos: 134 frases; habilidades locales: 81; lectura de notificaciones: 10 casos; el bucle del agente con un modelo simulado), **no en un teléfono real**. Buscar en cualquier app, tocar por nombre y mandar por Telegram, Messenger, Instagram o Signal se guían por lo que cada app anuncia a la accesibilidad ("Buscar", "Enviar"): en apps que dibujan todo a mano puede no encontrar la lupa; en ese caso lo dice y queda "mostrá los números". Las partes que tocan otras apps (botón de la cámara, interruptores de Wi-Fi, "Enviar a…" de WhatsApp) dependen de cómo dibuja cada fabricante su pantalla: si algo falla, el **Registro del agente** dice en qué paso.
 - "Terminá el video" depende de que el teléfono respete la regla de audio compartido para accesibilidad.
 - Atender y cortar llamadas por voz: con el teléfono sonando el micrófono está libre; en plena llamada, el audio lo tiene la llamada.
 - El APK para el teléfono se arma solo para arm64 (casi todos los teléfonos de los últimos años): con MediaPipe para las dos arquitecturas superaba el tamaño que se puede mandar por chat. Para otros equipos: `./gradlew assembleDebug -Pcontrolxia.abis=arm64-v8a,armeabi-v7a`.

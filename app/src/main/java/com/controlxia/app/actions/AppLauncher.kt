@@ -17,10 +17,17 @@ import java.text.Normalizer
  */
 class AppLauncher(private val context: Context) {
 
-    fun open(appName: String): String {
-        val query = normalize(appName)
-        if (query.isBlank()) return "No entendí qué app abrir"
+    /** Una app instalada: su nombre visible y su paquete. */
+    data class App(val label: String, val pkg: String)
 
+    /**
+     * La app instalada que mejor coincide con [appName]: exacta; si no, la más
+     * corta que contenga lo pedido ("maps" → "Maps" antes que "Maps Go"); si no,
+     * la que esté contenida en lo pedido ("whatsapp de trabajo" → "WhatsApp").
+     */
+    fun find(appName: String): App? {
+        val query = normalize(appName)
+        if (query.isBlank()) return null
         val pm = context.packageManager
         val launchables = pm.queryIntentActivities(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
@@ -30,18 +37,25 @@ class AppLauncher(private val context: Context) {
             val pkg = info.activityInfo?.packageName ?: return@mapNotNull null
             Triple(label, normalize(label), pkg)
         }
-
-        // Coincidencia exacta; si no, la más corta que contenga lo pedido
-        // ("maps" → "Maps" antes que "Maps Go"); si no, la que esté contenida
-        // en lo pedido ("whatsapp de trabajo" → "WhatsApp").
         val match = launchables.firstOrNull { it.second == query }
             ?: launchables.filter { it.second.contains(query) }.minByOrNull { it.second.length }
             ?: launchables.filter { it.second.length >= 3 && query.contains(it.second) }
                 .maxByOrNull { it.second.length }
-            ?: return "No encontré la app $appName"
-        val label = match.first
+            ?: return null
+        return App(match.first, match.third)
+    }
 
-        val launch = pm.getLaunchIntentForPackage(match.third)
+    fun open(appName: String): String {
+        if (normalize(appName).isBlank()) return "No entendí qué app abrir"
+        val app = find(appName) ?: return "No encontré la app $appName"
+        return open(app)
+    }
+
+    /** Abre [app]; con [fresh], en su pantalla principal (no donde quedó). */
+    fun open(app: App, fresh: Boolean = false): String {
+        val pm = context.packageManager
+        val label = app.label
+        val launch = pm.getLaunchIntentForPackage(app.pkg)
             ?: return "No pude abrir $label"
 
         // Con el teléfono bloqueado, Android no permite abrir apps de terceros
@@ -55,6 +69,7 @@ class AppLauncher(private val context: Context) {
         }
 
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (fresh) launch.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
         return try {
             context.startActivity(launch)
             "Abriendo $label"

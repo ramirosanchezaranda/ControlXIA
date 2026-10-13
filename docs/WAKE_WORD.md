@@ -19,9 +19,16 @@ En el panel → **Palabra de activación → Ajustar**:
 
 ## Modo conversación
 
-Activo por defecto (Ajustar → Conversación). Después de cada respuesta el asistente sigue escuchando unos segundos (8 por defecto, de 4 a 20) para el próximo pedido, sin decir el nombre de nuevo. Si no decís nada, vuelve en silencio a esperar el nombre. Cuando hace una pregunta ("¿Le mando…?") espera al menos 10 segundos.
+Activo por defecto (Ajustar → Conversación). Después de cada respuesta el asistente sigue escuchando para el próximo pedido, sin decir el nombre de nuevo: 15 segundos por defecto, de 4 a 60. Con 30 o más se le puede hablar de corrido, un pedido atrás del otro. Si no decís nada, vuelve en silencio a esperar el nombre. Cuando hace una pregunta ("¿Le mando…?") espera al menos 10 segundos.
 
-Para cerrar antes: "gracias" (responde "De nada"), "chau", "listo", "nada más", "eso es todo". Tiene que ser la frase entera: "gracias, ahora poné una alarma" sigue siendo un pedido. Hay un tope de 15 turnos seguidos sin el nombre, por si la tele o una charla de fondo lo mantienen escuchando.
+Para cerrar antes: "gracias" (responde "De nada"), "chau", "listo", "nada más", "eso es todo". Tiene que ser la frase entera: "gracias, ahora poné una alarma" sigue siendo un pedido. Hay un tope de 40 turnos seguidos sin el nombre, por si la tele o una charla de fondo lo mantienen escuchando.
+
+### Rápido y sin cortarte
+
+- **Tono en vez de "Te escucho"**: al oír su nombre suena un tono corto y empieza a transcribir enseguida (decir "Te escucho" tardaba un segundo, y en ese segundo se perdía el principio del pedido). En los turnos siguientes suena un tono más suave. Si preferís la voz, está "Contestar «Te escucho»" en Ajustar → Conversación.
+- **Pausas**: espera 2 segundos de silencio antes de dar el pedido por terminado (antes 1,5), así podés pensar o respirar a mitad de frase.
+- **Nada se pierde**: si el reconocedor termina con "no entendí" (pasa con frases largas o ruido al final), usa lo último que había entendido mientras hablabas. Si el micrófono todavía no estaba libre, reintenta solo.
+- Entre que termina de hablar y vuelve a escucharte pasan 0,25 s (antes 0,7).
 
 ## Frenarlo ("pará")
 

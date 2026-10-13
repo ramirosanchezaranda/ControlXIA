@@ -76,6 +76,16 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.ControlXIA.Transparent" />
 
+        <!-- Invisible: aparece sobre el bloqueo solo para pedir la huella o el
+             PIN cuando un pedido necesita la pantalla, y se cierra sola. -->
+        <activity
+            android:name=".ui.UnlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.ControlXIA.Transparent" />
+
         <!-- Servicio de escucha persistente. El tipo "microphone" es obligatorio
              para poder usar el micrófono de forma continua (Android 14+ además
              exige el permiso FOREGROUND_SERVICE_MICROPHONE de arriba).

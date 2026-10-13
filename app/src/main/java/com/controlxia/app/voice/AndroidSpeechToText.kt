@@ -23,6 +23,13 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
         onPartial: (String) -> Unit,
         onResult: (String) -> Unit,
         onError: (message: String, noSpeech: Boolean) -> Unit,
+    ) = listen(onPartial, onResult, onError, retried = false)
+
+    private fun listen(
+        onPartial: (String) -> Unit,
+        onResult: (String) -> Unit,
+        onError: (message: String, noSpeech: Boolean) -> Unit,
+        retried: Boolean,
     ) {
         main.post {
             if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -40,6 +47,9 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
             // Algunos reconocedores llaman onError después de onResults (o dos
             // veces onError). Solo cuenta el primer final de cada escucha.
             var finished = false
+            // Lo último que entendió mientras hablabas: si al final dice "no
+            // entendí" (pasa con frases largas o ruido al terminar), vale eso.
+            var lastPartial = ""
             fun finish(block: () -> Unit) {
                 if (finished || recognizer !== sr) return
                 finished = true
@@ -53,8 +63,9 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                         ?.firstOrNull()
                         .orEmpty()
                     finish {
-                        if (text.isBlank()) onError("No se entendió el comando", true)
-                        else onResult(text)
+                        val best = text.ifBlank { lastPartial }
+                        if (best.isBlank()) onError("No se entendió el comando", true)
+                        else onResult(best)
                     }
                 }
 
@@ -63,13 +74,33 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                     partial?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
                         ?.takeIf { it.isNotBlank() }
-                        ?.let(onPartial)
+                        ?.let {
+                            lastPartial = it
+                            onPartial(it)
+                        }
                 }
 
                 override fun onError(error: Int) {
                     val noSpeech = error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
                         error == SpeechRecognizer.ERROR_NO_MATCH
-                    finish { onError(errorMessage(error), noSpeech) }
+                    // El micrófono todavía no se liberó del todo (el motor de la
+                    // palabra recién lo soltó): reintentar una vez enseguida.
+                    if (!retried && (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+                            error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_AUDIO) &&
+                        lastPartial.isBlank() && !finished && recognizer === sr
+                    ) {
+                        finished = true
+                        cancelInternal()
+                        main.postDelayed({ listen(onPartial, onResult, onError, retried = true) }, RETRY_MS)
+                        return
+                    }
+                    finish {
+                        if (lastPartial.isNotBlank() && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                            onResult(lastPartial)
+                        } else {
+                            onError(errorMessage(error), noSpeech)
+                        }
+                    }
                 }
 
                 override fun onReadyForSpeech(params: Bundle?) {}
@@ -108,10 +139,11 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-AR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            // Un poco más de margen para las pausas al hablar, así no corta a
-            // mitad de frase. Algunos reconocedores lo ignoran.
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1_500L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1_500L)
+            // Margen para las pausas al hablar (pensar, respirar), así no corta
+            // a mitad de frase. Algunos reconocedores lo ignoran; para esos
+            // queda el último texto parcial si terminan sin resultado.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_MS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_MS)
         }
 
     private fun errorMessage(error: Int): String = when (error) {
@@ -123,5 +155,11 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
             "Error de red en el reconocimiento"
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "El reconocedor está ocupado"
         else -> "Error de reconocimiento ($error)"
+    }
+
+    private companion object {
+        /** Silencio que da por terminado el pedido. */
+        const val SILENCE_MS = 2_000L
+        const val RETRY_MS = 250L
     }
 }

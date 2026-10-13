@@ -12,7 +12,9 @@ Desde la versión 0.3.0 el asistente resuelve los pedidos en **varios pasos**: e
 |---|---|---|
 | Atajos | `search_in_app`, `open_app_section` | Abren una app en una búsqueda o sección con enlaces directos (Mercado Libre con orden por precio, Instagram Reels/mensajes/perfil, YouTube, Spotify, Maps, TikTok, Netflix, Play Store). Rápido y sin tocar la pantalla. |
 | Pantalla | `screen_read`, `screen_tap`, `screen_type`, `screen_scroll`, `screen_back` | Con el **control de apps** (accesibilidad) lee la pantalla como una lista numerada y toca, escribe o desplaza. Cada acción devuelve la pantalla nueva. |
-| Mensajes | `read_messages`, `reply_to_message`, `send_message`, `save_contact_alias` | Lee los mensajes desde las notificaciones, los responde con la acción "Responder" de la notificación, manda mensajes nuevos por WhatsApp o SMS a contactos, apodos ("mi pareja") o grupos. |
+| Cualquier app | `app_search` | Busca dentro de cualquier otra app instalada usando su propio buscador (toca la lupa, escribe y busca). |
+| Mensajes | `read_messages`, `reply_to_message`, `send_message`, `save_contact_alias` | Lee los mensajes desde las notificaciones, los responde con la acción "Responder" de la notificación, manda mensajes nuevos por WhatsApp o SMS a contactos, apodos ("mi pareja") o grupos, o por Telegram, Messenger, Instagram o Signal buscando el chat en la app. |
+| Notificaciones | `notifications` | Lee las notificaciones de la barra (todas, agrupadas por app, filtrables), abre la más nueva o las borra. |
 | WhatsApp por nombre | `whatsapp_open_chat` | Abre un chat o **grupo** buscándolo por nombre dentro de WhatsApp, en un solo paso (`actions/WhatsAppUi`). |
 | Teléfono | `phone`, `camera`, `call` | Botones y ajustes del sistema, cámara y llamadas: lo mismo que los comandos directos ([VOICE_CONTROL.md](VOICE_CONTROL.md)), para pedidos compuestos ("sacate una selfie y mandásela a Juan"). |
 | Audios | `send_audio` | Graba la voz del usuario o genera el audio con la voz del asistente y lo manda por WhatsApp (con confirmación). |
@@ -107,3 +109,7 @@ Detalle técnico: GPT-6 Luna y Sol solo aceptan herramientas en Chat Completions
 - El número de WhatsApp se arma desde la agenda; con números argentinos guardados sin "+54 9" se intenta normalizar, y si no se puede, busca el chat por nombre en WhatsApp.
 - La búsqueda por nombre en WhatsApp depende de su pantalla (ids internos y textos "Buscar"/"Enviar"); si WhatsApp cambia, puede fallar y el registro del agente dice en qué paso.
 - Un pedido largo tiene un tope de 15 pasos y 2 minutos y medio.
+
+## Con el teléfono bloqueado
+
+Las herramientas que manejan la pantalla (`open_app`, `search_in_app`, `open_app_section`, `app_search`, `whatsapp_open_chat`, `screen_*`, mandar por WhatsApp u otra app) primero piden desbloquear (`actions/UnlockGate`: una actividad invisible sobre el bloqueo llama a `requestDismissKeyguard`, aparece la huella o el PIN) y siguen solas apenas se desbloquea. El modelo no tiene que hacer nada distinto: el prompt le dice que use las herramientas igual. Si no se desbloquea en 30 s, la herramienta lo informa y el pedido termina ahí.

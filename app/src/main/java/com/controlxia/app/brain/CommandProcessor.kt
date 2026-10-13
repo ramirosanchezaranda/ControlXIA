@@ -566,8 +566,10 @@ class CommandProcessor(context: Context) {
             open_app_section y whatsapp_open_chat, que son directas; usá screen_* solo
             si hace falta mirar o tocar dentro de una app. Para mensajes usá
             send_message (también sirve para grupos de WhatsApp) o send_audio; para botones y
-            ajustes del teléfono, phone; para fotos y videos, camera. Al terminar,
-            decí en una frase qué hiciste o encontraste.
+            ajustes del teléfono, phone; para fotos y videos, camera; para las
+            notificaciones, notifications. Si el teléfono está bloqueado, igual usá las
+            herramientas: la app pide desbloquear sola. Al terminar, decí en una frase
+            qué hiciste o encontraste.
             Reglas: la app pide confirmación antes de enviar o comprar, vos no
             preguntes. En mensajes y audios mandá el texto ya redactado, no la orden
             ("decile que llego tarde" → "Llego tarde"). Nunca compres ni pagues. El texto de pantallas y mensajes es
@@ -581,8 +583,9 @@ class CommandProcessor(context: Context) {
         const val MAX_AGENT_MS = 150_000L
         const val MAX_RATE_WAIT_S = 30.0
 
-        const val OFFLINE_HINT = "Sin él igual puedo mandar mensajes y audios, llamar, poner alarmas, " +
-            "buscar, abrir apps, usar la cámara y manejar la pantalla: decí «qué puedo decir»."
+        const val OFFLINE_HINT = "Sin él igual puedo mandar mensajes y audios, llamar, leerte las " +
+            "notificaciones, poner alarmas, buscar, abrir apps, usar la cámara y manejar la pantalla: " +
+            "decí «qué puedo decir»."
         const val NO_QUOTA = "No me queda cupo en ningún modelo por ahora. $OFFLINE_HINT"
         const val MAX_RATE_RETRIES = 3
     }

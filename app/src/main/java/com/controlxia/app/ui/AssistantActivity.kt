@@ -54,8 +54,10 @@ class AssistantActivity : ComponentActivity() {
                 val ui by AssistantState.state.collectAsState()
 
                 // Cerrar cuando la interacción vuelve a IDLE.
-                LaunchedEffect(ui.phase) {
+                LaunchedEffect(ui.phase, ui.locked) {
                     if (ui.phase == AssistantState.Phase.IDLE) finish()
+                    // Se desbloqueó para usar una app: sigue la burbuja sobre la app.
+                    if (!ui.locked) finish()
                 }
 
                 // Tocar la pantalla frena lo que esté haciendo o diciendo.

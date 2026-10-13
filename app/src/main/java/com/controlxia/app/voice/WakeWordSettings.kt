@@ -48,8 +48,17 @@ class WakeWordSettings(context: Context) {
 
     /** Cuántos segundos espera el próximo pedido en modo conversación. */
     var conversationSeconds: Int
-        get() = prefs.getInt(KEY_CONVERSATION_SECONDS, 8).coerceIn(MIN_WAIT_S, MAX_WAIT_S)
+        get() = prefs.getInt(KEY_CONVERSATION_SECONDS, DEFAULT_WAIT_S).coerceIn(MIN_WAIT_S, MAX_WAIT_S)
         set(value) = prefs.edit().putInt(KEY_CONVERSATION_SECONDS, value.coerceIn(MIN_WAIT_S, MAX_WAIT_S)).apply()
+
+    /**
+     * Al oír su nombre, contesta "Te escucho" en voz alta. Apagado (lo normal)
+     * suena un tono corto y escucha enseguida, así no se pierde el principio
+     * de lo que decís.
+     */
+    var spokenAck: Boolean
+        get() = prefs.getBoolean(KEY_SPOKEN_ACK, false)
+        set(value) = prefs.edit().putBoolean(KEY_SPOKEN_ACK, value).apply()
 
     /**
      * "Pausa con las manos": mientras se reproduce algo, la cámara frontal mira
@@ -69,7 +78,10 @@ class WakeWordSettings(context: Context) {
 
     companion object {
         const val MIN_WAIT_S = 4
-        const val MAX_WAIT_S = 20
+        const val MAX_WAIT_S = 60
+        const val DEFAULT_WAIT_S = 15
+
+        private const val KEY_SPOKEN_ACK = "spoken_ack"
 
         private const val KEY_HANDS = "hands_pause"
         private const val KEY_CONVERSATION = "conversation_mode"

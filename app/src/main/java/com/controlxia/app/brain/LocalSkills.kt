@@ -54,6 +54,9 @@ object LocalSkills {
      * ("…que llego tarde y poneme una alarma"): el resto es el mensaje.
      */
     fun isCompound(text: String, skill: Skill): Boolean = when {
+        // "Abrí Spotify y tocá Biblioteca" son dos pasos, pero esta habilidad hace los dos.
+        skill is Tool && skill.name == "app_tap" ->
+            Regex("\\b(?:y|despues|luego)\\b").containsMatchIn(plain(skill.args["label"]?.toString().orEmpty()))
         skill is Tool && skill.name in setOf("send_message", "send_audio") ->
             COMPOUND_TAIL.containsMatchIn(plain(skill.args["text"]?.toString().orEmpty()))
         skill is ReplyLast -> COMPOUND_TAIL.containsMatchIn(plain(skill.text))
@@ -225,7 +228,19 @@ object LocalSkills {
         return "¿${sentence(body)}?"
     }
 
-    private fun via(n: String): String = if (Regex("\\b(?:sms|mensaje de texto)\\b").containsMatchIn(n)) "sms" else "whatsapp"
+    private fun via(n: String): String =
+        Regex("\\bpor (telegram|messenger|instagram|signal)\\b").find(n)?.groupValues?.get(1)
+            ?: if (Regex("\\b(?:sms|mensaje de texto)\\b").containsMatchIn(n)) "sms" else "whatsapp"
+
+    /** "Llego tarde por Telegram" → el mensaje sin la app ("Llego tarde") y la app. */
+    private fun message(tool: String, contact: String, text: String, n: String): Skill {
+        val tail = Regex("\\s+(?:por|en|via) (telegram|messenger|instagram|signal|whatsapp|wasap|sms)[.!]?$", RegexOption.IGNORE_CASE).find(text)
+        val app = tail?.groupValues?.get(1)?.lowercase()?.let { if (it == "wasap") "whatsapp" else it } ?: via(n)
+        val body = tail?.let { text.removeRange(it.range).trim() } ?: text
+        return Tool(tool, mapOf("contact" to contact, "text" to body, "app" to app))
+    }
+
+    private const val CHAT_APPS = "whatsapp|sms|telegram|messenger|instagram|signal"
 
     // ---- Búsquedas y secciones ----
 
@@ -262,6 +277,12 @@ object LocalSkills {
     )
     private val SECTION_NAMES = SECTIONS.keys.sortedByDescending { it.length }.joinToString("|")
 
+    private fun notifications(action: String, filter: String?): Skill {
+        val args = mutableMapOf<String, Any>("action" to action)
+        filter?.removePrefix("la ")?.removePrefix("el ")?.trim()?.takeIf { it.isNotEmpty() }?.let { args["filter"] = it }
+        return Tool("notifications", args)
+    }
+
     private val ALIASES = "pareja|mama|papa|jefe|jefa|novia|novio|esposa|esposo|mujer|marido|hermano|hermana|hijo|hija|abuela|abuelo|tia|tio|amigo|amiga|vieja|viejo"
 
     private val RULES: List<Pair<Regex, (MatchResult, String) -> Skill?>> = listOf(
@@ -293,13 +314,13 @@ object LocalSkills {
         },
 
         // Mensajes: "mandale a Juan que llego tarde", "decile a mi pareja que la quiero"
-        Regex("$SEND(?:$MSG)? (?:a |al |a la |para )(.+?) (?:por (?:whatsapp|sms) )?$SAY (.+)") to { m, original ->
+        Regex("$SEND(?:$MSG)? (?:a |al |a la |para )(.+?) (?:(?:por|en) (?:$CHAT_APPS) )?$SAY (.+)") to { m, original ->
             val text = messageAfter(original, setOf("que", "diciendo", "diciendole"), skipWords = 2) ?: return@to null
-            Tool("send_message", mapOf("contact" to m.groupValues[1], "text" to text, "app" to via(m.value)))
+            message("send_message", m.groupValues[1], text, m.value)
         },
-        Regex("(?:decile|decirle|avisale|contale|deciles|avisales) a (.+?) que (.+)") to { m, original ->
+        Regex("(?:decile|decirle|avisale|contale|deciles|avisales) a (.+?) (?:(?:por|en) (?:$CHAT_APPS) )?que (.+)") to { m, original ->
             val text = messageAfter(original, setOf("que"), skipWords = 2) ?: return@to null
-            Tool("send_message", mapOf("contact" to m.groupValues[1], "text" to text, "app" to "whatsapp"))
+            message("send_message", m.groupValues[1], text, m.value)
         },
         Regex("(?:preguntale|preguntales) (?:a |al )(.+?) (si|que|cuando|donde|como|a que hora) (.+)") to { m, original ->
             // La pregunta empieza después de "preguntale a <contacto>" en el texto original.
@@ -318,8 +339,22 @@ object LocalSkills {
             ReplyLast(text, m.groups[1]?.value)
         },
 
+        // Notificaciones: "leeme las notificaciones", "qué notificaciones tengo", "borrá las notificaciones"
+        Regex("(?:leeme|lee|leer|leelas|decime|que dicen|que me dicen|cuales son|repasame|contame)(?: las| mis)?(?: ultimas| nuevas)? notificaciones(?: nuevas| que tengo)?(?: (?:de|del|en) (.+))?") to { m, _ ->
+            notifications("read", m.groups[1]?.value)
+        },
+        Regex("(?:que |cuantas )?notificaciones (?:tengo|hay|me llegaron|nuevas)(?: (?:de|del|en) (.+))?|(?:tengo|hay|me llegaron|llegaron) (?:alguna |algunas )?notificaci(?:on|ones)(?: nuevas?)?(?: (?:de|del) (.+))?") to { m, _ ->
+            notifications("read", m.groups[1]?.value ?: m.groups[2]?.value)
+        },
+        Regex("(?:borra|borrame|borrar|limpia|limpiame|limpiar|descarta|descartar|elimina|eliminar|saca|sacame|cerra|quita) (?:todas )?(?:las |mis )?notificaciones") to { _, _ ->
+            notifications("clear", null)
+        },
+        Regex("(?:abri|abrime|abrir|toca|entra a|entra en|anda a) (?:la )?(?:ultima )?notificacion(?: (?:de|del) (.+))?") to { m, _ ->
+            notifications("open", m.groups[1]?.value)
+        },
+
         // Leer mensajes
-        Regex("(?:leeme|lee|leer|leeme los|decime|que dicen|que me dicen|cuales son)(?: los| mis| las)?(?: ultimos| nuevos)? (?:mensajes|whatsapps|wasaps|notificaciones|chats)(?: nuevos)?(?: de (.+?))?(?: (?:de|en|por) (whatsapp|telegram|instagram|sms|messenger))?") to { m, _ ->
+        Regex("(?:leeme|lee|leer|leeme los|decime|que dicen|que me dicen|cuales son)(?: los| mis| las)?(?: ultimos| nuevos)? (?:mensajes|whatsapps|wasaps|chats)(?: nuevos)?(?: de (.+?))?(?: (?:de|en|por) (whatsapp|telegram|instagram|sms|messenger))?") to { m, _ ->
             val from = m.groups[1]?.value?.takeIf { it !in setOf("whatsapp", "telegram", "instagram", "sms") }
             ReadMessages(from = from, app = m.groups[2]?.value ?: m.groups[1]?.value?.takeIf { it in setOf("whatsapp", "telegram", "instagram", "sms") })
         },
@@ -335,6 +370,12 @@ object LocalSkills {
         Regex("(?:pone|poneme|reproduci|pasame|quiero escuchar|quiero ver) (.+?) en (youtube|spotify)") to { m, _ ->
             search(APPS.getValue(m.groupValues[2]), m.groupValues[1])
         },
+        // Cualquier otra app: "buscá pizza en PedidosYa" (con su buscador; si no existe, Google).
+        Regex("(?:busca|buscame|buscar|busques) (.+) en (?:la app (?:de )?|la aplicacion (?:de )?)?([a-z0-9ñ]+(?: [a-z0-9ñ]+)?)") to { m, _ ->
+            val query = m.groupValues[1].replace(Regex("^(?:a |al |el |la |los |las )"), "").trim()
+            if (query.isEmpty() || Regex("\\b(?:chat|grupo|contacto|mensaje|archivo|foto)\\b").containsMatchIn(query)) null
+            else Tool("app_search", mapOf("app" to m.groupValues[2], "query" to query))
+        },
         Regex("(?:busca|buscame|buscar|googlea|googlear) (.+)") to { m, _ ->
             // Sin app: Google, salvo pedidos que son de otra cosa ("buscá el chat de…").
             if (Regex("\\b(?:chat|grupo|contacto|mensaje|archivo|foto)\\b").containsMatchIn(m.groupValues[1])) null
@@ -347,6 +388,14 @@ object LocalSkills {
         },
         Regex("(?:llevame|como llego|navega|navegar|guiame) (?:a|hasta|al|a la) (.+)") to { m, _ ->
             Tool("open_app_section", mapOf("app" to "google_maps", "section" to "navigate", "value" to m.groupValues[1]))
+        },
+
+        // Tocar algo dentro de una app: "en Spotify tocá Biblioteca", "abrí Spotify y tocá Biblioteca"
+        Regex("en ([a-z0-9ñ]+(?: [a-z0-9ñ]+)?) (?:toca|tocame|presiona|apreta|pulsa|selecciona|anda a|entra a|entra en) (?:el |la |los |las |en |a )?(.+)") to { m, original ->
+            Tool("app_tap", mapOf("app" to m.groupValues[1], "label" to originalWords(original, m.groupValues[2])))
+        },
+        Regex("(?:abri|abrime|entra a|entra en|anda a) ([a-z0-9ñ]+(?: [a-z0-9ñ]+)?) y (?:toca|tocame|presiona|apreta|pulsa|selecciona|anda a|entra a|entra en) (?:el |la |los |las |en |a )?(.+)") to { m, original ->
+            Tool("app_tap", mapOf("app" to m.groupValues[1], "label" to originalWords(original, m.groupValues[2])))
         },
 
         // Chats de WhatsApp: "abrí el chat de Juan", "abrí el grupo fútbol 2"

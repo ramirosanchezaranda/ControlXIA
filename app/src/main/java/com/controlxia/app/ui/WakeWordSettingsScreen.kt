@@ -73,6 +73,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
     var showLockedContent by remember { mutableStateOf(settings.showContentWhenLocked) }
     var conversation by remember { mutableStateOf(settings.conversationMode) }
     var waitSeconds by remember { mutableFloatStateOf(settings.conversationSeconds.toFloat()) }
+    var spokenAck by remember { mutableStateOf(settings.spokenAck) }
 
     Column(Modifier.fillMaxSize()) {
         TechTopBar(title = "Asistente y activación", onBack = onBack)
@@ -153,10 +154,36 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                         value = waitSeconds,
                         onValueChange = { waitSeconds = it },
                         valueRange = WakeWordSettings.MIN_WAIT_S.toFloat()..WakeWordSettings.MAX_WAIT_S.toFloat(),
-                        steps = WakeWordSettings.MAX_WAIT_S - WakeWordSettings.MIN_WAIT_S - 1,
                         onValueChangeFinished = { settings.conversationSeconds = waitSeconds.roundToInt() },
                     )
+                    Text(
+                        "Con 30 s o más podés hablarle de corrido: cada pedido sigue al anterior " +
+                            "hasta que digas «gracias» o te quedes callado.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
                 }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Contestar «Te escucho»", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Apagado suena un tono corto y escucha al instante: es más rápido y no se " +
+                            "pierde el principio de lo que decís.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                }
+                Switch(
+                    checked = spokenAck,
+                    onCheckedChange = {
+                        spokenAck = it
+                        settings.spokenAck = it
+                    },
+                )
             }
 
             HandsPauseContent(settings)

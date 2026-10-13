@@ -30,6 +30,11 @@ object AssistantState {
         _state.value = _state.value.copy(phase = phase, status = status)
     }
 
+    /** Se desbloqueó en medio del pedido: la pantalla sobre el bloqueo ya no hace falta. */
+    fun unlocked() {
+        _state.value = _state.value.copy(locked = false)
+    }
+
     fun idle() {
         _state.value = _state.value.copy(phase = Phase.IDLE, status = "")
     }

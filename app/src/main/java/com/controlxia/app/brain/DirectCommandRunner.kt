@@ -7,6 +7,7 @@ import com.controlxia.app.actions.Contacts
 import com.controlxia.app.actions.DeviceControl
 import com.controlxia.app.actions.PhoneCalls
 import com.controlxia.app.actions.ScreenNumbers
+import com.controlxia.app.actions.UnlockGate
 import com.controlxia.app.brain.DirectCommands.CameraAction
 import com.controlxia.app.brain.DirectCommands.Command
 import com.controlxia.app.diagnostics.AgentLog
@@ -30,6 +31,10 @@ class DirectCommandRunner(private val context: Context) {
     /** Ejecuta [command]. null = no se pudo resolver acá: que lo intente el modelo. */
     suspend fun run(command: Command): Reply? {
         AgentLog.add("DIRECTO $command")
+        // Con el teléfono bloqueado, lo que necesita la pantalla pide la huella primero.
+        unlockReason(command)?.let { why ->
+            if (!UnlockGate.unlock(context, why)) return Reply(UnlockGate.NOT_UNLOCKED)
+        }
         return when (command) {
             is DirectCommands.Global -> {
                 val label = GLOBAL_LABELS.getValue(command.action)
@@ -98,9 +103,14 @@ class DirectCommandRunner(private val context: Context) {
             DirectCommands.Enter -> done(ScreenNumbers.enter(), "Enter")
             is DirectCommands.Camera -> camera(command.action)
             is DirectCommands.OpenApp -> {
-                val result = apps.open(command.name)
+                var result = apps.open(command.name)
                 // Sin una app con ese nombre puede ser otra cosa ("abrí el mapa"): al modelo.
                 if (result.startsWith("No encontré la app")) return null
+                // Existe pero está bloqueado: pedir la huella y abrirla.
+                if (UnlockGate.isLockedMessage(result)) {
+                    if (!UnlockGate.unlock(context, "para abrir ${command.name}")) return Reply(UnlockGate.NOT_UNLOCKED)
+                    result = apps.open(command.name)
+                }
                 if (result.startsWith("Abriendo")) Reply("", shown = result) else Reply(result)
             }
             DirectCommands.Help -> Reply(HELP)
@@ -121,6 +131,18 @@ class DirectCommandRunner(private val context: Context) {
             DirectCommands.AnswerCall -> done(calls.answer(), "Llamada atendida")
             DirectCommands.HangUp -> done(calls.hangUp(), "Llamada cortada")
         }
+    }
+
+    /** Por qué hay que desbloquear para [command], o null si anda bloqueado (o no le importa). */
+    private fun unlockReason(command: Command): String? = when (command) {
+        is DirectCommands.Toggle, is DirectCommands.SettingsScreen -> "para cambiar los ajustes"
+        DirectCommands.PreviousApp -> "para volver a la app anterior"
+        is DirectCommands.Camera -> when (command.action) {
+            // La foto anda sobre el bloqueo (cámara segura); el resto necesita la cámara completa.
+            CameraAction.OPEN_VIDEO, CameraAction.SELFIE, CameraAction.START_VIDEO -> "para usar la cámara"
+            else -> null
+        }
+        else -> null
     }
 
     private suspend fun camera(action: CameraAction): Reply = when (action) {
@@ -196,10 +218,11 @@ class DirectCommandRunner(private val context: Context) {
             DirectCommands.Setting.MOBILE_DATA to "Datos",
         )
         const val HELP = "Sin internet para el modelo podés decir: mandale a Juan que llego tarde, " +
-            "mandale un audio a Juan, llamá a mamá, leeme los mensajes, respondele que sí, poné una " +
-            "alarma a las 7, temporizador de 5 minutos, agendá dentista el jueves a las 4, cuánto es " +
-            "25 por 4, buscá zapatillas en Mercado Libre, abrí los reels, abrí una app, sacá una foto, " +
-            "activá no molestar o el wifi, subí el volumen, pausa, y para cualquier pantalla: mostrá " +
-            "los números y tocá uno, bajá, atrás, inicio. Para frenarme, decí pará."
+            "por Telegram también, mandale un audio a Juan, llamá a mamá, leeme los mensajes o las " +
+            "notificaciones, respondele que sí, poné una alarma a las 7, temporizador de 5 minutos, " +
+            "agendá dentista el jueves a las 4, cuánto es 25 por 4, buscá pizza en cualquier app, en " +
+            "Spotify tocá Biblioteca, abrí los reels, sacá una foto, activá no molestar o el wifi, " +
+            "subí el volumen, pausa, y para cualquier pantalla: mostrá los números y tocá uno, bajá, " +
+            "atrás, inicio. Bloqueado también: si hace falta te pido la huella. Para frenarme, decí pará."
     }
 }

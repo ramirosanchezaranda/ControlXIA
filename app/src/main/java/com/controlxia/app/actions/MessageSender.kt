@@ -1,6 +1,5 @@
 package com.controlxia.app.actions
 
-import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -44,8 +43,7 @@ class MessageSender(private val context: Context) {
     }
 
     suspend fun sendWhatsApp(contact: Contacts.Contact, number: String, text: String): String {
-        val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-        if (keyguard.isKeyguardLocked) return "Desbloqueá el teléfono para mandar por WhatsApp."
+        if (!UnlockGate.unlock(context, "para mandarlo por WhatsApp")) return UnlockGate.NOT_UNLOCKED
         if (!PermissionManager.canLaunchActivities(context)) {
             return "Para abrir WhatsApp necesito el permiso Mostrar sobre otras apps."
         }
