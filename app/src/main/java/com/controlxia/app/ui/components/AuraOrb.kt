@@ -5,13 +5,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -27,6 +21,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import com.controlxia.app.ui.theme.Aura
+import com.controlxia.app.ui.theme.rememberAnimationClock
 import com.controlxia.app.ui.theme.rememberReduceMotion
 import com.controlxia.app.voice.AssistantState
 import kotlin.math.PI
@@ -79,25 +74,11 @@ fun AuraOrb(
         animationSpec = spring(dampingRatio = 0.55f, stiffness = 260f),
         label = "orb-energy",
     )
-    val currentSpeed by rememberUpdatedState(if (reduce) 0f else speed)
-    // Reloj propio: así la velocidad cambia sin saltos.
-    var time by remember { mutableFloatStateOf(0f) }
-    var beat by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(reduce) {
-        // Con las animaciones del sistema apagadas, la esfera queda quieta.
-        if (reduce) return@LaunchedEffect
-        var last = 0L
-        while (true) {
-            withFrameNanos { now ->
-                if (last != 0L) {
-                    val dt = ((now - last) / 1e9f).coerceAtMost(0.05f)
-                    time += dt * currentSpeed
-                    beat += dt
-                }
-                last = now
-            }
-        }
-    }
+    // Relojes propios: la velocidad cambia sin saltos. En reposo alcanza con
+    // 30 cuadros por segundo; con las animaciones apagadas o en ahorro, quieta.
+    val fps = if (mood == OrbMood.IDLE) 30 else 60
+    val time by rememberAnimationClock(fps, running = !reduce, speed = { speed })
+    val beat by rememberAnimationClock(fps, running = !reduce)
     val speaking = mood == OrbMood.SPEAKING
     val palette = Aura.colors.orb
 
@@ -254,17 +235,8 @@ fun VoiceWave(modifier: Modifier = Modifier, level: Float, active: Boolean = tru
         label = "wave-amp",
     )
     val shown by animateFloatAsState(if (active) 1f else 0f, spring(dampingRatio = 1f, stiffness = 120f), label = "wave-shown")
-    var time by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(reduce) {
-        if (reduce) return@LaunchedEffect
-        var last = 0L
-        while (true) {
-            withFrameNanos { now ->
-                if (last != 0L) time += ((now - last) / 1e9f).coerceAtMost(0.05f)
-                last = now
-            }
-        }
-    }
+    // Solo se mueve mientras escucha (o mientras se apaga): oculta no gasta nada.
+    val time by rememberAnimationClock(60, running = !reduce && (active || shown > 0.01f))
     val waveColors = Aura.colors.orb.wave
     Canvas(modifier.graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen, alpha = shown)) {
         if (shown <= 0.01f) return@Canvas

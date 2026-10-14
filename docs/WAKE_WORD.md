@@ -56,6 +56,23 @@ Prueba con el modelo real y voz sintetizada (2 voces × 2 velocidades, sensibili
 
 Mientras habla, el teléfono puede taparse a sí mismo: se activa el cancelador de eco si el equipo lo tiene, pero si "basta" no lo frena, decí su nombre (más tolerante) o tocá la píldora.
 
+## Batería
+
+Esperar el nombre tiene el micrófono abierto todo el tiempo, pero lo que más gasta es el reconocedor, no el micrófono. Desde la 0.11.0:
+
+- **No reconoce en silencio.** `SpeechGate` mide el volumen de cada bloque de 100 ms contra el ruido de fondo, que aprende solo. Mientras no hay nada más fuerte que el fondo (×2, unos +6 dB), Vosk no trabaja. Cuando aparece sonido, le pasa también el segundo anterior (para no perder el comienzo del nombre) y sigue reconociendo hasta 1,2 s después de que vuelve el silencio. En una casa en silencio, el reconocedor queda apagado la mayor parte del día.
+- **Pausa con la pantalla apagada si conviene** (Ajustar → Batería): con la pantalla apagada y sin cargar, se pausa si la batería está baja (15 % o menos) o en modo ahorro. También se puede elegir no escuchar nunca con la pantalla apagada. Al prender la pantalla o enchufar el cargador vuelve solo; con la pantalla prendida o cargando escucha siempre. El estado lo dice ("En pausa por batería baja…").
+
+Pruebas con el modelo real, voz sintetizada y ruido de fondo agregado (3 semillas de ruido), con y sin la compuerta:
+
+| Ruido de fondo | Nombre detectado | Falsas alarmas (de 42) | Flujo de 70 s (9 nombres) |
+|---|---|---|---|
+| Sin ruido | 24/24 igual | 5 con compuerta, 4 sin | 9/9 igual |
+| Moderado (RMS 150) | 24/24 igual | 3–4 con compuerta, 6–7 sin | 9/9 igual |
+| Fuerte (RMS 400) | 24/24 igual | 7–8 con compuerta, 6–7 sin | 0–3 activaciones de más con compuerta, 2–5 sin |
+
+Es decir: detecta igual y, con ruido moderado, se activa sola menos que antes. "Pará" sin ruido se reconoce igual que sin la compuerta.
+
 ## Resultados de las pruebas
 
 Se probó el mismo código Kotlin de la app (`WakePhraseDetector`) con el modelo real y voz sintetizada (espeak-ng) a tres velocidades:

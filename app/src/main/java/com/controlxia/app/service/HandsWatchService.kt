@@ -10,10 +10,16 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.media.AudioManager
 import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
+import android.content.IntentFilter
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureRequest
+import android.media.AudioPlaybackConfiguration
+import android.util.Range
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -33,6 +39,7 @@ import com.controlxia.app.actions.Gestures
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.GestureModel
+import com.controlxia.app.voice.Feedback
 import com.controlxia.app.voice.HandSigns
 import com.controlxia.app.voice.WakeWordSettings
 import com.google.mediapipe.framework.image.BitmapImageBuilder
@@ -70,7 +77,9 @@ class HandsWatchService : LifecycleService() {
     private var lastFrameAt = 0L
     private var streak = 0
     private var lastTrigger = 0L
+    private var lastHandAt = 0L
     private val signs = HandSigns.Trigger()
+    private val feedback by lazy { Feedback(this) }
     @Volatile
     private var gesturesOn = true
 
@@ -119,37 +128,67 @@ class HandsWatchService : LifecycleService() {
         }.onFailure { AgentLog.add("MANOS no pude cargar el modelo: ${it.message}") }.getOrNull()
     }
 
-    /** Prende la cámara mientras algo se reproduce; la apaga cuando para. */
+    /**
+     * Prende la cámara mientras algo se reproduce o hay una app de videos
+     * adelante, con la pantalla prendida; la apaga a los segundos de que no.
+     * Reacciona a avisos del sistema (reproducción, app adelante, pantalla) en
+     * vez de revisar todo el tiempo; un control lento cubre lo que se escape.
+     */
     private fun watchPlayback() {
-        val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audio.registerAudioPlaybackCallback(playbackCallback, handler)
+        XiaAccessibilityService.foregroundListeners += foregroundListener
+        ContextCompat.registerReceiver(
+            this, screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         lifecycleScope.launch {
-            var quietSince = 0L
             while (isActive) {
                 gesturesOn = WakeWordSettings(this@HandsWatchService).handGestures
-                // Reels sin sonido también cuentan: alcanza con que haya una app de videos adelante.
-                val playing = runCatching { audio.isMusicActive }.getOrDefault(false) || videoAppInFront()
-                val now = SystemClock.elapsedRealtime()
-                if (playing) {
-                    quietSince = 0L
-                    if (!cameraOn) bindCamera()
-                } else {
-                    if (quietSince == 0L) quietSince = now
-                    if (cameraOn && now - quietSince > CAMERA_OFF_AFTER_MS) unbindCamera()
-                }
-                delay(POLL_MS)
+                evaluate()
+                delay(HEARTBEAT_MS)
             }
         }
     }
 
-    private fun videoAppInFront(): Boolean = runCatching {
-        XiaAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() in VIDEO_APPS
-    }.getOrDefault(false)
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val audio by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    private val power by lazy { getSystemService(PowerManager::class.java) }
+    private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
+        override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) = evaluate()
+    }
+    private val foregroundListener: (String) -> Unit = { handler.post { evaluate() } }
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = evaluate()
+    }
+    private val turnOffIfQuiet = Runnable { if (!wanted() && cameraOn) unbindCamera() }
+
+    /** Hace falta mirar: pantalla prendida y algo reproduciéndose (o una app de videos adelante). */
+    private fun wanted(): Boolean =
+        power.isInteractive &&
+            (runCatching { audio.isMusicActive }.getOrDefault(false) ||
+                XiaAccessibilityService.foregroundPackage in VIDEO_APPS)
+
+    private fun evaluate() {
+        if (wanted()) {
+            handler.removeCallbacks(turnOffIfQuiet)
+            if (!cameraOn) bindCamera()
+        } else if (cameraOn) {
+            // Con la pantalla apagada, enseguida; si no, unos segundos (puede ser un corte entre videos).
+            handler.removeCallbacks(turnOffIfQuiet)
+            handler.postDelayed(turnOffIfQuiet, if (power.isInteractive) CAMERA_OFF_AFTER_MS else 0L)
+        }
+    }
 
     @SuppressLint("MissingPermission")
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
     private fun bindCamera() {
         val cameras = provider ?: return
         if (recognizer == null) return
-        val analysis = ImageAnalysis.Builder()
+        val builder = ImageAnalysis.Builder()
             .setResolutionSelector(
                 ResolutionSelector.Builder()
                     .setResolutionStrategy(
@@ -159,7 +198,11 @@ class HandsWatchService : LifecycleService() {
             )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-            .build()
+        // Solo se analizan unos 5 cuadros por segundo: que la cámara tampoco saque 30.
+        lowestFpsRange(cameras)?.let { range ->
+            Camera2Interop.Extender(builder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
+        }
+        val analysis = builder.build()
         analysis.setAnalyzer(analysisExecutor) { image -> analyze(image) }
         val ok = runCatching {
             cameras.unbindAll()
@@ -168,6 +211,18 @@ class HandsWatchService : LifecycleService() {
         cameraOn = ok.isSuccess
         AgentLog.add(if (cameraOn) "MANOS cámara prendida (se está reproduciendo algo)" else "MANOS no pude usar la cámara: ${ok.exceptionOrNull()?.message}")
     }
+
+    /** El rango de cuadros por segundo más bajo que acepta la cámara frontal (al menos 8). */
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+    private fun lowestFpsRange(cameras: ProcessCameraProvider): Range<Int>? = runCatching {
+        val front = cameras.availableCameraInfos.firstOrNull {
+            CameraSelector.DEFAULT_FRONT_CAMERA.filter(listOf(it)).isNotEmpty()
+        } ?: return@runCatching null
+        Camera2CameraInfo.from(front)
+            .getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+            ?.filter { it.upper >= MIN_CAMERA_FPS }
+            ?.minWithOrNull(compareBy<Range<Int>> { it.upper }.thenBy { it.lower })
+    }.getOrNull()
 
     private fun unbindCamera() {
         runCatching { provider?.unbindAll() }
@@ -180,8 +235,9 @@ class HandsWatchService : LifecycleService() {
     private fun analyze(image: ImageProxy) {
         try {
             val now = SystemClock.elapsedRealtime()
-            // ~5 cuadros por segundo alcanzan y ahorran batería.
-            if (now - lastFrameAt < FRAME_MS) return
+            // ~5 cuadros por segundo con una mano a la vista; ~3 si hace rato que no hay ninguna.
+            val interval = if (now - lastHandAt < ACTIVE_WINDOW_MS) FRAME_MS else IDLE_FRAME_MS
+            if (now - lastFrameAt < interval) return
             lastFrameAt = now
             // Mientras el asistente atiende, no hace falta mirar.
             if (AssistantState.state.value.phase != AssistantState.Phase.IDLE) {
@@ -191,6 +247,7 @@ class HandsWatchService : LifecycleService() {
             val engine = recognizer ?: return
             val frame = upright(image.toBitmap(), image.imageInfo.rotationDegrees)
             val result = engine.recognize(BitmapImageBuilder(frame).build())
+            if (result.landmarks().isNotEmpty()) lastHandAt = now
             // Dos palmas abiertas, con la muñeca en la parte de arriba de la imagen.
             val raised = result.gestures().indices.count { hand ->
                 val top = result.gestures()[hand].firstOrNull() ?: return@count false
@@ -232,7 +289,7 @@ class HandsWatchService : LifecycleService() {
     /** Hace lo que pide la seña, en la app que esté adelante. */
     private fun perform(sign: HandSigns.Sign) {
         AgentLog.add("MANOS seña ${sign.name}")
-        vibrate()
+        feedback.vibrate(25)
         lifecycleScope.launch {
             val device = DeviceControl(this@HandsWatchService)
             when (sign) {
@@ -255,18 +312,6 @@ class HandsWatchService : LifecycleService() {
         val service = XiaAccessibilityService.instance ?: return
         val metrics = resources.displayMetrics
         Gestures.doubleTapAt(service, metrics.widthPixels / 2f, metrics.heightPixels * 0.45f)
-    }
-
-    @Suppress("DEPRECATION")
-    private fun vibrate() {
-        runCatching {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-            } else {
-                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            }
-            vibrator.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE))
-        }
     }
 
     private fun onHandsUp() {
@@ -293,6 +338,10 @@ class HandsWatchService : LifecycleService() {
 
     override fun onDestroy() {
         running = false
+        handler.removeCallbacksAndMessages(null)
+        runCatching { audio.unregisterAudioPlaybackCallback(playbackCallback) }
+        XiaAccessibilityService.foregroundListeners -= foregroundListener
+        runCatching { unregisterReceiver(screenReceiver) }
         runCatching { provider?.unbindAll() }
         analysisExecutor.shutdown()
         runCatching { recognizer?.close() }
@@ -303,7 +352,11 @@ class HandsWatchService : LifecycleService() {
     companion object {
         private const val NOTIFICATION_ID = 1003
         private const val ACTION_STOP = "com.controlxia.app.action.HANDS_STOP"
-        private const val POLL_MS = 1_500L
+        /** Control lento por si se escapa algún aviso del sistema. */
+        private const val HEARTBEAT_MS = 10_000L
+        private const val IDLE_FRAME_MS = 350L
+        private const val ACTIVE_WINDOW_MS = 4_000L
+        private const val MIN_CAMERA_FPS = 8
         private const val CAMERA_OFF_AFTER_MS = 8_000L
         private const val FRAME_MS = 200L
         private const val FRAMES_NEEDED = 3

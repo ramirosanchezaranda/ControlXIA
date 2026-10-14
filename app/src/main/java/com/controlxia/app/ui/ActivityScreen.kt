@@ -16,14 +16,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,7 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.diagnostics.AgentLog
-import com.controlxia.app.service.WakeWordService
+import com.controlxia.app.service.ServiceStatus
 import com.controlxia.app.ui.components.AuraOrb
 import com.controlxia.app.ui.components.ChatBubble
 import com.controlxia.app.ui.components.LargeTitle
@@ -44,7 +41,6 @@ import com.controlxia.app.ui.theme.Mono
 import com.controlxia.app.ui.theme.staggerReveal
 import com.controlxia.app.voice.RecentCommandsStore
 import com.controlxia.app.voice.WakeWordSettings
-import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -60,18 +56,10 @@ fun ActivityScreen(contentPadding: PaddingValues) {
     val context = LocalContext.current
     val colors = Aura.colors
     val agentName = remember { WakeWordSettings(context).agentName }
-    var lastReply by remember { mutableStateOf(WakeWordService.lastReply) }
-    var lastCommand by remember { mutableStateOf(WakeWordService.lastCommand) }
-    var logVersion by remember { mutableIntStateOf(AgentLog.version) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            lastReply = WakeWordService.lastReply
-            lastCommand = WakeWordService.lastCommand
-            logVersion = AgentLog.version
-            delay(1_000)
-        }
-    }
-    val history = remember(lastReply, lastCommand) { RecentCommandsStore(context).all().asReversed() }
+    // Se actualizan solos cuando hay un pedido nuevo o el registro cambia.
+    val service by ServiceStatus.state.collectAsState()
+    val logVersion by AgentLog.changes.collectAsState()
+    val history = remember(service.lastReply, service.lastCommand) { RecentCommandsStore(context).all().asReversed() }
     val log = remember(logVersion) { AgentLog.recent(40).asReversed() }
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {

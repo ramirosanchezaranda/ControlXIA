@@ -1,5 +1,6 @@
 package com.controlxia.app.ui.theme
 
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -22,6 +23,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -62,15 +67,45 @@ object AuraMotion {
 // Nombre de antes (lo usan pantallas viejas).
 val ExpoOut = AuraMotion.EaseOut
 
-/** true si el usuario apagó las animaciones del sistema. */
+/**
+ * true si el usuario apagó las animaciones del sistema o tiene prendido el
+ * ahorro de batería: ahí las animaciones continuas (esfera, fondo) se quedan
+ * quietas.
+ */
 @Composable
 fun rememberReduceMotion(): Boolean {
     val context = LocalContext.current
     return remember {
-        runCatching {
+        val noAnimations = runCatching {
             Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
         }.getOrDefault(false)
+        val powerSave = context.getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
+        noAnimations || powerSave
     }
+}
+
+/**
+ * Un reloj en segundos para animaciones continuas, que avanza a lo sumo
+ * [fps] veces por segundo (no hace falta redibujar 60 o 120 veces por
+ * segundo una luz que se mueve despacio) y solo mientras [running]. [speed]
+ * lo acelera o frena sin saltos.
+ */
+@Composable
+fun rememberAnimationClock(fps: Int, running: Boolean = true, speed: () -> Float = { 1f }): State<Float> {
+    val time = remember { mutableFloatStateOf(0f) }
+    val currentSpeed by rememberUpdatedState(speed)
+    val currentFps by rememberUpdatedState(fps)
+    LaunchedEffect(running) {
+        if (!running) return@LaunchedEffect
+        var last = 0L
+        while (true) {
+            val now = withFrameNanos { it }
+            if (last != 0L) time.floatValue += ((now - last) / 1e9f).coerceAtMost(0.1f) * currentSpeed()
+            last = now
+            delay((1_000L / currentFps.coerceIn(1, 120)) - 4L)
+        }
+    }
+    return time
 }
 
 /** Entre pasos (onboarding): aparece subiendo apenas, el anterior se desvanece rápido. */

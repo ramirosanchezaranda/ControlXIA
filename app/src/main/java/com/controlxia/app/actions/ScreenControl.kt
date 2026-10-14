@@ -7,7 +7,6 @@ import android.content.Context
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Build
-import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import com.controlxia.app.service.XiaAccessibilityService
 import kotlinx.coroutines.Dispatchers
@@ -113,11 +112,7 @@ class ScreenControl(private val context: Context) {
                 ?.takeIf { it.isEditable }
         }
         if (field == null) return@withContext "[$id] no es un campo de texto."
-        field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        val args = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-        }
-        if (!field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+        if (!Nodes.setText(field, text)) {
             return@withContext "No pude escribir en [$id]."
         }
         var submitted = false
@@ -175,13 +170,8 @@ class ScreenControl(private val context: Context) {
 
     private fun click(node: AccessibilityNodeInfo): Boolean {
         node.refresh()
-        var target: AccessibilityNodeInfo? = node
-        while (target != null && !target.isClickable) target = target.parent
-        if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return true
         val service = XiaAccessibilityService.instance ?: return false
-        val bounds = Rect().also { node.getBoundsInScreen(it) }
-        if (bounds.isEmpty) return false
-        return gesture(service, bounds.exactCenterX(), bounds.exactCenterY(), null, 60)
+        return Nodes.click(service, node)
     }
 
     private fun swipe(service: AccessibilityService, forward: Boolean): Boolean {

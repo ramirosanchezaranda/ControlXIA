@@ -187,6 +187,8 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                 )
             }
 
+            BatteryContent(settings)
+
             HandsPauseContent(settings)
 
             // Privacidad con el teléfono bloqueado
@@ -413,3 +415,47 @@ private val HAND_LEGEND = listOf(
     "✌️" to "V: pausa y te escucho, sin decir mi nombre",
     "🙌" to "Las dos manos arriba: pausa y te pregunto qué necesitás",
 )
+
+/** Cuándo soltar el micrófono para ahorrar batería (lo aplica el servicio al instante). */
+@Composable
+private fun BatteryContent(settings: WakeWordSettings) {
+    val context = LocalContext.current
+    var screenOff by remember { mutableStateOf(settings.listenScreenOff) }
+    var lowBattery by remember { mutableStateOf(settings.pauseOnLowBattery) }
+    SectionLabel("Batería")
+    SwitchRow(
+        title = "Escuchar con la pantalla apagada",
+        detail = "Para llamarlo con el teléfono bloqueado y la pantalla negra. Apagado, solo " +
+            "te oye con la pantalla prendida y el teléfono duerme de verdad: es lo que más ahorra.",
+        checked = screenOff,
+        onChange = {
+            screenOff = it
+            settings.listenScreenOff = it
+            WakeWordService.reload(context)
+        },
+    )
+    if (screenOff) {
+        SwitchRow(
+            title = "Pausar con batería baja",
+            detail = "Con la pantalla apagada y menos de ${com.controlxia.app.service.ListeningPolicy.LOW_PERCENT} % " +
+                "(o con el ahorro de batería del teléfono), deja de escuchar hasta que prendas la pantalla o lo cargues.",
+            checked = lowBattery,
+            onChange = {
+                lowBattery = it
+                settings.pauseOnLowBattery = it
+                WakeWordService.reload(context)
+            },
+        )
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, detail: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = Muted)
+        }
+        AuraSwitch(checked = checked, onCheckedChange = onChange)
+    }
+}

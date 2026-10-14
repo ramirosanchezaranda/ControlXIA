@@ -1,11 +1,7 @@
 package com.controlxia.app.actions
 
-import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.content.Intent
-import android.graphics.Path
-import android.graphics.Rect
-import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.permissions.PermissionManager
@@ -54,18 +50,18 @@ class WhatsAppUi(private val context: Context) {
         withContext(Dispatchers.Main) { context.startActivity(launch) }
         AgentLog.add("WHATSAPP buscar chat «$name»")
 
-        val search = waitFor(service, pkg, 6_000) { findSearch(it, pkg) }
+        val search = Nodes.waitFor(service, pkg, 6_000) { findSearch(it, pkg) }
             ?: return@withContext failed("No encontré el buscador de WhatsApp.")
-        click(service, search)
+        Nodes.click(service, search)
 
         if (!typeSearch(service, pkg, name)) return@withContext failed("No pude escribir en el buscador de WhatsApp.")
-        var result = waitFor(service, pkg, 3_000) { findResult(it, pkg, name) }
+        var result = Nodes.waitFor(service, pkg, 3_000) { findResult(it, pkg, name) }
         if (result == null && fuzzy && normalize(name).length >= 3) {
             // Con las primeras letras de la palabra más larga ("fu" de "fulgo")
             // WhatsApp lista los chats parecidos.
             val longest = normalize(name).split(' ').maxByOrNull { it.length }.orEmpty()
             typeSearch(service, pkg, longest.take(2))
-            result = waitFor(service, pkg, 3_000) { root ->
+            result = Nodes.waitFor(service, pkg, 3_000) { root ->
                 closestResult(root, pkg, name)?.takeIf { it.second >= MIN_SIMILARITY }?.first
             }
             val best = result?.text ?: service.rootInActiveWindow?.let { closestResult(it, pkg, name) }
@@ -74,9 +70,9 @@ class WhatsAppUi(private val context: Context) {
         }
         if (result == null) return@withContext failed("No encontré «$name» en WhatsApp.")
         val title = result.text?.toString()?.trim().orEmpty().ifBlank { name }
-        click(service, result)
+        Nodes.click(service, result)
 
-        waitFor(service, pkg, 4_000) { findEntry(it, pkg) }
+        Nodes.waitFor(service, pkg, 4_000) { findEntry(it, pkg) }
             ?: return@withContext failed("Encontré «$title» pero no pude entrar al chat.")
         AgentLog.add("WHATSAPP chat «$title» abierto")
         OpenResult.Opened(title)
@@ -100,13 +96,13 @@ class WhatsAppUi(private val context: Context) {
         }
         val current = service.rootInActiveWindow?.packageName?.toString()?.takeIf { it in PACKAGES }
             ?: return@withContext fail("WhatsApp no está en pantalla.")
-        val entry = waitFor(service, current, 2_000) { findEntry(it, current) }
+        val entry = Nodes.waitFor(service, current, 2_000) { findEntry(it, current) }
             ?: return@withContext fail("No encontré dónde escribir en el chat.")
-        setText(entry, text)
+        Nodes.setText(entry, text)
         delay(500)
-        val send = waitFor(service, current, 2_000) { findSendButton(it, current) }
+        val send = Nodes.waitFor(service, current, 2_000) { findSendButton(it, current) }
             ?: return@withContext fail("Escribí el mensaje pero no encontré el botón de enviar: tocalo vos.")
-        click(service, send)
+        Nodes.click(service, send)
         AgentLog.add("WHATSAPP enviado")
         null
     }
@@ -139,16 +135,16 @@ class WhatsAppUi(private val context: Context) {
 
             if (number == null) {
                 // "Enviar a…": buscar el chat, marcarlo y tocar enviar.
-                val search = waitFor(service, pkg, 6_000) { findSearch(it, pkg) }
+                val search = Nodes.waitFor(service, pkg, 6_000) { findSearch(it, pkg) }
                     ?: return@withContext fail("No encontré el buscador de «Enviar a» en WhatsApp.")
-                click(service, search)
+                Nodes.click(service, search)
                 if (!typeSearch(service, pkg, chatName)) return@withContext fail("No pude buscar «$chatName».")
-                val row = waitFor(service, pkg, 3_000) { findResult(it, pkg, chatName) }
-                    ?: waitFor(service, pkg, 2_000) { root ->
+                val row = Nodes.waitFor(service, pkg, 3_000) { findResult(it, pkg, chatName) }
+                    ?: Nodes.waitFor(service, pkg, 2_000) { root ->
                         closestResult(root, pkg, chatName)?.takeIf { it.second >= MIN_SIMILARITY }?.first
                     }
                     ?: return@withContext fail("No encontré «$chatName» para mandarle el audio.")
-                click(service, row)
+                Nodes.click(service, row)
                 delay(600)
             }
             // El botón de enviar, y si WhatsApp pregunta "¿Enviar audio a…?", confirmar.
@@ -159,11 +155,11 @@ class WhatsAppUi(private val context: Context) {
                 if (root != null && root.packageName?.toString() == pkg) {
                     val button = findSendButton(root, pkg) ?: findDialogButton(root)
                     if (button != null) {
-                        click(service, button)
+                        Nodes.click(service, button)
                         sent = true
                         delay(800)
                         // Algunas versiones piden confirmar después del primer toque.
-                        service.rootInActiveWindow?.let { findDialogButton(it) }?.let { click(service, it) }
+                        service.rootInActiveWindow?.let { findDialogButton(it) }?.let { Nodes.click(service, it) }
                     }
                 }
                 if (!sent) delay(300)
@@ -186,24 +182,6 @@ class WhatsAppUi(private val context: Context) {
     private fun fail(reason: String): String {
         AgentLog.add("WHATSAPP $reason")
         return reason
-    }
-
-    /** Espera hasta [timeoutMs] a que WhatsApp esté en pantalla y [find] encuentre algo. */
-    private suspend fun waitFor(
-        service: XiaAccessibilityService,
-        pkg: String,
-        timeoutMs: Long,
-        find: (AccessibilityNodeInfo) -> AccessibilityNodeInfo?,
-    ): AccessibilityNodeInfo? {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            val root = service.rootInActiveWindow
-            if (root != null && root.packageName?.toString() == pkg) {
-                find(root)?.let { return it }
-            }
-            delay(300)
-        }
-        return null
     }
 
     private fun findSearch(root: AccessibilityNodeInfo, pkg: String): AccessibilityNodeInfo? {
@@ -247,10 +225,10 @@ class WhatsAppUi(private val context: Context) {
 
     /** Escribe [query] en el buscador abierto. */
     private suspend fun typeSearch(service: XiaAccessibilityService, pkg: String, query: String): Boolean {
-        val field = waitFor(service, pkg, 3_000) { root ->
-            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable } ?: firstEditable(root)
+        val field = Nodes.waitFor(service, pkg, 3_000) { root ->
+            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable } ?: Nodes.firstEditable(root)
         } ?: return false
-        setText(field, query)
+        Nodes.setText(field, query)
         delay(1_000)
         return true
     }
@@ -272,7 +250,7 @@ class WhatsAppUi(private val context: Context) {
 
     private fun findEntry(root: AccessibilityNodeInfo, pkg: String): AccessibilityNodeInfo? =
         root.findAccessibilityNodeInfosByViewId("$pkg:id/entry").firstOrNull()
-            ?: firstEditable(root)?.takeIf { field ->
+            ?: Nodes.firstEditable(root)?.takeIf { field ->
                 val hint = field.hintText?.toString().orEmpty().lowercase()
                 "mensaje" in hint || "message" in hint
             }
@@ -284,38 +262,6 @@ class WhatsAppUi(private val context: Context) {
                     it.contentDescription?.toString().equals(label, ignoreCase = true)
                 }
             }
-
-    private fun firstEditable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-        if (node == null) return null
-        if (node.isEditable && node.isVisibleToUser) return node
-        for (i in 0 until node.childCount) firstEditable(node.getChild(i))?.let { return it }
-        return null
-    }
-
-    private fun setText(field: AccessibilityNodeInfo, text: String) {
-        field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        val args = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-        }
-        field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-    }
-
-    /** Toca el elemento (o el primer padre tocable); si no se puede, con un gesto. */
-    private fun click(service: XiaAccessibilityService, node: AccessibilityNodeInfo) {
-        var target: AccessibilityNodeInfo? = node
-        while (target != null && !target.isClickable) target = target.parent
-        if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
-        val bounds = Rect().also { node.getBoundsInScreen(it) }
-        if (bounds.isEmpty) return
-        val path = Path().apply { moveTo(bounds.exactCenterX(), bounds.exactCenterY()) }
-        service.dispatchGesture(
-            GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, 60))
-                .build(),
-            null,
-            null,
-        )
-    }
 
     companion object {
         val PACKAGES = listOf("com.whatsapp", "com.whatsapp.w4b")

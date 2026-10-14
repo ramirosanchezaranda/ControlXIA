@@ -76,6 +76,16 @@ class WakeWordSettings(context: Context) {
         get() = prefs.getBoolean(KEY_HAND_GESTURES, true)
         set(value) = prefs.edit().putBoolean(KEY_HAND_GESTURES, value).apply()
 
+    /** Escuchar el nombre también con la pantalla apagada (gasta más batería). */
+    var listenScreenOff: Boolean
+        get() = prefs.getBoolean(KEY_SCREEN_OFF, true)
+        set(value) = prefs.edit().putBoolean(KEY_SCREEN_OFF, value).apply()
+
+    /** Con la pantalla apagada, pausar la escucha si la batería está baja o en modo ahorro. */
+    var pauseOnLowBattery: Boolean
+        get() = prefs.getBoolean(KEY_LOW_BATTERY, true)
+        set(value) = prefs.edit().putBoolean(KEY_LOW_BATTERY, value).apply()
+
     /** 0f = menos sensible (menos falsos positivos), 1f = más sensible. */
     var sensitivity: Float
         get() = prefs.getFloat(KEY_SENS, 0.5f)
@@ -92,6 +102,8 @@ class WakeWordSettings(context: Context) {
         private const val KEY_SPOKEN_ACK = "spoken_ack"
 
         private const val KEY_HANDS = "hands_pause"
+        private const val KEY_SCREEN_OFF = "listen_screen_off"
+        private const val KEY_LOW_BATTERY = "pause_low_battery"
         private const val KEY_HAND_GESTURES = "hand_gestures"
         private const val KEY_CONVERSATION = "conversation_mode"
         private const val KEY_CONVERSATION_SECONDS = "conversation_seconds"

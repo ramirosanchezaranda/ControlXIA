@@ -1,5 +1,8 @@
 package com.controlxia.app.diagnostics
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -21,15 +24,18 @@ object AgentLog {
 
     private val entries = ArrayDeque<Entry>()
 
-    @Volatile
-    var version: Int = 0
-        private set
+    private val _changes = MutableStateFlow(0)
+
+    /** Cambia cada vez que se agrega o borra algo (para que la pantalla se actualice sola). */
+    val changes: StateFlow<Int> = _changes.asStateFlow()
+
+    val version: Int get() = _changes.value
 
     @Synchronized
     fun add(text: String) {
         entries.addLast(Entry(System.currentTimeMillis(), text.replace('\n', ' ').take(MAX_TEXT)))
         while (entries.size > MAX_ENTRIES) entries.removeFirst()
-        version++
+        _changes.value++
     }
 
     @Synchronized
@@ -38,7 +44,7 @@ object AgentLog {
     @Synchronized
     fun clear() {
         entries.clear()
-        version++
+        _changes.value++
     }
 
     @Synchronized

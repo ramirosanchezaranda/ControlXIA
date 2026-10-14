@@ -8,19 +8,12 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.media.AudioManager
-import android.media.ToneGenerator
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -41,9 +34,10 @@ import com.controlxia.app.voice.AndroidSpeechToText
 import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.ListeningOverlay
 import com.controlxia.app.voice.RecentCommandsStore
+import com.controlxia.app.voice.Feedback
+import com.controlxia.app.voice.Speaker
 import com.controlxia.app.voice.SpeechToText
 import com.controlxia.app.voice.VoiceBridge
-import com.controlxia.app.voice.VoiceSettings
 import com.controlxia.app.voice.VoskModelStore
 import com.controlxia.app.voice.VoskWakeWordEngine
 import com.controlxia.app.voice.WakeWordEngine
@@ -55,11 +49,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.coroutines.resume
 
 /**
  * Servicio de escucha persistente. Corre como Foreground Service de tipo
@@ -82,10 +74,11 @@ class WakeWordService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
-    /** Frase pedida antes de que el TTS termine de inicializar. */
-    private var pendingSpeech: Pair<String, String>? = null
+    /** La voz del asistente (TTS). */
+    private lateinit var speaker: Speaker
+
+    /** Vibración y el tono de "te escucho". */
+    private lateinit var feedback: Feedback
 
     private var wakeEngine: WakeWordEngine? = null
     private var stt: SpeechToText? = null
@@ -133,17 +126,15 @@ class WakeWordService : Service() {
      */
     private var stopEngine: WakeWordEngine? = null
 
+    /** Cuándo soltar el micrófono para ahorrar batería. */
+    private var policy: ListeningPolicy? = null
+
     /** Una herramienta está usando el micrófono (grabando un audio): no escuchar "pará". */
     private var micLent = false
 
     /** El pedido en curso se escribió (no se dijo): no seguir escuchando de más. */
     private var typedSession = false
 
-    /** Quién espera que termine de hablar una frase (por id de la frase). */
-    private val utteranceWaiters = mutableMapOf<String, () -> Unit>()
-
-    /** El tono de "te escucho": mucho más corto que decirlo, así no se pierde nada. */
-    private var toneGenerator: ToneGenerator? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -162,6 +153,7 @@ class WakeWordService : Service() {
                 startStopListener()
             }
         }
+        policy = ListeningPolicy(this) { main.post { applyPolicy() } }.also { it.start() }
         // Una alarma empieza o deja de sonar: el motor de voz pasa a oír "apagá la alarma".
         OwnAlarms.onRingingChanged = {
             main.post { if (listeningCommand) reloadPending = true else startListeningFresh() }
@@ -169,7 +161,8 @@ class WakeWordService : Service() {
         // Se desbloqueó en medio de un pedido (para usar una app): seguir con la burbuja.
         UnlockGate.onUnlocked = { main.post { onPhoneUnlocked() } }
         agentName = WakeWordSettings(this).agentName
-        tts = TextToSpeech(this) { status -> main.post { onTtsInit(status) } }
+        speaker = Speaker(this) { id -> onUtteranceFinished(id) }
+        feedback = Feedback(this)
     }
 
     private fun onPhoneUnlocked() {
@@ -177,43 +170,6 @@ class WakeWordService : Service() {
         lockedSession = false
         AssistantState.unlocked()
         pill(AssistantState.state.value.status.ifBlank { "Sigo con tu pedido…" })
-    }
-
-    private fun onTtsInit(status: Int) {
-        val engine = tts ?: return
-        if (status != TextToSpeech.SUCCESS) return
-        applySpanishLanguage(engine)
-        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {}
-
-            override fun onDone(utteranceId: String?) {
-                main.post { onUtteranceFinished(utteranceId) }
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                main.post { onUtteranceFinished(utteranceId) }
-            }
-        })
-        ttsReady = true
-        pendingSpeech?.let { (text, id) ->
-            pendingSpeech = null
-            speakOut(text, id)
-        }
-    }
-
-    /** es-AR si está instalado; si no, el español más cercano disponible. */
-    private fun applySpanishLanguage(engine: TextToSpeech) {
-        val candidates = listOf(
-            Locale("es", "AR"), Locale("es", "US"), Locale("es", "ES"), Locale("es"),
-        )
-        for (locale in candidates) {
-            val result = runCatching { engine.setLanguage(locale) }
-                .getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
-            if (result != TextToSpeech.LANG_MISSING_DATA &&
-                result != TextToSpeech.LANG_NOT_SUPPORTED
-            ) return
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -383,6 +339,12 @@ class WakeWordService : Service() {
             setWakeStatus(false, "Falta el permiso de micrófono", failed = true)
             return
         }
+        // Para cuidar la batería (pantalla apagada con batería baja, o lo que
+        // eligió el usuario): el micrófono queda libre hasta que cambie algo.
+        policy?.pauseReason()?.let { reason ->
+            setWakeStatus(false, "$reason. Vuelve al prender la pantalla o al cargar.")
+            return
+        }
         val settings = WakeWordSettings(this)
         agentName = settings.agentName
         val recording = CameraControl.recording
@@ -460,7 +422,7 @@ class WakeWordService : Service() {
             if (CameraControl.recording) {
                 // Grabando: no hablar (se grabaría) ni transcribir (no llega audio).
                 AgentLog.add("GRABANDO: para terminar decí «terminá el video»")
-                vibrate(40)
+                feedback.vibrate(40)
                 wakeEngine?.let { startEngine(it) }
                 return@post
             }
@@ -482,7 +444,7 @@ class WakeWordService : Service() {
         transcriptionStarted = false
 
         voiceWakeLock.acquire(INTERACTION_MAX_MS)
-        vibrate()
+        feedback.vibrate()
 
         val settings = WakeWordSettings(this)
         agentName = settings.agentName
@@ -501,15 +463,15 @@ class WakeWordService : Service() {
         wakeEngine?.stop() // liberar el micrófono para el ASR
 
         val spoken = ack ?: if (settings.spokenAck) "Te escucho" else null
-        if (spoken == null || !ttsReady) {
-            beep()
+        if (spoken == null || !speaker.ready) {
+            feedback.beep()
             main.postDelayed(afterAck, TONE_MS)
             return
         }
         // Transcribir al terminar de hablar (así no se transcribe a sí mismo).
         // Tope por si el TTS no avisa.
         main.postDelayed(afterAck, ACK_MAX_WAIT_MS)
-        speakOut(spoken, UTT_ACK, queueIfNotReady = false)
+        speaker.speak(spoken, UTT_ACK, queueIfNotReady = false)
     }
 
     /**
@@ -522,14 +484,6 @@ class WakeWordService : Service() {
         if (appVisible) overlay?.hide() else overlay?.show(agentName, status)
     }
 
-    /** Tono corto de "te escucho" (más suave para seguir una conversación). */
-    private fun beep(soft: Boolean = false) {
-        runCatching {
-            val tone = toneGenerator ?: ToneGenerator(AudioManager.STREAM_MUSIC, TONE_VOLUME)
-                .also { toneGenerator = it }
-            tone.startTone(if (soft) ToneGenerator.TONE_PROP_ACK else ToneGenerator.TONE_PROP_BEEP, TONE_LENGTH_MS)
-        }
-    }
 
     /**
      * Un pedido escrito: va directo al cerebro, como si lo hubieras dicho. Si
@@ -566,7 +520,6 @@ class WakeWordService : Service() {
     }
 
     private fun onUtteranceFinished(id: String?) {
-        utteranceWaiters.remove(id)?.invoke()
         when (id) {
             UTT_ACK -> if (listeningCommand && !transcriptionStarted) {
                 main.removeCallbacks(afterAck)
@@ -667,18 +620,7 @@ class WakeWordService : Service() {
     }
 
     /** Para las herramientas: dice [text] y vuelve cuando terminó de hablar. */
-    private suspend fun speakAndWait(text: String) = suspendCancellableCoroutine<Unit> { cont ->
-        main.post {
-            if (!ttsReady) {
-                if (cont.isActive) cont.resume(Unit)
-                return@post
-            }
-            val id = "bridge_${SystemClock.uptimeMillis()}"
-            utteranceWaiters[id] = { if (cont.isActive) cont.resume(Unit) }
-            showProgress(text)
-            speakOut(text, id)
-        }
-    }
+    private suspend fun speakAndWait(text: String) = speaker.speakAndWait(text) { showProgress(text) }
 
     /** Escucha "pará", "basta"… y el nombre mientras trabaja y mientras responde. */
     private fun startStopListener() {
@@ -725,15 +667,15 @@ class WakeWordService : Service() {
             processingJob?.cancel()
         }
         processingJob = null
-        tts?.stop()
-        vibrate(60)
+        speaker.stop()
+        feedback.vibrate(60)
         followUpPending = false
         inFollowUp = false
         if (wasWorking) {
             // Avisar que frenó: lo que estaba haciendo quedó a medias a propósito.
             showProgress("Frené")
             main.postDelayed(resumeAfterReply, 2_500L)
-            speakOut("Listo, paré.", UTT_REPLY)
+            speaker.speak("Listo, paré.", UTT_REPLY)
         } else {
             resumeListening()
         }
@@ -754,12 +696,12 @@ class WakeWordService : Service() {
             processingJob?.cancel()
         }
         processingJob = null
-        tts?.stop()
+        speaker.stop()
         main.removeCallbacks(resumeAfterReply)
         followUpPending = false
         inFollowUp = false
         followUps = 0
-        vibrate()
+        feedback.vibrate()
         AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
         pill("Te escucho…")
         transcriptionStarted = true
@@ -769,17 +711,17 @@ class WakeWordService : Service() {
     /** "Apagá la alarma" / "posponela" mientras suena una alarma propia. */
     private fun onAlarmPhrase(phrase: String) {
         AgentLog.add("ESCUCHÉ «$phrase» con la alarma sonando")
-        vibrate(60)
+        feedback.vibrate(60)
         if (OwnAlarms.isSnooze(phrase)) OwnAlarms.snooze(this) else OwnAlarms.stop(this)
     }
 
     /** "Terminá el video" mientras la cámara graba (lo oye el motor de voz, sin internet). */
     private fun onStopVideoHeard(phrase: String) {
         AgentLog.add("ESCUCHÉ «$phrase» mientras grababa")
-        vibrate(60)
+        feedback.vibrate(60)
         scope.launch {
             val error = CameraControl(applicationContext).stopVideo()
-            speakOut(error ?: "Listo, el video quedó guardado.", UTT_TIME)
+            speaker.speak(error ?: "Listo, el video quedó guardado.", UTT_TIME)
             if (!listeningCommand) startListeningFresh()
         }
     }
@@ -806,7 +748,7 @@ class WakeWordService : Service() {
             // Sin hablar: despedidas ("listo", "nada más") o comandos que se ven
             // ("atrás", "bajá", "tocá 5"), que muestran un texto y siguen escuchando.
             answer.shown?.let { shown ->
-                vibrate(30)
+                feedback.vibrate(30)
                 updateNotification(maskedStatus(shown, "Listo"))
                 AssistantState.update(AssistantState.Phase.REPLYING, maskedStatus(shown, "Listo"))
                 pill(shown)
@@ -825,7 +767,7 @@ class WakeWordService : Service() {
         // Reanudar cuando termine de hablar; con tope por si el TTS no avisa.
         main.removeCallbacks(resumeAfterReply)
         main.postDelayed(resumeAfterReply, estimatedSpeechMs(reply))
-        speakOut(reply, UTT_REPLY)
+        speaker.speak(reply, UTT_REPLY)
     }
 
     /** Terminó de hablar: o escucha la respuesta a su pregunta, o vuelve a esperar el nombre. */
@@ -843,8 +785,8 @@ class WakeWordService : Service() {
         AgentLog.add("ESPERANDO otro pedido ${followUpWindowMs / 1_000} s (sin decir el nombre)")
         main.removeCallbacks(resumeAfterReply)
         voiceWakeLock.acquire(INTERACTION_MAX_MS)
-        vibrate(40)
-        beep(soft = true)
+        feedback.vibrate(40)
+        feedback.beep(soft = true)
         AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
         pill("Te escucho…")
         transcriptionStarted = true
@@ -870,12 +812,32 @@ class WakeWordService : Service() {
         // Reanudar el wake word; si el engine se perdió o cambiaron los
         // ajustes mientras tanto, reconstruirlo.
         val engine = wakeEngine
-        if (engine == null || reloadPending) {
+        if (engine == null || reloadPending || policy?.pauseReason() != null) {
             reloadPending = false
             startListeningFresh()
             return
         }
         startEngine(engine)
+    }
+
+    /**
+     * Cambió la pantalla, el cargador o la batería: prender o soltar el
+     * micrófono según [ListeningPolicy]. En medio de un pedido no se toca
+     * (se aplica al volver a esperar el nombre).
+     */
+    private fun applyPolicy() {
+        if (!inForeground || listeningCommand) return
+        val reason = policy?.pauseReason()
+        if (reason != null) {
+            if (wakeEngine == null && !wakeWordActive) return
+            AgentLog.add("ESCUCHA pausada: $reason")
+            wakeEngine?.release()
+            wakeEngine = null
+            setWakeStatus(false, "$reason. Vuelve al prender la pantalla o al cargar.")
+        } else if (wakeEngine == null) {
+            AgentLog.add("ESCUCHA reanudada")
+            startListening()
+        }
     }
 
     private fun startListeningFresh() {
@@ -891,19 +853,9 @@ class WakeWordService : Service() {
     private fun speakTime() {
         acquireBriefWakeLock()
         val hora = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-        speakOut("Son las $hora", UTT_TIME)
+        speaker.speak("Son las $hora", UTT_TIME)
     }
 
-    /** Aplica la voz/tono elegidos y dice el texto en voz alta. */
-    private fun speakOut(text: String, id: String, queueIfNotReady: Boolean = true) {
-        val engine = tts
-        if (engine == null || !ttsReady) {
-            if (queueIfNotReady) pendingSpeech = text to id
-            return
-        }
-        VoiceSettings(this).applyTo(engine)
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
-    }
 
     private fun acquireBriefWakeLock() {
         // Wake lock con timeout: mantiene la CPU despierta lo justo para la
@@ -929,17 +881,6 @@ class WakeWordService : Service() {
     private fun maskedStatus(text: String, generic: String): String =
         if (lockedSession && !showContentLocked) generic else text
 
-    @Suppress("DEPRECATION")
-    private fun vibrate(millis: Long = 120) {
-        runCatching {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-            } else {
-                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            }
-            vibrator.vibrate(VibrationEffect.createOneShot(millis, VibrationEffect.DEFAULT_AMPLITUDE))
-        }
-    }
 
     private fun stopFromUser() {
         ServicePrefs.setEnabled(this, false)
@@ -965,7 +906,7 @@ class WakeWordService : Service() {
         stt = null
         wakeEngine?.release()
         wakeEngine = null
-        tts?.stop()
+        speaker.stop()
         if (voiceWakeLock.isHeld) runCatching { voiceWakeLock.release() }
     }
 
@@ -974,6 +915,8 @@ class WakeWordService : Service() {
         VoiceBridge.micClaim = null
         UnlockGate.onUnlocked = null
         OwnAlarms.onRingingChanged = null
+        policy?.stop()
+        policy = null
         CameraControl.onRecordingChanged = null
         running = false
         wakeWordActive = false
@@ -982,10 +925,8 @@ class WakeWordService : Service() {
         // Libera los ~110 MB del modelo de voz si el motor ya soltó el micrófono.
         VoskModelStore.releaseIfIdle()
         scope.cancel()
-        tts?.shutdown()
-        tts = null
-        toneGenerator?.release()
-        toneGenerator = null
+        speaker.shutdown()
+        feedback.release()
         super.onDestroy()
     }
 
@@ -1009,8 +950,6 @@ class WakeWordService : Service() {
         private const val ACK_MAX_WAIT_MS = 2_500L
         /** Cuánto después del tono empieza a transcribir (que no se oiga el tono). */
         private const val TONE_MS = 160L
-        private const val TONE_LENGTH_MS = 90
-        private const val TONE_VOLUME = 60
         /** Pausa entre que termina de hablar y vuelve a escuchar (sin oírse a sí mismo). */
         private const val AFTER_SPEECH_MS = 250L
         private const val STT_MAX_MS = 30_000L
@@ -1026,40 +965,40 @@ class WakeWordService : Service() {
         @Volatile
         var appVisible: Boolean = false
 
-        /** Estado observable simple para la UI. */
-        @Volatile
-        var running: Boolean = false
-            private set
+        // Lo que ve la UI vive en [ServiceStatus] (observable); estos accesos son atajos.
+        var running: Boolean
+            get() = ServiceStatus.state.value.running
+            private set(value) = ServiceStatus.update { it.copy(running = value) }
 
         /** true cuando el wake word está escuchando activamente. */
-        @Volatile
-        var wakeWordActive: Boolean = false
-            private set
+        var wakeWordActive: Boolean
+            get() = ServiceStatus.state.value.wakeActive
+            private set(value) = ServiceStatus.update { it.copy(wakeActive = value) }
 
         /** Último estado legible del wake word (motivo si está inactivo). */
-        @Volatile
-        var wakeWordStatus: String? = null
-            private set
+        var wakeWordStatus: String?
+            get() = ServiceStatus.state.value.wakeStatus
+            private set(value) = ServiceStatus.update { it.copy(wakeStatus = value) }
 
         /** true si el wake word está inactivo por un error (no mientras se prepara). */
-        @Volatile
-        var wakeWordFailed: Boolean = false
-            private set
+        var wakeWordFailed: Boolean
+            get() = ServiceStatus.state.value.wakeFailed
+            private set(value) = ServiceStatus.update { it.copy(wakeFailed = value) }
 
         /** Última transcripción escuchada (para feedback inmediato en la UI). */
-        @Volatile
-        var lastCommand: String? = null
-            private set
+        var lastCommand: String?
+            get() = ServiceStatus.state.value.lastCommand
+            private set(value) = ServiceStatus.update { it.copy(lastCommand = value) }
 
         /** Última respuesta hablada de Xia (para mostrar en la UI). */
-        @Volatile
-        var lastReply: String? = null
-            private set
+        var lastReply: String?
+            get() = ServiceStatus.state.value.lastReply
+            private set(value) = ServiceStatus.update { it.copy(lastReply = value) }
 
         /** Error técnico del último pedido al LLM (null si salió bien). */
-        @Volatile
-        var lastBrainError: String? = null
-            private set
+        var lastBrainError: String?
+            get() = ServiceStatus.state.value.lastError
+            private set(value) = ServiceStatus.update { it.copy(lastError = value) }
 
         /**
          * Intenta arrancar el servicio. Devuelve false si Android lo bloqueó:

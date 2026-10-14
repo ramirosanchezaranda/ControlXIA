@@ -105,8 +105,8 @@ android {
         applicationId = "com.controlxia.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.10.0"
+        versionCode = 12
+        versionName = "0.11.0"
 
         buildConfigField("String", "VOSK_MODEL_NAME", "\"$voskModelName\"")
         buildConfigField("String", "VOSK_MODEL_URL", "\"$voskModelUrl\"")
@@ -161,11 +161,13 @@ android {
         buildConfig = true
     }
 
-    // Capturas de las pantallas en la PC (Robolectric): ./gradlew testDebugUnitTest
+    // Pruebas en la PC: ./gradlew testDebugUnitTest
+    // Las capturas de pantalla (Robolectric, lentas) solo con -Pscreenshots=true.
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
             all { test ->
+                if (providers.gradleProperty("screenshots").orNull != "true") test.exclude("**/ScreenshotTest*")
                 test.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
                 // Repositorio para que Robolectric baje Android (por si Maven Central no responde).
                 providers.gradleProperty("robolectric.repo").orNull?.let {

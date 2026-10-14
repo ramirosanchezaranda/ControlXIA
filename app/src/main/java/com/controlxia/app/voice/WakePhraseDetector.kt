@@ -30,11 +30,18 @@ import java.util.Locale
  * mientras habla: cuentan solo si se dijeron solas ("¡pará!", "basta, basta"),
  * no dentro de una frase ("para mí un café", "para mandar mensajes…"), y si el
  * reconocedor libre oyó esa misma palabra.
+ *
+ * Para ahorrar batería, con [gated] el reconocedor solo trabaja cuando hay
+ * sonido ([SpeechGate]): en silencio no decodifica nada. Al aparecer voz se
+ * le pasa también el audio de un rato antes, así no se pierde el principio
+ * del nombre. Como el reconocedor ya no ve todo el audio, sus tiempos se
+ * traducen a los del micrófono ([toRing]).
  */
 class WakePhraseDetector(
     private val model: Model,
     private val phrases: List<Phrase>,
     sensitivity: Float,
+    private val gated: Boolean = true,
 ) : AutoCloseable {
 
     /** Una frase a detectar; [alone]: solo cuenta dicha sola (ver la doc de la clase). */
@@ -62,6 +69,23 @@ class WakePhraseDetector(
         setWords(true)
     }
     private val ring = AudioRing(SAMPLE_RATE * RING_SECONDS)
+    private val gate = SpeechGate()
+
+    /** Si el reconocedor está recibiendo audio ahora (la compuerta está abierta). */
+    private var feeding = false
+
+    /** Muestras que recibió el reconocedor desde que se creó. */
+    private var fed = 0L
+
+    /**
+     * Tramos de audio continuo que recibió el reconocedor: dónde empieza cada
+     * uno para el reconocedor y para el micrófono. Sirve para traducir tiempos.
+     */
+    private val segments = ArrayDeque<LongArray>()
+
+    /** Bloques que se saltearon por silencio (para el registro de batería). */
+    var skippedChunks = 0L
+        private set
 
     /** Recibe [n] muestras nuevas; true si con ellas se confirmó alguna frase. */
     fun accept(chunk: ShortArray, n: Int): Boolean = detect(chunk, n) >= 0
@@ -81,8 +105,36 @@ class WakePhraseDetector(
             // No era "pará" solo: puede ser "Beto, para que…", que sí lo despierta.
             findWake(stop.heard)?.let { return it }
         }
+        if (gated && !gate.update(chunk, n)) {
+            skippedChunks++
+            if (!feeding) return -1
+            // Volvió el silencio: lo que quedaba a medio reconocer se cierra ahora.
+            feeding = false
+            return handle(grammar.finalResult)
+        }
+        if (!feeding) {
+            feeding = true
+            // Lo de un rato antes, para no perder el principio de la palabra.
+            val now = ring.total - n
+            val from = maxOf(now - PRE_GATE_SAMPLES, ring.total - ring.capacity, 0L)
+            segments.addLast(longArrayOf(fed, from))
+            while (segments.size > MAX_SEGMENTS) segments.removeFirst()
+            ring.slice(from, now)?.takeIf { it.isNotEmpty() }?.let { before ->
+                fed += before.size
+                if (grammar.acceptWaveForm(before, before.size)) {
+                    val index = handle(grammar.result)
+                    if (index >= 0) return index
+                }
+            }
+        }
+        fed += n
         if (!grammar.acceptWaveForm(chunk, n)) return -1
-        val heard = parseWords(grammar.result)
+        return handle(grammar.result)
+    }
+
+    /** Un resultado de la gramática: ¿se dijo alguna frase? */
+    private fun handle(json: String): Int {
+        val heard = parseWords(json, ::toRing)
         // Primero las de frenar ("Beto, pará" frena, no despierta). Se confirman
         // un rato después: la gramática avisa apenas termina la palabra, antes de
         // saber si la frase sigue ("ya basta de lluvia…").
@@ -92,6 +144,17 @@ class WakePhraseDetector(
             return -1
         }
         return findWake(heard) ?: -1
+    }
+
+    /**
+     * Segundos del reconocedor → segundos del micrófono. Sin compuerta son
+     * iguales; con compuerta el reconocedor se saltea el silencio.
+     */
+    private fun toRing(seconds: Double): Double {
+        if (!gated) return seconds
+        val sample = (seconds * SAMPLE_RATE).toLong()
+        val segment = segments.lastOrNull { it[0] <= sample } ?: return seconds
+        return (segment[1] + (sample - segment[0])).toDouble() / SAMPLE_RATE
     }
 
     /** El nombre (u otra frase que no es de frenar) en lo que oyó la gramática. */
@@ -115,15 +178,15 @@ class WakePhraseDetector(
 
     private class Hit(val start: Double, val end: Double)
 
-    private fun parseWords(json: String): List<Word> {
+    private fun parseWords(json: String, time: (Double) -> Double = { it }): List<Word> {
         val result = (runCatching { Json.parseToJsonElement(json) }.getOrNull() as? JsonObject)
             ?.get("result") as? JsonArray ?: return emptyList()
         return result.mapNotNull { item ->
             val o = item as? JsonObject ?: return@mapNotNull null
             Word(
                 text = (o["word"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null,
-                start = (o["start"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null,
-                end = (o["end"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null,
+                start = time((o["start"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null),
+                end = time((o["end"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null),
                 conf = (o["conf"] as? JsonPrimitive)?.doubleOrNull ?: 1.0,
             )
         }
@@ -226,9 +289,12 @@ class WakePhraseDetector(
     }
 
     /** Últimos segundos de audio, indexados por número de muestra desde el arranque. */
-    private class AudioRing(private val capacity: Int) {
+    private class AudioRing(val capacity: Int) {
         private val data = ShortArray(capacity)
-        private var total = 0L
+
+        /** Muestras recibidas desde el arranque. */
+        var total = 0L
+            private set
 
         /** Segundos de audio recibidos desde el arranque. */
         val seconds: Double get() = total.toDouble() / SAMPLE_RATE
@@ -248,6 +314,10 @@ class WakePhraseDetector(
     companion object {
         const val SAMPLE_RATE = 16_000
         private const val RING_SECONDS = 25
+
+        /** Audio de antes que se le pasa al reconocedor cuando aparece voz. */
+        private const val PRE_GATE_SAMPLES = SAMPLE_RATE.toLong()
+        private const val MAX_SEGMENTS = 256
         private const val PRE_ROLL_S = 1.5
         private const val POST_ROLL_S = 0.3
 

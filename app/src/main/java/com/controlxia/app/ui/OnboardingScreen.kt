@@ -54,7 +54,6 @@ import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.service.XiaAccessibilityService
 import com.controlxia.app.service.XiaNotificationListener
-import com.controlxia.app.ui.components.Hairline
 import com.controlxia.app.ui.components.SectionLabel
 import com.controlxia.app.ui.components.StatusDot
 import com.controlxia.app.ui.components.TechButton
@@ -63,7 +62,6 @@ import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
 import com.controlxia.app.ui.theme.screenTransition
 import com.controlxia.app.voice.WakeWordSettings
-import java.util.Locale
 
 /**
  * Configuración inicial: presenta la app y pide los permisos de a uno, con

@@ -27,7 +27,16 @@ class XiaAccessibilityService : AccessibilityService() {
 
     /** Con los números a la vista, se actualizan cuando cambia la pantalla. */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.packageName == packageName) return
+        if (event == null) return
+        // Qué app está adelante, sin tener que leer la pantalla (lo usa la cámara de los gestos).
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val pkg = event.packageName?.toString()
+            if (pkg != null && pkg != foregroundPackage) {
+                foregroundPackage = pkg
+                foregroundListeners.forEach { it(pkg) }
+            }
+        }
+        if (event.packageName == packageName) return
         ScreenNumbers.onScreenChanged()
     }
 
@@ -49,6 +58,14 @@ class XiaAccessibilityService : AccessibilityService() {
         @Volatile
         var instance: XiaAccessibilityService? = null
             private set
+
+        /** La app que está adelante (según el último cambio de ventana). */
+        @Volatile
+        var foregroundPackage: String? = null
+            private set
+
+        /** Quiénes quieren saber cuando cambia la app de adelante. */
+        val foregroundListeners = java.util.concurrent.CopyOnWriteArraySet<(String) -> Unit>()
 
         /** true si está activado en los ajustes del sistema (aunque aún no conectó). */
         fun isEnabled(context: Context): Boolean {

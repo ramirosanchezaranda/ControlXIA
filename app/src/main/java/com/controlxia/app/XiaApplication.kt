@@ -12,6 +12,7 @@ class XiaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         com.controlxia.app.ui.theme.ThemeSettings.init(this)
+        com.controlxia.app.service.ServicePrefs.load(this)
         createNotificationChannels()
     }
 

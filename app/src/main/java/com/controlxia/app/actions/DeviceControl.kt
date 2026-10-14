@@ -217,7 +217,7 @@ class DeviceControl(private val context: Context) {
         if (switch.isChecked == on) {
             AgentLog.add("TELÉFONO ${which.name} ya estaba ${if (on) "prendido" else "apagado"}")
         } else {
-            clickNode(service, switch)
+            Nodes.click(service, switch)
             AgentLog.add("TELÉFONO ${which.name} → ${if (on) "prendido" else "apagado"}")
         }
         delay(600)
@@ -286,7 +286,7 @@ class DeviceControl(private val context: Context) {
         if (state == on) {
             AgentLog.add("TELÉFONO «$name» ya estaba ${if (on) "activado" else "desactivado"}")
         } else {
-            clickNode(service, tile)
+            Nodes.click(service, tile)
             AgentLog.add("TELÉFONO «$name» → ${if (on) "activado" else "desactivado"}")
         }
         delay(500)
@@ -447,13 +447,6 @@ class DeviceControl(private val context: Context) {
             return null
         }
         return visit(root, 0) ?: any
-    }
-
-    private fun clickNode(service: XiaAccessibilityService, node: AccessibilityNodeInfo) {
-        var target: AccessibilityNodeInfo? = node
-        while (target != null && !target.isClickable) target = target.parent
-        if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
-        Gestures.tap(service, node)
     }
 
     private fun normalize(text: String): String =

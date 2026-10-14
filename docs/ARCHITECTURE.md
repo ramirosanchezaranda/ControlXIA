@@ -1,0 +1,65 @@
+# Arquitectura
+
+Cómo está armada la app, para tocarla sin romper nada. Detalles de cada parte: [WAKE_WORD.md](WAKE_WORD.md) (escucha del nombre), [VOICE_CONTROL.md](VOICE_CONTROL.md) (comandos sin IA), [AGENT.md](AGENT.md) (el agente con herramientas) y [DESIGN.md](DESIGN.md) (interfaz).
+
+## El camino de un pedido
+
+```
+micrófono ─▶ SpeechGate ─▶ WakePhraseDetector (Vosk) ─▶ "Beto"
+                                                         │
+                     WakeWordService (servicio en primer plano)
+                                                         │
+             tono / vibración (Feedback) ◀──────────────┤
+                                                         ▼
+                                  AndroidSpeechToText: el pedido en texto
+                                                         │
+                                                         ▼
+ CommandProcessor ─▶ 1. DirectCommands  (atrás, bajá, volumen…)  ─▶ DirectCommandRunner
+                  ─▶ 2. LocalSkills     (alarmas, mensajes, cuentas…) ─▶ ToolRegistry
+                  ─▶ 3. modelo (Groq, Gemini, Claude, OpenAI…) con herramientas ─▶ ToolRegistry
+                                                         │
+                                                         ▼
+                               actions/*  (accesibilidad, intents, sistema)
+                                                         │
+                                                         ▼
+                                     Reply ─▶ Speaker (voz) + pantalla
+```
+
+Los pasos 1 y 2 son instantáneos y no usan internet; solo lo que no entienden va al modelo.
+
+## Paquetes
+
+| Paquete | Qué tiene | Depende de Android |
+|---|---|---|
+| `brain/` | Entender el pedido y decidir: `DirectCommands`, `LocalSkills`, `Calculator`, `NotificationSummary`, `TaskCheck` (sin Android, con pruebas), `CommandProcessor` (el agente), `ToolRegistry` (las herramientas) y los proveedores de modelos. | Solo `CommandProcessor`, `ToolRegistry` y los proveedores |
+| `actions/` | Hacer cosas en el teléfono: abrir apps, tocar y escribir por accesibilidad (`Nodes`, `Gestures`, `ScreenControl`, `ScreenNumbers`, `AppUi`, `WhatsAppUi`), alarmas, llamadas, cámara, mensajes. | Sí |
+| `voice/` | Escuchar y hablar: `SpeechGate` y `WakePhraseDetector` (sin Android), el motor Vosk, el reconocimiento del pedido, `Speaker` (voz), `Feedback` (tono y vibración), `HandSigns` (señas, sin Android), ajustes. | En parte |
+| `service/` | Lo que corre en segundo plano: `WakeWordService`, `HandsWatchService` (cámara para las señas), `XiaAccessibilityService`, el lector de notificaciones, `ListeningPolicy` (cuándo escuchar), `ServiceStatus` (estado para la interfaz) y los receptores (arranque, alarmas, vigilancia). | Sí |
+| `ui/` | Compose: pantallas, tema (`theme/`) y componentes (`components/`). Solo lee estado y llama al servicio. | Sí |
+| `diagnostics/` | `AgentLog`: el registro paso a paso que se ve en Actividad. | No |
+
+## Reglas que seguimos
+
+- **La lógica, sin Android.** Lo que decide (qué comando es, qué seña, cuándo pausar) son funciones puras que se prueban en la PC. Android queda en los bordes (`actions/`, `service/`).
+- **Estado por flujos, no consultando.** El servicio publica su estado en `ServiceStatus.state` (un `StateFlow`) y el registro avisa con `AgentLog.changes`; la interfaz los observa con `collectAsState()` y se redibuja solo cuando algo cambia. Nada de bucles que pregunten cada segundo.
+- **Eventos, no sondeos.** La cámara de las señas se prende y apaga por avisos (suena audio, cambia la app de adelante, se apaga la pantalla) en vez de mirar cada tanto; la escucha se pausa o reanuda por avisos de pantalla, cargador y batería (`ListeningPolicy`).
+- **Una sola copia de cada cosa.** Tocar, escribir y esperar elementos en otras apps está en `actions/Nodes`; la voz en `voice/Speaker`; el tono y la vibración en `voice/Feedback`.
+- **Lo que tiene consecuencias lo confirma el código**, no el modelo (ver `Confirmation` y [AGENT.md](AGENT.md)).
+
+## Batería
+
+| Qué | Cómo ahorra |
+|---|---|
+| `SpeechGate` | El reconocedor de la palabra de activación no trabaja en silencio: una compuerta de volumen, que aprende el ruido de fondo, lo despierta solo cuando hay sonido (con 1 s de audio previo para no perder el comienzo). |
+| `ListeningPolicy` | Con la pantalla apagada y sin cargar, pausa la escucha si la batería está baja (≤ 15 %) o en modo ahorro, o siempre si el usuario lo elige. Con la pantalla prendida o cargando, escucha siempre. |
+| `HandsWatchService` | La cámara solo se prende con la pantalla prendida y video o música sonando; usa la menor cantidad de cuadros por segundo que permita la cámara y analiza más espaciado cuando no hay una mano a la vista. |
+| Animaciones | La esfera y el fondo se redibujan a 20–30 cuadros por segundo (no a 60/120), se detienen cuando no se ven y quedan quietas con el ahorro de batería o las animaciones del sistema apagadas. |
+| Wake locks | Solo con tope de tiempo y mientras dura un pedido. |
+
+## Pruebas
+
+```
+./gradlew testDebugUnitTest                         # lógica: comandos, habilidades, notificaciones, señas, compuerta, política
+./gradlew testDebugUnitTest -Pscreenshots=true \
+    --tests '*ScreenshotTest*'                      # capturas de las pantallas → app/build/screenshots
+```

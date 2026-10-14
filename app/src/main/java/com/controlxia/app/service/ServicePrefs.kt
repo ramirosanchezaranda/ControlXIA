@@ -19,6 +19,13 @@ object ServicePrefs {
     fun setEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_ENABLED, enabled).apply()
+        ServiceStatus.update { it.copy(enabled = enabled) }
+    }
+
+    /** Carga en [ServiceStatus] lo guardado (al arrancar la app). */
+    fun load(context: Context) {
+        val enabled = isEnabled(context)
+        ServiceStatus.update { it.copy(enabled = enabled) }
     }
 
     /** true cuando el usuario ya pasó por la configuración inicial. */

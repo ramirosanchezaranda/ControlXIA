@@ -1,11 +1,5 @@
 package com.controlxia.app.ui.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.ui.theme.Aura
+import com.controlxia.app.ui.theme.rememberAnimationClock
 import com.controlxia.app.ui.theme.rememberReduceMotion
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -127,16 +122,9 @@ fun Modifier.frostedGlass(shape: Shape = GlassShape): Modifier = composed {
 fun AuraBackground(modifier: Modifier = Modifier, energy: Float = 0f) {
     val colors = Aura.colors
     // Con las animaciones del sistema apagadas, las luces quedan quietas (y no se redibuja).
-    val t = if (rememberReduceMotion()) 0f else {
-        val transition = rememberInfiniteTransition(label = "aura")
-        val phase by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = (2 * Math.PI).toFloat(),
-            animationSpec = infiniteRepeatable(tween(26_000, easing = LinearEasing), RepeatMode.Restart),
-            label = "aura-t",
-        )
-        phase
-    }
+    // Las luces se mueven muy despacio: 20 cuadros por segundo alcanzan.
+    val seconds by rememberAnimationClock(fps = 20, running = !rememberReduceMotion())
+    val t = (seconds * (2 * Math.PI / CYCLE_S)).toFloat()
     Canvas(modifier.fillMaxSize()) {
         drawRect(colors.background)
         val big = max(size.width, size.height)
@@ -165,6 +153,9 @@ fun AuraBackground(modifier: Modifier = Modifier, energy: Float = 0f) {
 }
 
 private class Glow(val x: Float, val y: Float, val radius: Float)
+
+/** Segundos de una vuelta completa de las luces del fondo. */
+private const val CYCLE_S = 26.0
 
 private val GLOWS = listOf(
     Glow(0.15f, 0.08f, 0.62f),

@@ -45,7 +45,7 @@ Las pantallas sobre el bloqueo (el asistente y la alarma) van siempre en oscuro,
 - El contenido no se estira más de 720 dp: en tablets queda centrado.
 - Los tamaños salen de la pantalla (la esfera, por ejemplo, entre 150 y 300 dp) y los textos pueden crecer con el tamaño de letra del sistema sin cortarse.
 
-Capturas automáticas (vertical, chico, horizontal, tablet, claro y oscuro): `./gradlew testDebugUnitTest --tests '*ScreenshotTest*'` → `app/build/screenshots`.
+Capturas automáticas (vertical, chico, horizontal, tablet, claro y oscuro): `./gradlew testDebugUnitTest -Pscreenshots=true --tests '*ScreenshotTest*'` → `app/build/screenshots`.
 
 ## De dónde sacar más animaciones así
 

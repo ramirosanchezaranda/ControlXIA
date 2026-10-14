@@ -9,7 +9,6 @@ import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -77,7 +76,7 @@ object ScreenNumbers {
         val node = items.getOrNull(number - 1)
             ?: return if (items.isEmpty()) "Primero decí «mostrá los números»." else "No hay un $number en pantalla."
         node.refresh()
-        val ok = if (long) Gestures.longPress(service, node) else click(service, node)
+        val ok = if (long) Gestures.longPress(service, node) else Nodes.click(service, node)
         AgentLog.add("NÚMEROS ${if (long) "mantener" else "tocar"} $number ${if (ok) "ok" else "falló"}")
         onScreenChanged()
         return if (ok) null else "No pude tocar el $number."
@@ -91,7 +90,7 @@ object ScreenNumbers {
         val service = XiaAccessibilityService.instance ?: return DeviceControl.NEEDS_A11Y
         val node = findByLabel(label)
             ?: return "No veo «$label» en pantalla. Decí «mostrá los números» y elegí uno."
-        val ok = if (long) Gestures.longPress(service, node) else click(service, node)
+        val ok = if (long) Gestures.longPress(service, node) else Nodes.click(service, node)
         AgentLog.add("TOCAR «$label» ${if (ok) "ok" else "falló"}")
         onScreenChanged()
         return if (ok) null else "No pude tocar «$label»."
@@ -122,11 +121,7 @@ object ScreenNumbers {
             current.endsWith(" ") -> current + text
             else -> "$current $text"
         }
-        val args = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
-        }
-        field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        return if (field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) null else "No pude escribir ahí."
+        return if (Nodes.setText(field, value)) null else "No pude escribir ahí."
     }
 
     /** Apretar Enter en el campo con el foco (buscar, enviar en algunos chats). */
@@ -175,13 +170,6 @@ object ScreenNumbers {
             if (text.isNotBlank()) return text
         }
         return ""
-    }
-
-    private fun click(service: XiaAccessibilityService, node: AccessibilityNodeInfo): Boolean {
-        var target: AccessibilityNodeInfo? = node
-        while (target != null && !target.isClickable) target = target.parent
-        if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return true
-        return Gestures.tap(service, node)
     }
 
     private fun windowManager(context: Context): WindowManager? =

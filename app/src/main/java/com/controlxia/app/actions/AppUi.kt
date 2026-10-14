@@ -2,10 +2,8 @@ package com.controlxia.app.actions
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.service.XiaAccessibilityService
@@ -31,7 +29,7 @@ class AppUi(private val context: Context) {
         openApp(service, app, fresh = true)?.let { return@withContext it }
         val field = openSearch(service, app.pkg)
             ?: return@withContext fail("Abrí ${app.label} pero no encontré su buscador. Decí «mostrá los números» para elegirlo vos.")
-        setText(field, query)
+        Nodes.setText(field, query)
         delay(400)
         submit(service, app.pkg, field)
         AgentLog.add("APP busqué «$query» en ${app.label}")
@@ -44,12 +42,12 @@ class AppUi(private val context: Context) {
         val app = launcher.find(appName) ?: return@withContext "No encontré la app $appName."
         val alreadyThere = service.rootInActiveWindow?.packageName?.toString() == app.pkg
         if (!alreadyThere) openApp(service, app, fresh = false)?.let { return@withContext it }
-        var found = waitFor(service, app.pkg, 5_000) { ScreenNumbers.findByLabel(label) }
+        var found = Nodes.waitFor(service, app.pkg, 5_000) { ScreenNumbers.findByLabel(label) }
         if (found == null) {
             // Puede estar más abajo.
             DeviceControl(context).scroll(DeviceControl.Direction.DOWN)
             delay(700)
-            found = waitFor(service, app.pkg, 1_500) { ScreenNumbers.findByLabel(label) }
+            found = Nodes.waitFor(service, app.pkg, 1_500) { ScreenNumbers.findByLabel(label) }
         }
         if (found == null) return@withContext fail("Abrí ${app.label} pero no encontré «$label».")
         ScreenNumbers.tapLabel(label)?.let { return@withContext it }
@@ -82,19 +80,19 @@ class AppUi(private val context: Context) {
         }
         val search = openSearch(service, app.pkg)
             ?: return@withContext fail("Abrí ${app.label} pero no encontré dónde buscar el chat.")
-        setText(search, chat)
+        Nodes.setText(search, chat)
         delay(1_200)
-        val row = waitFor(service, app.pkg, 4_000) { root -> chatResult(root, chat) }
+        val row = Nodes.waitFor(service, app.pkg, 4_000) { root -> chatResult(root, chat) }
             ?: return@withContext fail("No encontré a «$chat» en ${app.label}.")
-        click(service, row)
+        Nodes.click(service, row)
         delay(900)
-        val field = waitFor(service, app.pkg, 5_000) { root -> messageField(root) }
+        val field = Nodes.waitFor(service, app.pkg, 5_000) { root -> messageField(root) }
             ?: return@withContext fail("Abrí el chat en ${app.label} pero no encontré dónde escribir.")
-        setText(field, text)
+        Nodes.setText(field, text)
         delay(500)
-        val send = waitFor(service, app.pkg, 3_000) { root -> sendButton(root) }
+        val send = Nodes.waitFor(service, app.pkg, 3_000) { root -> sendButton(root) }
             ?: return@withContext fail("Escribí el mensaje en ${app.label} pero no encontré el botón de enviar: tocalo vos.")
-        click(service, send)
+        Nodes.click(service, send)
         AgentLog.add("APP mensaje enviado por ${app.label} a «$chat»")
         null
     }
@@ -106,21 +104,21 @@ class AppUi(private val context: Context) {
         if (!UnlockGate.unlock(context, "para abrir ${app.label}")) return UnlockGate.NOT_UNLOCKED
         val result = withContext(Dispatchers.Main) { launcher.open(app, fresh) }
         if (!result.startsWith("Abriendo")) return result
-        return if (waitFor(service, app.pkg, 8_000) { it } == null) fail("${app.label} tarda en abrir.") else null
+        return if (Nodes.waitFor(service, app.pkg, 8_000) { it } == null) fail("${app.label} tarda en abrir.") else null
     }
 
     /** El campo de búsqueda listo para escribir (tocando la lupa si hace falta). */
     private suspend fun openSearch(service: XiaAccessibilityService, pkg: String): AccessibilityNodeInfo? {
-        waitFor(service, pkg, 5_000) { root -> searchField(root) }?.let { field ->
-            click(service, field)
+        Nodes.waitFor(service, pkg, 5_000) { root -> searchField(root) }?.let { field ->
+            Nodes.click(service, field)
             delay(500)
             return focusedEditable(service, pkg) ?: field
         }
-        val button = waitFor(service, pkg, 2_000) { root -> searchButton(root) } ?: return null
-        click(service, button)
+        val button = Nodes.waitFor(service, pkg, 2_000) { root -> searchButton(root) } ?: return null
+        Nodes.click(service, button)
         delay(800)
-        return waitFor(service, pkg, 3_000) { root ->
-            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable } ?: searchField(root) ?: firstEditable(root)
+        return Nodes.waitFor(service, pkg, 3_000) { root ->
+            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable } ?: searchField(root) ?: Nodes.firstEditable(root)
         }
     }
 
@@ -137,17 +135,17 @@ class AppUi(private val context: Context) {
         if (entered) return
         // Muchas apps buscan mientras escribís; si hay un botón "Buscar", tocarlo.
         service.rootInActiveWindow?.takeIf { it.packageName?.toString() == pkg }
-            ?.let { root -> find(root) { !it.isEditable && it.isClickable && label(it).let { l -> l == "buscar" || l == "search" } } }
-            ?.let { click(service, it) }
+            ?.let { root -> Nodes.find(root) { !it.isEditable && it.isClickable && label(it).let { l -> l == "buscar" || l == "search" } } }
+            ?.let { Nodes.click(service, it) }
     }
 
     // ---- Qué es cada cosa en pantalla ----
 
     private fun searchField(root: AccessibilityNodeInfo): AccessibilityNodeInfo? =
-        find(root) { it.isEditable && isSearchy(it) }
+        Nodes.find(root) { it.isEditable && isSearchy(it) }
 
     private fun searchButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? =
-        find(root) { !it.isEditable && isSearchy(it) && label(it).length <= 40 }
+        Nodes.find(root) { !it.isEditable && isSearchy(it) && label(it).length <= 40 }
 
     private fun isSearchy(node: AccessibilityNodeInfo): Boolean {
         val words = label(node) + " " + id(node)
@@ -157,13 +155,13 @@ class AppUi(private val context: Context) {
     /** El campo para escribir el mensaje: el que dice "Mensaje", si no el último editable. */
     private fun messageField(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         val editables = mutableListOf<AccessibilityNodeInfo>()
-        visit(root) { if (it.isEditable) editables += it }
+        Nodes.visit(root) { if (it.isEditable) editables += it }
         return editables.firstOrNull { node -> MESSAGE_WORDS.any { (label(node) + " " + id(node)).contains(it) } }
             ?: editables.lastOrNull { !isSearchy(it) }
     }
 
     private fun sendButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? =
-        find(root) { node ->
+        Nodes.find(root) { node ->
             !node.isEditable && (label(node) in SEND_LABELS || id(node).let { it.endsWith("send") || it.contains("send_button") })
         }
 
@@ -171,7 +169,7 @@ class AppUi(private val context: Context) {
     private fun chatResult(root: AccessibilityNodeInfo, chat: String): AccessibilityNodeInfo? {
         val wanted = WhatsAppUi.normalize(chat)
         var best: Pair<AccessibilityNodeInfo, Double>? = null
-        visit(root) { node ->
+        Nodes.visit(root) { node ->
             if (node.isEditable) return@visit
             val text = node.text?.toString() ?: node.contentDescription?.toString() ?: return@visit
             val clean = WhatsAppUi.normalize(text)
@@ -195,55 +193,6 @@ class AppUi(private val context: Context) {
 
     private fun id(node: AccessibilityNodeInfo): String =
         node.viewIdResourceName?.substringAfter(":id/")?.lowercase().orEmpty()
-
-    private fun find(root: AccessibilityNodeInfo, match: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
-        var found: AccessibilityNodeInfo? = null
-        visit(root) { if (found == null && match(it)) found = it }
-        return found
-    }
-
-    private fun visit(root: AccessibilityNodeInfo, action: (AccessibilityNodeInfo) -> Unit) {
-        fun go(node: AccessibilityNodeInfo?, depth: Int) {
-            if (node == null || depth > 40 || !node.isVisibleToUser) return
-            action(node)
-            for (i in 0 until node.childCount) go(node.getChild(i), depth + 1)
-        }
-        go(root, 0)
-    }
-
-    private fun firstEditable(root: AccessibilityNodeInfo): AccessibilityNodeInfo? = find(root) { it.isEditable }
-
-    private suspend fun waitFor(
-        service: XiaAccessibilityService,
-        pkg: String,
-        timeoutMs: Long,
-        find: (AccessibilityNodeInfo) -> AccessibilityNodeInfo?,
-    ): AccessibilityNodeInfo? {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            val root = service.rootInActiveWindow
-            if (root != null && root.packageName?.toString() == pkg) find(root)?.let { return it }
-            delay(300)
-        }
-        return null
-    }
-
-    private fun setText(field: AccessibilityNodeInfo, text: String) {
-        field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        val args = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-        }
-        field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-    }
-
-    /** Toca el elemento (o el primer padre tocable); si no se puede, con un gesto. */
-    private fun click(service: XiaAccessibilityService, node: AccessibilityNodeInfo) {
-        var target: AccessibilityNodeInfo? = node
-        while (target != null && !target.isClickable) target = target.parent
-        if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
-        val bounds = Rect().also { node.getBoundsInScreen(it) }
-        if (!bounds.isEmpty) Gestures.tapAt(service, bounds.exactCenterX(), bounds.exactCenterY())
-    }
 
     private fun fail(reason: String): String {
         AgentLog.add("APP $reason")

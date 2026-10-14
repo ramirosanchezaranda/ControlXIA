@@ -38,11 +38,9 @@ import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,7 +54,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.brain.LlmSettings
 import com.controlxia.app.permissions.PermissionManager
-import com.controlxia.app.service.ServicePrefs
+import com.controlxia.app.service.ServiceStatus
 import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.service.XiaAccessibilityService
 import com.controlxia.app.service.XiaNotificationListener
@@ -79,7 +77,6 @@ import com.controlxia.app.ui.theme.pressable
 import com.controlxia.app.ui.theme.staggerReveal
 import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.WakeWordSettings
-import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -106,24 +103,14 @@ fun HomeScreen(
     val assistant by AssistantState.state.collectAsState()
     val level by AssistantState.level.collectAsState()
 
-    // Lo que pasa en el servicio, refrescado cada segundo.
-    var serviceOn by remember(tick) { mutableStateOf(ServicePrefs.isEnabled(context)) }
-    var running by remember { mutableStateOf(WakeWordService.running) }
-    var wakeStatus by remember { mutableStateOf(WakeWordService.wakeWordStatus) }
-    var lastCommand by remember { mutableStateOf(WakeWordService.lastCommand) }
-    var lastReply by remember { mutableStateOf(WakeWordService.lastReply) }
-    var brainError by remember { mutableStateOf(WakeWordService.lastBrainError) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            running = WakeWordService.running
-            serviceOn = ServicePrefs.isEnabled(context)
-            wakeStatus = WakeWordService.wakeWordStatus
-            lastCommand = WakeWordService.lastCommand
-            lastReply = WakeWordService.lastReply
-            brainError = WakeWordService.lastBrainError
-            delay(1_000)
-        }
-    }
+    // Lo que pasa en el servicio: se actualiza solo cuando cambia.
+    val service by ServiceStatus.state.collectAsState()
+    val serviceOn = service.enabled
+    val running = service.running
+    val wakeStatus = service.wakeStatus
+    val lastCommand = service.lastCommand
+    val lastReply = service.lastReply
+    val brainError = service.lastError
     var permissionsBump by remember { mutableIntStateOf(0) }
     val missing = remember(tick, permissionsBump) { missingPermissions(context) }
     val brainSummary = remember(tick) {
@@ -253,12 +240,7 @@ fun HomeScreen(
                     checked = serviceOn,
                     enabled = PermissionManager.hasRecordAudio(context) && PermissionManager.hasPostNotifications(context),
                     onCheckedChange = { on ->
-                        if (on) {
-                            serviceOn = WakeWordService.start(context)
-                        } else {
-                            WakeWordService.stop(context)
-                            serviceOn = false
-                        }
+                        if (on) WakeWordService.start(context) else WakeWordService.stop(context)
                     },
                 )
             }
@@ -371,13 +353,7 @@ private fun Header(agentName: String) {
 /** Cápsula "● Escuchando" / "En pausa" con el punto latiendo. */
 @Composable
 private fun LiveBadge() {
-    var on by remember { mutableStateOf(WakeWordService.wakeWordActive) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            on = WakeWordService.wakeWordActive
-            delay(1_000)
-        }
-    }
+    val on = ServiceStatus.state.collectAsState().value.wakeActive
     val colors = Aura.colors
     Row(
         Modifier.glass(CircleShape, strong = true, elevated = false).padding(horizontal = 12.dp, vertical = 7.dp),

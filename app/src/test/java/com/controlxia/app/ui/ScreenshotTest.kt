@@ -95,6 +95,11 @@ class ScreenshotTest {
         com.controlxia.app.ui.theme.ThemeSettings.setPalette(app, com.controlxia.app.ui.theme.Palette.AURA)
     }
 
+    /** Ajustes de la escucha enteros (pantalla alta), con la sección de batería. */
+    @Test
+    @Config(qualifiers = TALL)
+    fun listeningSettings() = shoot("listening-settings", dark = false) { WakeWordSettingsScreen(onBack = {}) }
+
     private fun shootTabs(prefix: String, dark: Boolean) {
         Tab.entries.forEach { tab ->
             shoot("$prefix-${tab.name.lowercase()}", dark) {
@@ -151,5 +156,6 @@ class ScreenshotTest {
         const val SMALL = "w320dp-h640dp-port-hdpi"
         const val LANDSCAPE = "w852dp-h393dp-land-xxhdpi"
         const val TABLET = "w1024dp-h768dp-land-mdpi"
+        const val TALL = "w393dp-h2400dp-port-hdpi"
     }
 }

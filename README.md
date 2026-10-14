@@ -38,6 +38,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Alarmas que andan siempre**: en el Reloj si las toma y, si no, propias (exactas, con pantalla sobre el bloqueo, Detener/Posponer, sobreviven a un reinicio). "Apagá la alarma" y "posponela" por voz, sin decir el nombre.
 - ✅ **Gestos con una mano** mirando reels y videos: ☝️ siguiente, 👇 anterior, 👉 foto/historia, 👍 me gusta, ✌️ hablarle; 🙌 pausa y pregunta.
 - ✅ **Apariencia a elección**: automático, claro u oscuro, y tres paletas (Aura, Studio, Toscana) que cambian también la esfera.
+- ✅ **Gasta menos batería**: el reconocedor del nombre no trabaja en silencio, la escucha se pausa con la pantalla apagada si la batería está baja o en ahorro (configurable), la cámara de los gestos solo se prende con video o música en pantalla y a pocos cuadros por segundo, y las animaciones se redibujan menos y se quedan quietas con el ahorro de batería. Ver [docs/WAKE_WORD.md](docs/WAKE_WORD.md#batería).
 - ⏳ Próximo: llamadas, recordatorios, activación con botón home (rol de asistente).
 
 ## Compilar
@@ -83,13 +84,16 @@ La palabra de activación es el **nombre que le pongas** (por defecto "Xia") y s
 
 ```
 app/src/main/java/com/controlxia/app/
-├── service/       # WakeWordService (orquesta wake word → ASR → cerebro → TTS), BootReceiver, Watchdog
+├── service/       # WakeWordService (nombre → pedido → cerebro → voz), HandsWatchService (gestos), ListeningPolicy, ServiceStatus, accesibilidad, notificaciones, receptores
+├── brain/         # DirectCommands y LocalSkills (sin modelo), CommandProcessor (agente), ToolRegistry, proveedores de modelos
+├── actions/       # Hacer cosas: Nodes y Gestures (tocar/escribir en otras apps), AppUi, WhatsAppUi, alarmas, llamadas, cámara, mensajes
+├── voice/         # SpeechGate + WakePhraseDetector (Vosk), reconocimiento del pedido, Speaker, Feedback, HandSigns, ajustes
 ├── permissions/   # PermissionManager (fabricante + overlay para abrir apps bloqueado)
-├── brain/         # Multi-LLM + CommandProcessor, ToolRegistry, ConversationMemory
-├── actions/       # AppLauncher, AlarmActions, AppDeepLinks (búsquedas/secciones), ScreenControl (accesibilidad), MessageStore/MessageSender/Contacts (mensajería)
-├── voice/         # WakeWordEngine (Vosk + WakePhraseDetector + VoskModelStore), SpeechToText, ListeningOverlay, VoiceSettings, settings, RecentCommandsStore
-├── feedback/      # FeedbackStore (historial local analizado por el LLM)
-└── ui/            # Onboarding, Dashboard, LlmSettings, Feedback, WakeWordSettings, VoiceSettings
-    ├── theme/     # XiaTheme (papel/tinta/acento, tipografía mono) + Motion (expo.out)
-    └── components/# TechButton, TechPanel, StatusRow, hairlines…
+├── diagnostics/   # AgentLog (registro paso a paso)
+├── feedback/      # FeedbackStore (historial local analizado por el modelo)
+└── ui/            # Compose: Inicio, Explorar, Actividad, Ajustes, onboarding, alarma, asistente sobre el bloqueo
+    ├── theme/     # XiaTheme (paletas claro/oscuro), Motion (resortes, reloj de animación)
+    └── components/# Glass, AuraOrb, controles
 ```
+
+Cómo se conecta todo y qué reglas seguimos: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Pruebas: `./gradlew testDebugUnitTest`.
