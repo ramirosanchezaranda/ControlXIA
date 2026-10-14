@@ -36,7 +36,8 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Cualquier app sin el modelo**: "buscá pizza en PedidosYa" (toca la lupa de la app y busca), "en Spotify tocá Biblioteca", mensajes por Telegram, Messenger, Instagram o Signal.
 - ✅ **Interfaz estilo Apple / Liquid Glass**: tema claro y oscuro con los colores de iOS, vidrio esmerilado, fondo de luces que se mueven, la esfera del asistente (crece con tu voz, gira al pensar), onda de voz como Siri, pestañas flotantes de vidrio (Inicio, Explorar, Actividad, Ajustes), pedir escribiendo o tocando la esfera, animaciones con resortes y diseño adaptable a teléfonos chicos, horizontal y tablets. Ver [docs/DESIGN.md](docs/DESIGN.md).
 - ✅ **Alarmas que andan siempre**: en el Reloj si las toma y, si no, propias (exactas, con pantalla sobre el bloqueo, Detener/Posponer, sobreviven a un reinicio). "Apagá la alarma" y "posponela" por voz, sin decir el nombre.
-- ✅ **Gestos con una mano** mirando reels y videos: ☝️ siguiente, 👇 anterior, 👉 foto/historia, 👍 me gusta, ✌️ hablarle; 🙌 pausa y pregunta.
+- ✅ **Saludar al teléfono** (sin cámara, con el sensor de proximidad, anda con la pantalla apagada): 👋 prende la pantalla, 👋👋 te escucha, ✋ tapar un segundo pospone la alarma, lo frena o pausa el video. Ver [docs/VOICE_CONTROL.md](docs/VOICE_CONTROL.md#gestos-con-las-manos).
+- ✅ **Gestos con una mano** mirando reels y videos: ☝️ siguiente, 👇 anterior, 👉 foto/historia, ✋ pausa, 👍 me gusta, ✌️ hablarle; 🙌 pausa y pregunta.
 - ✅ **Apariencia a elección**: automático, claro u oscuro, y tres paletas (Aura, Studio, Toscana) que cambian también la esfera.
 - ✅ **Gasta menos batería**: el reconocedor del nombre no trabaja en silencio, la escucha se pausa con la pantalla apagada si la batería está baja o en ahorro (configurable), la cámara de los gestos solo se prende con video o música en pantalla y a pocos cuadros por segundo, y las animaciones se redibujan menos y se quedan quietas con el ahorro de batería. Ver [docs/WAKE_WORD.md](docs/WAKE_WORD.md#batería).
 - ⏳ Próximo: llamadas, recordatorios, activación con botón home (rol de asistente).
@@ -84,7 +85,7 @@ La palabra de activación es el **nombre que le pongas** (por defecto "Xia") y s
 
 ```
 app/src/main/java/com/controlxia/app/
-├── service/       # WakeWordService (nombre → pedido → cerebro → voz), HandsWatchService (gestos), ListeningPolicy, ServiceStatus, accesibilidad, notificaciones, receptores
+├── service/       # WakeWordService (nombre → pedido → cerebro → voz), HandsWatchService (señas con la cámara), WaveGestures (saludos con el sensor), ListeningPolicy, ServiceStatus, accesibilidad, notificaciones, receptores
 ├── brain/         # DirectCommands y LocalSkills (sin modelo), CommandProcessor (agente), ToolRegistry, proveedores de modelos
 ├── actions/       # Hacer cosas: Nodes y Gestures (tocar/escribir en otras apps), AppUi, WhatsAppUi, alarmas, llamadas, cámara, mensajes
 ├── voice/         # SpeechGate + WakePhraseDetector (Vosk), reconocimiento del pedido, Speaker, Feedback, HandSigns, ajustes

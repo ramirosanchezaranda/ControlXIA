@@ -76,6 +76,14 @@ class WakeWordSettings(context: Context) {
         get() = prefs.getBoolean(KEY_HAND_GESTURES, true)
         set(value) = prefs.edit().putBoolean(KEY_HAND_GESTURES, value).apply()
 
+    /**
+     * Saludar al teléfono (sensor de proximidad, sin cámara): un saludo prende
+     * la pantalla, dos te escucha, tapar un segundo frena o pospone.
+     */
+    var waveGestures: Boolean
+        get() = prefs.getBoolean(KEY_WAVES, true)
+        set(value) = prefs.edit().putBoolean(KEY_WAVES, value).apply()
+
     /** Escuchar el nombre también con la pantalla apagada (gasta más batería). */
     var listenScreenOff: Boolean
         get() = prefs.getBoolean(KEY_SCREEN_OFF, true)
@@ -105,6 +113,7 @@ class WakeWordSettings(context: Context) {
         private const val KEY_SCREEN_OFF = "listen_screen_off"
         private const val KEY_LOW_BATTERY = "pause_low_battery"
         private const val KEY_HAND_GESTURES = "hand_gestures"
+        private const val KEY_WAVES = "wave_gestures"
         private const val KEY_CONVERSATION = "conversation_mode"
         private const val KEY_CONVERSATION_SECONDS = "conversation_seconds"
         private const val KEY_AGENT = "agent_name"

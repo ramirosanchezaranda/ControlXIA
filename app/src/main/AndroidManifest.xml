@@ -99,6 +99,17 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.ControlXIA.Transparent" />
 
+        <!-- Invisible: prende la pantalla cuando saludás al teléfono y se cierra. -->
+        <activity
+            android:name=".ui.ScreenOnActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="com.controlxia.app.wake"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.ControlXIA.Transparent" />
+
         <receiver
             android:name=".service.AlarmReceiver"
             android:exported="false" />

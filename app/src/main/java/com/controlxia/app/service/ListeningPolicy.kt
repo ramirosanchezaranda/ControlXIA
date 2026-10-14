@@ -35,6 +35,20 @@ class ListeningPolicy(private val context: Context, private val onChange: () -> 
         )
     }
 
+    /**
+     * Pantalla apagada con batería baja o en ahorro (si el usuario pidió
+     * pausar en ese caso), sin importar si elige escuchar con la pantalla
+     * apagada: ahí conviene soltar también los sensores.
+     */
+    fun lowPower(): Boolean = pauseReason(
+        screenOn = power.isInteractive,
+        charging = isCharging(),
+        lowBattery = isLow(),
+        powerSave = power.isPowerSaveMode,
+        listenScreenOff = true,
+        pauseOnLowBattery = WakeWordSettings(context).pauseOnLowBattery,
+    ) != null
+
     fun start() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)

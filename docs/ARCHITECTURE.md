@@ -33,8 +33,8 @@ Los pasos 1 y 2 son instantáneos y no usan internet; solo lo que no entienden v
 |---|---|---|
 | `brain/` | Entender el pedido y decidir: `DirectCommands`, `LocalSkills`, `Calculator`, `NotificationSummary`, `TaskCheck` (sin Android, con pruebas), `CommandProcessor` (el agente), `ToolRegistry` (las herramientas) y los proveedores de modelos. | Solo `CommandProcessor`, `ToolRegistry` y los proveedores |
 | `actions/` | Hacer cosas en el teléfono: abrir apps, tocar y escribir por accesibilidad (`Nodes`, `Gestures`, `ScreenControl`, `ScreenNumbers`, `AppUi`, `WhatsAppUi`), alarmas, llamadas, cámara, mensajes. | Sí |
-| `voice/` | Escuchar y hablar: `SpeechGate` y `WakePhraseDetector` (sin Android), el motor Vosk, el reconocimiento del pedido, `Speaker` (voz), `Feedback` (tono y vibración), `HandSigns` (señas, sin Android), ajustes. | En parte |
-| `service/` | Lo que corre en segundo plano: `WakeWordService`, `HandsWatchService` (cámara para las señas), `XiaAccessibilityService`, el lector de notificaciones, `ListeningPolicy` (cuándo escuchar), `ServiceStatus` (estado para la interfaz) y los receptores (arranque, alarmas, vigilancia). | Sí |
+| `voice/` | Escuchar y hablar: `SpeechGate` y `WakePhraseDetector` (sin Android), el motor Vosk, el reconocimiento del pedido, `Speaker` (voz), `Feedback` (tono y vibración), `HandSigns` y `WaveDetector` (señas y saludos, sin Android), ajustes. | En parte |
+| `service/` | Lo que corre en segundo plano: `WakeWordService`, `HandsWatchService` (cámara para las señas), `WaveGestures` (saludos con el sensor de proximidad), `XiaAccessibilityService`, el lector de notificaciones, `ListeningPolicy` (cuándo escuchar), `ServiceStatus` (estado para la interfaz) y los receptores (arranque, alarmas, vigilancia). | Sí |
 | `ui/` | Compose: pantallas, tema (`theme/`) y componentes (`components/`). Solo lee estado y llama al servicio. | Sí |
 | `diagnostics/` | `AgentLog`: el registro paso a paso que se ve en Actividad. | No |
 
@@ -54,12 +54,13 @@ Los pasos 1 y 2 son instantáneos y no usan internet; solo lo que no entienden v
 | `ListeningPolicy` | Con la pantalla apagada y sin cargar, pausa la escucha si la batería está baja (≤ 15 %) o en modo ahorro, o siempre si el usuario lo elige. Con la pantalla prendida o cargando, escucha siempre. |
 | `HandsWatchService` | La cámara solo se prende con la pantalla prendida y video o música sonando; usa la menor cantidad de cuadros por segundo que permita la cámara y analiza más espaciado cuando no hay una mano a la vista. |
 | Animaciones | La esfera y el fondo se redibujan a 20–30 cuadros por segundo (no a 60/120), se detienen cuando no se ven y quedan quietas con el ahorro de batería o las animaciones del sistema apagadas. |
+| Saludos | El sensor de proximidad gasta muy poco; igual se suelta con la pantalla apagada y la batería baja o en ahorro. |
 | Wake locks | Solo con tope de tiempo y mientras dura un pedido. |
 
 ## Pruebas
 
 ```
-./gradlew testDebugUnitTest                         # lógica: comandos, habilidades, notificaciones, señas, compuerta, política
+./gradlew testDebugUnitTest                         # lógica: comandos, habilidades, notificaciones, señas, saludos, compuerta, política
 ./gradlew testDebugUnitTest -Pscreenshots=true \
     --tests '*ScreenshotTest*'                      # capturas de las pantallas → app/build/screenshots
 ```

@@ -115,13 +115,34 @@ Mientras suena una alarma propia, el motor de voz oye "apagá la alarma" o "posp
 
 ## Gestos con las manos
 
-Ajustes → **Gestos con las manos**. Mientras mirás videos o reels, la cámara frontal mira tus manos:
+Hay dos formas, las dos en Ajustar → **Gestos con las manos**.
+
+### Saludar al teléfono (sin cámara)
+
+Pasando la mano por encima de la pantalla, a unos centímetros y sin tocarla. Usa el **sensor de proximidad** (el que apaga la pantalla cuando te acercás el teléfono a la oreja), así que anda **con la pantalla apagada** y casi no gasta batería. Viene activado.
+
+| Gesto | Hace |
+|---|---|
+| 👋 Un saludo con la pantalla apagada | Prende la pantalla (queda la pantalla de bloqueo; con desbloqueo facial, el teléfono puede desbloquearse solo) |
+| 👋👋 Dos saludos seguidos | Te escucha, como si dijeras el nombre (con la pantalla apagada, también la prende) |
+| ✋ Tapar un segundo | Si suena una alarma, la pospone; si el asistente está hablando o trabajando, lo frena; si estás mirando un video, lo pausa |
+
+- **Un saludo** es que el sensor quede tapado un instante (hasta 0,8 s) y se destape. Para que el bolsillo o el teléfono boca abajo no cuenten, antes tiene que haber estado destapado al menos 0,6 s. Si igual la prende y enseguida queda tapada (estaba en el bolsillo), la vuelve a apagar.
+- Durante una llamada no hace nada: ahí el sensor es para la oreja.
+- Necesita la escucha de ControlXIA encendida. Con la pantalla apagada y la batería baja o en ahorro (si está activado "Pausar con batería baja"), se pausa igual que la escucha.
+- En los ajustes hay un **probador**: mientras están abiertos, dice en vivo si el sensor ve tu mano y si contó un saludo.
+- Algunos teléfonos (varios Xiaomi, por ejemplo) no tienen un sensor real sino uno "virtual" que solo funciona en llamadas o con la pantalla prendida: ahí el saludo con la pantalla apagada puede no andar.
+
+### Señas frente a la cámara (mirando videos)
+
+Mientras mirás videos o reels, la cámara frontal mira tus manos:
 
 | Seña | Hace |
 |---|---|
 | ☝️ Dedo índice para arriba | Reel o video siguiente (mantenelo para seguir pasando, uno cada ~2 s) |
 | 👇 Dedo para abajo | El anterior |
 | 👉 Dedo al costado | Foto o historia siguiente o anterior |
+| ✋ Palma abierta | Pausa o sigue el video |
 | 👍 Pulgar arriba | Me gusta (dos toques en el medio) |
 | ✌️ V | Pausa y te escucha, sin decir el nombre |
 | 🙌 Las dos manos arriba | Pausa y pregunta "¿Qué necesitás?" |

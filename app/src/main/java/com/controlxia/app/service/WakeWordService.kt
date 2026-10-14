@@ -129,6 +129,9 @@ class WakeWordService : Service() {
     /** Cuándo soltar el micrófono para ahorrar batería. */
     private var policy: ListeningPolicy? = null
 
+    /** Saludos al teléfono con el sensor de proximidad (si están activados). */
+    private var waves: WaveGestures? = null
+
     /** Una herramienta está usando el micrófono (grabando un audio): no escuchar "pará". */
     private var micLent = false
 
@@ -207,6 +210,7 @@ class WakeWordService : Service() {
         ServicePrefs.setEnabled(this, true)
         ReactivationNotifier.dismiss(this)
         WatchdogReceiver.schedule(this)
+        applyWaveSetting()
 
         when (intent?.action) {
             ACTION_RELOAD -> reloadWakeWord()
@@ -399,6 +403,28 @@ class WakeWordService : Service() {
                 main.postDelayed(retryWakeWord, ENGINE_RETRY_MS)
             }
         }
+    }
+
+    /** Prende o apaga los saludos según el ajuste (y los suelta con la batería baja y la pantalla apagada). */
+    private fun applyWaveSetting() {
+        if (!inForeground || !WakeWordSettings(this).waveGestures || policy?.lowPower() == true) {
+            waves?.stop()
+            waves = null
+            return
+        }
+        val gestures = waves ?: WaveGestures(
+            this,
+            onListen = { listenNow(this) },
+            onStop = {
+                if (listeningCommand) {
+                    stopCurrent("tapaste el teléfono")
+                    true
+                } else {
+                    false
+                }
+            },
+        ).also { waves = it }
+        gestures.start()
     }
 
     /** Aplica cambios de ajustes del wake word sin apagar el servicio. */
@@ -826,6 +852,7 @@ class WakeWordService : Service() {
      * (se aplica al volver a esperar el nombre).
      */
     private fun applyPolicy() {
+        applyWaveSetting()
         if (!inForeground || listeningCommand) return
         val reason = policy?.pauseReason()
         if (reason != null) {
@@ -917,6 +944,8 @@ class WakeWordService : Service() {
         OwnAlarms.onRingingChanged = null
         policy?.stop()
         policy = null
+        waves?.stop()
+        waves = null
         CameraControl.onRecordingChanged = null
         running = false
         wakeWordActive = false

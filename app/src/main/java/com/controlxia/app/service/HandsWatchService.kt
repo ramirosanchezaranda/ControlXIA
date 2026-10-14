@@ -35,6 +35,7 @@ import androidx.lifecycle.lifecycleScope
 import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
 import com.controlxia.app.actions.DeviceControl
+import com.controlxia.app.actions.MediaApps
 import com.controlxia.app.actions.Gestures
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.voice.AssistantState
@@ -170,7 +171,7 @@ class HandsWatchService : LifecycleService() {
     private fun wanted(): Boolean =
         power.isInteractive &&
             (runCatching { audio.isMusicActive }.getOrDefault(false) ||
-                XiaAccessibilityService.foregroundPackage in VIDEO_APPS)
+                XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO)
 
     private fun evaluate() {
         if (wanted()) {
@@ -298,6 +299,7 @@ class HandsWatchService : LifecycleService() {
                 HandSigns.Sign.POINT_LEFT -> device.scroll(DeviceControl.Direction.LEFT)
                 HandSigns.Sign.POINT_RIGHT -> device.scroll(DeviceControl.Direction.RIGHT)
                 HandSigns.Sign.THUMB_UP -> like()
+                HandSigns.Sign.OPEN_PALM -> device.media(DeviceControl.Media.TOGGLE)
                 HandSigns.Sign.VICTORY -> {
                     device.media(DeviceControl.Media.PAUSE)
                     WakeWordService.listenNow(this@HandsWatchService)
@@ -329,7 +331,7 @@ class HandsWatchService : LifecycleService() {
         return NotificationCompat.Builder(this, XiaApplication.CHANNEL_SERVICE)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Gestos con las manos")
-            .setContentText("☝️ siguiente · 👇 anterior · 👍 me gusta · ✌️ hablarme · 🙌 pausa")
+            .setContentText("☝️ siguiente · 👇 anterior · ✋ pausa · 👍 me gusta · ✌️ hablarme")
             .setOngoing(true)
             .setSilent(true)
             .addAction(0, "Desactivar", stop)
@@ -368,14 +370,9 @@ class HandsWatchService : LifecycleService() {
         private val ACTIONS = setOf(
             HandSigns.Sign.POINT_UP, HandSigns.Sign.POINT_DOWN, HandSigns.Sign.POINT_LEFT,
             HandSigns.Sign.POINT_RIGHT, HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY,
+            HandSigns.Sign.OPEN_PALM,
         )
 
-        /** Apps de videos: con una de estas adelante la cámara mira aunque no haya sonido. */
-        private val VIDEO_APPS = setOf(
-            "com.instagram.android", "com.zhiliaoapp.musically", "com.ss.android.ugc.trill",
-            "com.google.android.youtube", "com.facebook.katana", "com.netflix.mediaclient",
-            "com.snapchat.android",
-        )
 
         @Volatile
         var running = false
