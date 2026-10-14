@@ -3,75 +3,50 @@ package com.controlxia.app.ui
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.HandsWatchService
 import com.controlxia.app.service.ServicePrefs
 import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.ui.theme.XiaTheme
-import com.controlxia.app.ui.theme.screenTransition
 import com.controlxia.app.voice.GestureModel
 import com.controlxia.app.voice.WakeWordSettings
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // De borde a borde: el fondo de luces pasa por detrás de las barras del sistema.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             XiaTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    var onboarded by remember {
-                        mutableStateOf(ServicePrefs.isOnboarded(this@MainActivity))
-                    }
-                    var screen by remember { mutableStateOf(Screen.DASHBOARD) }
-                    val target = if (!onboarded) ONBOARDING else screen.name
-
-                    AnimatedContent(
-                        targetState = target,
-                        transitionSpec = screenTransition(),
-                        label = "screens",
-                    ) { current ->
-                        when (current) {
-                            ONBOARDING -> OnboardingFlow(
-                                onFinished = {
-                                    ServicePrefs.setOnboarded(this@MainActivity, true)
-                                    onboarded = true
-                                }
-                            )
-                            Screen.LLM_SETTINGS.name -> LlmSettingsScreen(
-                                onBack = { screen = Screen.DASHBOARD }
-                            )
-                            Screen.FEEDBACK.name -> FeedbackScreen(
-                                onBack = { screen = Screen.DASHBOARD }
-                            )
-                            Screen.WAKEWORD.name -> WakeWordSettingsScreen(
-                                onBack = { screen = Screen.DASHBOARD }
-                            )
-                            Screen.VOICE.name -> VoiceSettingsScreen(
-                                onBack = { screen = Screen.DASHBOARD }
-                            )
-                            else -> DashboardScreen(
-                                onOpenLlm = { screen = Screen.LLM_SETTINGS },
-                                onOpenFeedback = { screen = Screen.FEEDBACK },
-                                onOpenWakeWord = { screen = Screen.WAKEWORD },
-                                onOpenVoice = { screen = Screen.VOICE },
-                            )
-                        }
-                    }
+                var onboarded by remember {
+                    mutableStateOf(ServicePrefs.isOnboarded(this@MainActivity))
                 }
+                AuraApp(
+                    onboarded = onboarded,
+                    onOnboarded = {
+                        ServicePrefs.setOnboarded(this@MainActivity, true)
+                        onboarded = true
+                    },
+                )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Con la app a la vista, la esfera reemplaza a la burbuja flotante.
+        WakeWordService.appVisible = true
+    }
+
+    override fun onStop() {
+        WakeWordService.appVisible = false
+        super.onStop()
     }
 
     override fun onResume() {
@@ -94,9 +69,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private enum class Screen { DASHBOARD, LLM_SETTINGS, FEEDBACK, WAKEWORD, VOICE }
-
-    private companion object {
-        const val ONBOARDING = "ONBOARDING"
-    }
 }

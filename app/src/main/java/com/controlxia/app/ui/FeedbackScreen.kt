@@ -167,7 +167,7 @@ fun FeedbackScreen(onBack: () -> Unit) {
                             Hairline()
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                "XIA",
+                                "Respuesta",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Accent,
                             )

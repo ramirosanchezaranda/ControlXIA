@@ -18,7 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
+import com.controlxia.app.ui.components.AuraSwitch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -128,7 +128,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                         color = Muted,
                     )
                 }
-                Switch(
+                AuraSwitch(
                     checked = conversation,
                     onCheckedChange = {
                         conversation = it
@@ -177,7 +177,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                         color = Muted,
                     )
                 }
-                Switch(
+                AuraSwitch(
                     checked = spokenAck,
                     onCheckedChange = {
                         spokenAck = it
@@ -204,7 +204,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
                         color = Muted,
                     )
                 }
-                Switch(
+                AuraSwitch(
                     checked = showLockedContent,
                     onCheckedChange = {
                         showLockedContent = it
@@ -214,7 +214,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
             }
 
             Text(
-                "Los cambios se aplican solos al volver al panel.",
+                "Los cambios se aplican solos al volver.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Muted,
             )
@@ -356,7 +356,7 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
                 color = Muted,
             )
         }
-        Switch(
+        AuraSwitch(
             checked = enabled,
             onCheckedChange = { on ->
                 if (on) {

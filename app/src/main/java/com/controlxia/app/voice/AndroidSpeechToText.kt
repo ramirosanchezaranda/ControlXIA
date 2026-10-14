@@ -53,6 +53,7 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
             fun finish(block: () -> Unit) {
                 if (finished || recognizer !== sr) return
                 finished = true
+                AssistantState.setLevel(0f)
                 block()
                 cancelInternal()
             }
@@ -105,7 +106,10 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
 
                 override fun onReadyForSpeech(params: Bundle?) {}
                 override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
+                // De -2 dB (silencio) a 10 dB (hablando fuerte) → 0 a 1, para la esfera.
+                override fun onRmsChanged(rmsdB: Float) {
+                    if (!finished && recognizer === sr) AssistantState.setLevel((rmsdB + 2f) / 12f)
+                }
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}

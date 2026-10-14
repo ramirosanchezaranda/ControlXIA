@@ -4,6 +4,28 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Chat
+import androidx.compose.material.icons.rounded.Accessibility
+import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.controlxia.app.ui.components.AuraOrb
+import com.controlxia.app.ui.components.IconTile
+import com.controlxia.app.ui.components.OrbMood
+import com.controlxia.app.ui.theme.Aura
+import com.controlxia.app.ui.theme.AuraColors
+import com.controlxia.app.ui.theme.AuraMotion
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -193,22 +215,36 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     var page by rememberSaveable { mutableIntStateOf(0) }
 
     Column(Modifier.fillMaxSize()) {
-        // Encabezado técnico con progreso
+        // Progreso: una cápsula que se llena con un resorte.
+        val progress by animateFloatAsState((page + 1f) / totalPages, AuraMotion.smooth(), label = "progress")
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("XIA", style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.weight(1f))
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .clip(CircleShape)
+                    .background(Aura.colors.separator),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(progress)
+                        .height(6.dp)
+                        .clip(CircleShape)
+                        .background(Aura.colors.blue),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
             Text(
-                String.format(Locale.ROOT, "CONFIG %02d / %02d", page + 1, totalPages),
-                style = MaterialTheme.typography.labelSmall,
+                "${page + 1} de $totalPages",
+                style = MaterialTheme.typography.labelMedium,
                 color = Muted,
             )
         }
-        Hairline()
 
         Column(
             modifier = Modifier
@@ -225,14 +261,19 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             Column {
             when {
                 p == 0 -> {
-                    Spacer(Modifier.height(32.dp))
-                    SectionLabel("Configuración inicial")
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
+                    AuraOrb(Modifier.align(Alignment.CenterHorizontally).size(200.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text(
-                        "Tu teléfono,\ncontrolado\npor voz.",
-                        style = MaterialTheme.typography.headlineLarge,
+                        "Hola, soy ${wakeSettings.agentName}.",
+                        style = MaterialTheme.typography.displaySmall,
                     )
-                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "Tu teléfono, controlado por voz.",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Accent,
+                    )
+                    Spacer(Modifier.height(16.dp))
                     Text(
                         "Xia escucha tu palabra de activación, entiende pedidos en " +
                             "lenguaje natural y ejecuta acciones reales: abrir apps, " +
@@ -246,14 +287,11 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                 }
                 p in 1..permSteps.size -> {
                     val step = permSteps[p - 1]
-                    Spacer(Modifier.height(32.dp))
-                    Text(
-                        String.format(Locale.ROOT, "%02d", p),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = Accent,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    SectionLabel(step.label)
+                    Spacer(Modifier.height(24.dp))
+                    val (icon, tint) = permIcon(step.label)
+                    IconTile(icon, tint(Aura.colors), size = 64.dp)
+                    Spacer(Modifier.height(16.dp))
+                    SectionLabel(step.label.lowercase().replaceFirstChar { it.uppercase() })
                     Spacer(Modifier.height(16.dp))
                     Text(step.title, style = MaterialTheme.typography.headlineMedium)
                     Spacer(Modifier.height(16.dp))
@@ -268,11 +306,11 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                         Spacer(Modifier.width(10.dp))
                         Text(
                             when (step.granted) {
-                                true -> "CONCEDIDO"
-                                false -> "PENDIENTE"
-                                null -> "VERIFICACIÓN MANUAL"
+                                true -> "Listo"
+                                false -> "Pendiente"
+                                null -> "Verificalo vos"
                             },
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             color = Muted,
                         )
                     }
@@ -304,7 +342,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     Text(
                         "Xia usa un modelo de lenguaje para entender tus pedidos. " +
                             "Elegí el proveedor, pegá tu API key y probá la conexión. " +
-                            "Podés cambiarlo cuando quieras desde el panel.",
+                            "Podés cambiarlo cuando quieras en Ajustes.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = Muted,
                     )
@@ -312,16 +350,16 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     LlmSettingsContent()
                 }
                 else -> {
-                    Spacer(Modifier.height(32.dp))
-                    SectionLabel("Listo")
-                    Spacer(Modifier.height(16.dp))
-                    Text("Todo\nconfigurado.", style = MaterialTheme.typography.headlineLarge)
+                    Spacer(Modifier.height(12.dp))
+                    AuraOrb(Modifier.align(Alignment.CenterHorizontally).size(150.dp), mood = OrbMood.SPEAKING)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Todo listo.", style = MaterialTheme.typography.displaySmall)
                     Spacer(Modifier.height(20.dp))
                     Text(
                         "Encendé la escucha y Xia queda disponible incluso con el " +
                             "teléfono bloqueado. Decí “${wakeSettings.spokenWakeWord()}” " +
                             "y después tu pedido. Lo que haya quedado pendiente lo vas " +
-                            "a ver marcado en el panel.",
+                            "a ver marcado en Ajustes → Permisos.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = Muted,
                     )
@@ -332,7 +370,6 @@ fun OnboardingFlow(onFinished: () -> Unit) {
         }
 
         // Barra de acciones inferior
-        Hairline()
         AnimatedContent(
             targetState = page,
             transitionSpec = screenTransition(),
@@ -364,10 +401,10 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(
-                                if (step.granted == null) "YA LO ACTIVÉ / CONTINUAR"
-                                else "OMITIR POR AHORA",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Muted,
+                                if (step.granted == null) "Ya lo activé, continuar"
+                                else "Omitir por ahora",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Accent,
                             )
                         }
                     }
@@ -389,9 +426,9 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                     )
                     TextButton(onClick = onFinished, modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            "ENTRAR SIN ENCENDER",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Muted,
+                            "Entrar sin encender",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Accent,
                         )
                     }
                 }
@@ -399,4 +436,15 @@ fun OnboardingFlow(onFinished: () -> Unit) {
         }
         }
     }
+}
+
+/** El ícono de color de cada permiso. */
+private fun permIcon(label: String): Pair<ImageVector, (AuraColors) -> Color> = when {
+    label.startsWith("MICR") -> Icons.Rounded.Mic to { it.red }
+    label.startsWith("NOTIF") -> Icons.Rounded.Notifications to { it.orange }
+    label.startsWith("BATER") -> Icons.Rounded.BatteryChargingFull to { it.green }
+    label.startsWith("SOBRE") -> Icons.Rounded.Layers to { it.blue }
+    label.startsWith("CONTROL") -> Icons.Rounded.Accessibility to { it.indigo }
+    label.startsWith("MENSAJES") -> Icons.AutoMirrored.Rounded.Chat to { it.pink }
+    else -> Icons.Rounded.PhoneAndroid to { it.gray }
 }

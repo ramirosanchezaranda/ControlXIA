@@ -22,6 +22,15 @@ object AssistantState {
     private val _state = MutableStateFlow(Ui())
     val state: StateFlow<Ui> = _state.asStateFlow()
 
+    private val _level = MutableStateFlow(0f)
+
+    /** Volumen de tu voz mientras escucha (0 a 1): la esfera crece con él. */
+    val level: StateFlow<Float> = _level.asStateFlow()
+
+    fun setLevel(value: Float) {
+        _level.value = value.coerceIn(0f, 1f)
+    }
+
     fun begin(agentName: String, locked: Boolean) {
         _state.value = Ui(Phase.LISTENING, agentName, "Escuchando…", locked)
     }
@@ -36,6 +45,7 @@ object AssistantState {
     }
 
     fun idle() {
+        _level.value = 0f
         _state.value = _state.value.copy(phase = Phase.IDLE, status = "")
     }
 }

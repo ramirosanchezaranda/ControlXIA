@@ -111,7 +111,7 @@ fun VoiceSettingsScreen(onBack: () -> Unit) {
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SectionLabel("Elegí cómo suena  ·  ${currentGender.uppercase()}")
+            SectionLabel("Elegí cómo suena · $currentGender")
             Text(
                 "Las voces disponibles dependen del motor de voz del teléfono. Los " +
                     "presets ajustan el tono para sonar más grave o más aguda aunque " +

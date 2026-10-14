@@ -1,72 +1,169 @@
 package com.controlxia.app.ui.theme
 
+import android.provider.Settings
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 /**
- * Lenguaje de movimiento de ControlXIA: minimalista, estilo GSAP.
- * Curva "expo.out" (arranque rápido, frenada larga) — la firma de GSAP —
- * con salida corta y entrada con leve desplazamiento vertical.
+ * Movimiento al estilo de Apple: resortes en vez de curvas fijas (todo
+ * frena con naturalidad y se puede interrumpir), duraciones de 200 a 500 ms,
+ * "push" lateral entre pantallas con un poco de paralaje, y botones que se
+ * achican apenas al tocarlos. Si el teléfono tiene las animaciones apagadas
+ * (accesibilidad), todo aparece sin moverse.
  */
-val ExpoOut = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
+object AuraMotion {
+    /** Resorte sin rebote para pantallas y paneles (como UIKit por defecto). */
+    fun <T> smooth() = spring<T>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 420f)
 
-/** Transición estándar entre pantallas y pasos: fade + rise sutil. */
+    /** Resorte con un rebote apenas visible (soltar un botón, indicadores). */
+    fun <T> snappy() = spring<T>(dampingRatio = 0.78f, stiffness = 520f)
+
+    /** Rebote suave y lento (la esfera, apariciones). */
+    fun <T> gentle() = spring<T>(dampingRatio = 0.72f, stiffness = 180f)
+
+    /** Curva "ease out" de iOS para lo que no usa resortes. */
+    val EaseOut = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+    val EaseInOut = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
+}
+
+// Nombre de antes (lo usan pantallas viejas).
+val ExpoOut = AuraMotion.EaseOut
+
+/** true si el usuario apagó las animaciones del sistema. */
+@Composable
+fun rememberReduceMotion(): Boolean {
+    val context = LocalContext.current
+    return remember {
+        runCatching {
+            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+        }.getOrDefault(false)
+    }
+}
+
+/** Entre pasos (onboarding): aparece subiendo apenas, el anterior se desvanece rápido. */
 fun <T> screenTransition(): AnimatedContentTransitionScope<T>.() -> ContentTransform = {
     (
-        fadeIn(tween(durationMillis = 420, delayMillis = 60, easing = ExpoOut)) +
-            slideInVertically(
-                tween(durationMillis = 420, delayMillis = 60, easing = ExpoOut)
-            ) { fullHeight -> fullHeight / 20 }
-        ).togetherWith(
-            fadeOut(tween(durationMillis = 140, easing = FastOutLinearInEasing))
-        )
+        fadeIn(tween(durationMillis = 320, delayMillis = 40, easing = AuraMotion.EaseOut)) +
+            slideInVertically(AuraMotion.smooth()) { it / 16 } +
+            scaleIn(AuraMotion.smooth(), initialScale = 0.98f)
+        ).togetherWith(fadeOut(tween(durationMillis = 140)))
 }
 
 /**
- * Reveal escalonado estilo GSAP: al aparecer, el bloque hace fade + rise con un
- * retraso proporcional a [index], de modo que las secciones entran en cascada.
- * Discreto por diseño (8dp de recorrido). Envolvé cada sección con esto.
+ * "Push" de iOS: la pantalla nueva entra desde la derecha y la anterior se
+ * corre un poco a la izquierda y se oscurece (paralaje). Al volver, al revés.
+ */
+fun <T> pushTransition(forward: Boolean): AnimatedContentTransitionScope<T>.() -> ContentTransform = {
+    val spec = spring<IntOffset>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 380f)
+    if (forward) {
+        (slideInHorizontally(spec) { it } + fadeIn(tween(220)))
+            .togetherWith(slideOutHorizontally(spec) { -it / 4 } + fadeOut(tween(260)))
+    } else {
+        (slideInHorizontally(spec) { -it / 4 } + fadeIn(tween(220)))
+            .togetherWith(slideOutHorizontally(spec) { it } + fadeOut(tween(260)))
+    }
+}
+
+/** Cambio de pestaña: fundido corto con un mínimo de escala. */
+fun <T> tabTransition(): AnimatedContentTransitionScope<T>.() -> ContentTransform = {
+    (fadeIn(tween(240, easing = AuraMotion.EaseOut)) + scaleIn(AuraMotion.smooth(), initialScale = 0.985f))
+        .togetherWith(fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.995f))
+}
+
+/**
+ * Aparición escalonada: cada bloque entra subiendo y aclarándose con un
+ * resorte, un poco después que el anterior ([index]).
  */
 @Composable
 fun Modifier.staggerReveal(
     index: Int,
-    stepDelayMs: Int = 55,
-    rise: Dp = 8.dp,
+    stepDelayMs: Int = 45,
+    rise: Dp = 14.dp,
 ): Modifier {
-    var shown by remember { mutableStateOf(false) }
-    val progress by animateFloatAsState(
-        targetValue = if (shown) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = 460,
-            delayMillis = index * stepDelayMs,
-            easing = ExpoOut,
-        ),
-        label = "stagger-$index",
-    )
-    // Dispara la animación una sola vez, al entrar en composición.
-    LaunchedEffect(Unit) { shown = true }
+    val reduce = rememberReduceMotion()
+    val progress = remember { Animatable(if (reduce) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (progress.value < 1f) {
+            delay(index.coerceAtMost(8) * stepDelayMs.toLong())
+            progress.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 210f))
+        }
+    }
     val risePx = with(LocalDensity.current) { rise.toPx() }
     return this.graphicsLayer {
-        alpha = progress
-        translationY = (1f - progress) * risePx
+        val p = progress.value
+        alpha = p.coerceIn(0f, 1f)
+        translationY = (1f - p) * risePx
+        val s = 0.97f + 0.03f * p
+        scaleX = s
+        scaleY = s
     }
+}
+
+/**
+ * Toque al estilo iOS: se achica a [pressedScale] mientras está apretado y
+ * vuelve con un rebote suave al soltar, con un "tic" háptico liviano. Sin la
+ * onda de Material.
+ */
+fun Modifier.pressable(
+    enabled: Boolean = true,
+    pressedScale: Float = 0.96f,
+    haptic: Boolean = true,
+    role: Role? = Role.Button,
+    onClick: () -> Unit,
+): Modifier = composed {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) pressedScale else 1f,
+        animationSpec = if (pressed) spring(dampingRatio = 1f, stiffness = 1500f) else spring(dampingRatio = 0.55f, stiffness = 420f),
+        label = "press",
+    )
+    val feedback = LocalHapticFeedback.current
+    this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+        .clickable(
+            interactionSource = interaction,
+            indication = null,
+            enabled = enabled,
+            role = role,
+        ) {
+            if (haptic) feedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        }
 }

@@ -135,6 +135,9 @@ class WakeWordService : Service() {
     /** Una herramienta está usando el micrófono (grabando un audio): no escuchar "pará". */
     private var micLent = false
 
+    /** El pedido en curso se escribió (no se dijo): no seguir escuchando de más. */
+    private var typedSession = false
+
     /** Quién espera que termine de hablar una frase (por id de la frase). */
     private val utteranceWaiters = mutableMapOf<String, () -> Unit>()
 
@@ -168,7 +171,7 @@ class WakeWordService : Service() {
         if (!listeningCommand || !lockedSession) return
         lockedSession = false
         AssistantState.unlocked()
-        overlay?.show(agentName, AssistantState.state.value.status.ifBlank { "Sigo con tu pedido…" })
+        pill(AssistantState.state.value.status.ifBlank { "Sigo con tu pedido…" })
     }
 
     private fun onTtsInit(status: Int) {
@@ -246,6 +249,17 @@ class WakeWordService : Service() {
 
         when (intent?.action) {
             ACTION_RELOAD -> reloadWakeWord()
+            // Tocaste la esfera en la app: escuchar ya, sin decir el nombre.
+            ACTION_LISTEN -> {
+                startListening()
+                main.post { if (!listeningCommand) startInteraction(null) }
+            }
+            // Escribiste un pedido en la app.
+            ACTION_TEXT -> {
+                startListening()
+                val text = intent.getStringExtra(EXTRA_TEXT).orEmpty().trim()
+                if (text.isNotEmpty()) main.post { startTextInteraction(text) }
+            }
             ACTION_SPEAK_TIME -> {
                 startListening()
                 speakTime()
@@ -451,6 +465,7 @@ class WakeWordService : Service() {
      */
     private fun startInteraction(ack: String?) {
         listeningCommand = true
+        typedSession = false
         followUps = 0
         followUpPending = false
         transcriptionStarted = false
@@ -468,8 +483,9 @@ class WakeWordService : Service() {
             // sobre el bloqueo (requiere permiso de overlay para lanzarla).
             if (overlay?.canShow() == true) launchAssistantScreen()
         } else {
-            // Desbloqueado: pill flotante sobre la app actual.
-            overlay?.show(agentName, "Escuchando…")
+            // Desbloqueado: burbuja flotante sobre la app actual (en ControlXIA
+            // no hace falta: la esfera de la pantalla muestra lo mismo).
+            pill("Escuchando…")
         }
         wakeEngine?.stop() // liberar el micrófono para el ASR
 
@@ -485,6 +501,16 @@ class WakeWordService : Service() {
         speakOut(spoken, UTT_ACK, queueIfNotReady = false)
     }
 
+    /**
+     * La burbuja flotante con [status]: sobre cualquier app, salvo bloqueado
+     * (ahí está la pantalla del asistente) o con ControlXIA abierta (ahí está
+     * la esfera). Si la app queda atrás a mitad de un pedido, aparece.
+     */
+    private fun pill(status: String) {
+        if (lockedSession || !listeningCommand) return
+        if (appVisible) overlay?.hide() else overlay?.show(agentName, status)
+    }
+
     /** Tono corto de "te escucho" (más suave para seguir una conversación). */
     private fun beep(soft: Boolean = false) {
         runCatching {
@@ -492,6 +518,40 @@ class WakeWordService : Service() {
                 .also { toneGenerator = it }
             tone.startTone(if (soft) ToneGenerator.TONE_PROP_ACK else ToneGenerator.TONE_PROP_BEEP, TONE_LENGTH_MS)
         }
+    }
+
+    /**
+     * Un pedido escrito: va directo al cerebro, como si lo hubieras dicho. Si
+     * estaba esperando que hables, deja de escuchar y usa lo escrito; si está
+     * trabajando en otro pedido, no lo pisa.
+     */
+    private fun startTextInteraction(text: String) {
+        if (listeningCommand) {
+            if (processingJob?.isActive == true) return
+            stt?.cancel()
+            main.removeCallbacks(sttTimeout)
+            main.removeCallbacks(resumeAfterReply)
+            main.removeCallbacks(afterAck)
+            inFollowUp = false
+        }
+        listeningCommand = true
+        typedSession = true
+        followUps = 0
+        followUpPending = false
+        transcriptionStarted = true
+        voiceWakeLock.acquire(INTERACTION_MAX_MS)
+        val settings = WakeWordSettings(this)
+        agentName = settings.agentName
+        lockedSession = false
+        showContentLocked = settings.showContentWhenLocked
+        AssistantState.begin(agentName, false)
+        wakeEngine?.stop()
+        AgentLog.add("ESCRIBISTE «$text»")
+        runCatching { RecentCommandsStore(applicationContext).add(text) }
+        lastCommand = text
+        AssistantState.update(AssistantState.Phase.HEARD, "“$text”")
+        pill("“$text”")
+        processAndRespond(text)
     }
 
     private fun onUtteranceFinished(id: String?) {
@@ -525,7 +585,7 @@ class WakeWordService : Service() {
                 val shown = maskedStatus(partial, "Te escuché")
                 updateNotification("… $shown")
                 AssistantState.update(AssistantState.Phase.HEARD, shown)
-                if (!lockedSession) overlay?.updateStatus(shown)
+                pill(shown)
             },
             onResult = { text ->
                 if (!listeningCommand) return@listen
@@ -537,7 +597,7 @@ class WakeWordService : Service() {
                 val shown = maskedStatus("“$text”", "Te escuché")
                 updateNotification("Escuché: $shown")
                 AssistantState.update(AssistantState.Phase.HEARD, shown)
-                if (!lockedSession) overlay?.updateStatus(shown)
+                pill(shown)
                 processAndRespond(text)
             },
             onError = { message, noSpeech ->
@@ -556,7 +616,7 @@ class WakeWordService : Service() {
                 AgentLog.add("NO ENTENDÍ: $message")
                 // Mostrar el motivo un instante y volver a esperar la palabra.
                 AssistantState.update(AssistantState.Phase.REPLYING, message)
-                if (!lockedSession) overlay?.updateStatus(message)
+                pill(message)
                 main.removeCallbacks(resumeAfterReply)
                 main.postDelayed(resumeAfterReply, 1_200L)
             },
@@ -690,7 +750,7 @@ class WakeWordService : Service() {
         followUps = 0
         vibrate()
         AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
-        if (!lockedSession) overlay?.updateStatus("Te escucho…")
+        pill("Te escucho…")
         transcriptionStarted = true
         transcribeCommand()
     }
@@ -710,7 +770,7 @@ class WakeWordService : Service() {
         if (!listeningCommand) return
         updateNotification(step)
         AssistantState.update(AssistantState.Phase.HEARD, step)
-        if (!lockedSession) overlay?.updateStatus(step)
+        pill(step)
     }
 
     private fun deliverReply(answer: Reply, error: String?) {
@@ -720,7 +780,7 @@ class WakeWordService : Service() {
         // Seguir escuchando sin wake word si preguntó algo ("¿Le mando…?") o
         // en modo conversación, salvo que el usuario se haya despedido.
         followUpPending = !answer.endsConversation && followUps < MAX_FOLLOW_UPS &&
-            (answer.expectsReply || settings.conversationMode)
+            (answer.expectsReply || (settings.conversationMode && !typedSession))
         val window = settings.conversationSeconds * 1_000L
         followUpWindowMs = if (answer.expectsReply) maxOf(window, QUESTION_WINDOW_MS) else window
         lastBrainError = error
@@ -731,7 +791,7 @@ class WakeWordService : Service() {
                 vibrate(30)
                 updateNotification(maskedStatus(shown, "Listo"))
                 AssistantState.update(AssistantState.Phase.REPLYING, maskedStatus(shown, "Listo"))
-                if (!lockedSession) overlay?.updateStatus(shown)
+                pill(shown)
             }
             main.removeCallbacks(resumeAfterReply)
             main.postDelayed(resumeAfterReply, if (answer.shown != null) 400L else 0L)
@@ -743,7 +803,7 @@ class WakeWordService : Service() {
         val shown = maskedStatus(reply, "Respuesta lista")
         updateNotification(shown)
         AssistantState.update(AssistantState.Phase.REPLYING, shown)
-        if (!lockedSession) overlay?.updateStatus(reply)
+        pill(reply)
         // Reanudar cuando termine de hablar; con tope por si el TTS no avisa.
         main.removeCallbacks(resumeAfterReply)
         main.postDelayed(resumeAfterReply, estimatedSpeechMs(reply))
@@ -768,7 +828,7 @@ class WakeWordService : Service() {
         vibrate(40)
         beep(soft = true)
         AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
-        if (!lockedSession) overlay?.updateStatus("Te escucho…")
+        pill("Te escucho…")
         transcriptionStarted = true
         main.postDelayed({ if (listeningCommand && inFollowUp) transcribeCommand() }, TONE_MS)
     }
@@ -919,6 +979,9 @@ class WakeWordService : Service() {
         const val ACTION_RELOAD = "com.controlxia.app.action.RELOAD"
         const val ACTION_INTERRUPT = "com.controlxia.app.action.INTERRUPT"
         const val ACTION_HANDS_UP = "com.controlxia.app.action.HANDS_UP"
+        const val ACTION_LISTEN = "com.controlxia.app.action.LISTEN"
+        const val ACTION_TEXT = "com.controlxia.app.action.TEXT"
+        const val EXTRA_TEXT = "text"
 
         private const val UTT_ACK = "ack"
         private const val UTT_REPLY = "reply"
@@ -939,6 +1002,10 @@ class WakeWordService : Service() {
         /** Tiempo mínimo para contestar una pregunta ("¿Le mando…?"). */
         private const val QUESTION_WINDOW_MS = 10_000L
         private const val ENGINE_RETRY_MS = 10_000L
+
+        /** ControlXIA está en pantalla (ahí la esfera reemplaza a la burbuja flotante). */
+        @Volatile
+        var appVisible: Boolean = false
 
         /** Estado observable simple para la UI. */
         @Volatile
@@ -1006,6 +1073,20 @@ class WakeWordService : Service() {
         /** Levantaste las dos manos: preguntar qué necesitás. */
         fun handsUp(context: Context) {
             if (running) tryStart(context, ACTION_HANDS_UP)
+        }
+
+        /** Escuchar ya, sin decir el nombre (tocaste la esfera). Prende la escucha si estaba apagada. */
+        fun listenNow(context: Context): Boolean = tryStart(context, ACTION_LISTEN)
+
+        /** Un pedido escrito. Prende la escucha si estaba apagada. */
+        fun sendText(context: Context, text: String): Boolean = try {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, WakeWordService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_TEXT, text),
+            )
+            true
+        } catch (e: Exception) {
+            false
         }
 
         /** Frena lo que el asistente esté haciendo o diciendo (sin apagar la escucha). */

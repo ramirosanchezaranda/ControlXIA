@@ -105,8 +105,8 @@ android {
         applicationId = "com.controlxia.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.8.0"
+        versionCode = 10
+        versionName = "0.9.0"
 
         buildConfigField("String", "VOSK_MODEL_NAME", "\"$voskModelName\"")
         buildConfigField("String", "VOSK_MODEL_URL", "\"$voskModelUrl\"")
@@ -160,12 +160,33 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // Capturas de las pantallas en la PC (Robolectric): ./gradlew testDebugUnitTest
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all { test ->
+                test.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+                // Repositorio para que Robolectric baje Android (por si Maven Central no responde).
+                providers.gradleProperty("robolectric.repo").orNull?.let {
+                    test.systemProperty("robolectric.dependency.repo.url", it)
+                }
+                test.systemProperty("screenshots.dir", layout.buildDirectory.dir("screenshots").get().asFile.path)
+            }
+        }
+    }
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
+    // Inter (la tipografía libre más parecida a SF Pro) por Google Fonts, sin pesar en el APK.
+    implementation("androidx.compose.ui:ui-text-google-fonts")
+    // Vidrio esmerilado de verdad (desenfoque de lo que hay detrás) en Android 12+.
+    implementation("dev.chrisbanes.haze:haze:1.1.1")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")

@@ -8,8 +8,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Checklist de permisos** en la app: micrófono, notificaciones, exención de batería y ajustes específicos del fabricante (Xiaomi, Samsung, Huawei, Oppo, Vivo, OnePlus).
 - ✅ **Capa multi-LLM configurable**: Anthropic (Claude), OpenAI (GPT), Google (Gemini) y cualquier endpoint OpenAI-compatible (Groq, OpenRouter, Ollama local). API keys cifradas en el dispositivo, modelo elegible o escrito a mano, botón "Probar conexión".
 - ✅ **Prueba de vida con pantalla bloqueada**: botón "Probar voz" en la notificación persistente → dice la hora por TTS sin desbloquear.
-- ✅ **UI minimalista editorial**: onboarding guiado que pide los permisos de a uno con contexto, dashboard con estado en vivo del sistema, y tema propio (papel/tinta/acento azul, etiquetas monospace).
-- ✅ **Transiciones estilo GSAP**: curva `expo.out` centralizada en `ui/theme/Motion.kt`; cambios de pantalla/paso con `AnimatedContent` (fade + rise) y reveal escalonado de las secciones del dashboard (`Modifier.staggerReveal`).
+- ✅ **Onboarding guiado** que pide los permisos de a uno con contexto; después, la app muestra lo que quedó pendiente.
 - ✅ **Feedback con el propio LLM**: pantalla donde el usuario cuenta qué falló o qué quiere; el LLM configurado lo analiza, responde y lo clasifica ([BUG]/[IDEA]/[MEJORA]); historial local como insumo del roadmap.
 - ✅ **Wake word por nombre, 100 % open source**: detección on-device con **Vosk** y su modelo en español (`voice/VoskWakeWordEngine` + `voice/WakePhraseDetector`), sin cuentas, sin claves y sin internet. Se dice el nombre del asistente ("Xia") y responde; doble verificación para no activarse con palabras como "fantasía". Al detectar: vibración + un tono corto, y escucha al instante (sin perder el principio del pedido). Funciona con pantalla bloqueada. Detalles en [docs/WAKE_WORD.md](docs/WAKE_WORD.md).
 - ✅ **Cadena de voz completa → acciones reales**: transcripción → `brain/CommandProcessor` (LLM configurado + catálogo de tools) → ejecuta la acción → responde en voz alta. Tools que ya andan: `get_time`, `get_date`, `open_app`, `set_alarm`, `set_timer`. Memoria conversacional corta. "Actividad reciente" muestra el comando y la respuesta.
@@ -35,6 +34,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Bloqueado**: lee y responde mensajes y notificaciones, llama, manda SMS y pone alarmas sin desbloquear; para lo que necesita la pantalla pide la huella y sigue solo.
 - ✅ **Notificaciones**: "leeme las notificaciones" (todas, agrupadas por app), "las de WhatsApp", "abrí la notificación de Gmail", "borrá las notificaciones".
 - ✅ **Cualquier app sin el modelo**: "buscá pizza en PedidosYa" (toca la lupa de la app y busca), "en Spotify tocá Biblioteca", mensajes por Telegram, Messenger, Instagram o Signal.
+- ✅ **Interfaz estilo Apple / Liquid Glass**: tema claro y oscuro con los colores de iOS, vidrio esmerilado, fondo de luces que se mueven, la esfera del asistente (crece con tu voz, gira al pensar), onda de voz como Siri, pestañas flotantes de vidrio (Inicio, Explorar, Actividad, Ajustes), pedir escribiendo o tocando la esfera, animaciones con resortes y diseño adaptable a teléfonos chicos, horizontal y tablets. Ver [docs/DESIGN.md](docs/DESIGN.md).
 - ⏳ Próximo: llamadas, recordatorios, activación con botón home (rol de asistente).
 
 ## Compilar

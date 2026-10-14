@@ -14,7 +14,7 @@ import java.util.zip.ZipInputStream
 
 /** El modelo de voz todavía no está en el teléfono: hay que descargarlo. */
 class VoskModelMissingException :
-    IOException("Falta descargar el modelo de voz (39 MB). Tocá «Descargar» en el panel")
+    IOException("Falta descargar el modelo de voz (39 MB). Tocá «Descargar» en Ajustes → Nombre y activación")
 
 /**
  * Modelo de voz en español de Vosk, compartido por toda la app.
