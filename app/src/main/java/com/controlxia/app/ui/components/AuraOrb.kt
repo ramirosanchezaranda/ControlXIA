@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import com.controlxia.app.ui.theme.Aura
 import com.controlxia.app.ui.theme.rememberReduceMotion
 import com.controlxia.app.voice.AssistantState
 import kotlin.math.PI
@@ -98,6 +99,7 @@ fun AuraOrb(
         }
     }
     val speaking = mood == OrbMood.SPEAKING
+    val palette = Aura.colors.orb
 
     Canvas(
         modifier
@@ -114,8 +116,8 @@ fun AuraOrb(
         val haloR = minOf(r * (1.38f + 0.18f * energy), size.minDimension / 2f)
         drawCircle(
             brush = Brush.radialGradient(
-                0f to HALO.copy(alpha = 0.38f + 0.3f * energy),
-                0.55f to VIOLET.copy(alpha = 0.16f + 0.14f * energy),
+                0f to palette.halo.copy(alpha = 0.38f + 0.3f * energy),
+                0.55f to palette.lobes[1].copy(alpha = 0.16f + 0.14f * energy),
                 1f to Color.Transparent,
                 center = c,
                 radius = haloR,
@@ -129,9 +131,9 @@ fun AuraOrb(
             // Cuerpo: azul profundo con la luz de arriba.
             drawCircle(
                 brush = Brush.radialGradient(
-                    0f to Color(0xFF7FB2FF),
-                    0.45f to Color(0xFF2F5BFF),
-                    1f to Color(0xFF1A1F8F),
+                    0f to palette.light,
+                    0.45f to palette.mid,
+                    1f to palette.deep,
                     center = c + Offset(-0.25f * r, -0.35f * r),
                     radius = r * 1.55f,
                 ),
@@ -145,12 +147,13 @@ fun AuraOrb(
                 val dist = r * lobe.distance * wobble * (1f - 0.25f * energy * (if (mood == OrbMood.THINKING) 1f else 0f))
                 val p = c + Offset(cos(angle) * dist, sin(angle) * dist * 0.85f)
                 val lr = r * lobe.size * (1f + 0.25f * energy)
-                val white = lobe.color == Color.White
+                val white = lobe.colorIndex < 0
+                val color = if (white) Color.White else palette.lobes[lobe.colorIndex]
                 drawCircle(
                     brush = Brush.radialGradient(
-                        0f to lobe.color.copy(alpha = lobe.alpha),
-                        0.5f to lobe.color.copy(alpha = lobe.alpha * 0.55f),
-                        1f to lobe.color.copy(alpha = 0f),
+                        0f to color.copy(alpha = lobe.alpha),
+                        0.5f to color.copy(alpha = lobe.alpha * 0.55f),
+                        1f to color.copy(alpha = 0f),
                         center = p,
                         radius = lr,
                     ),
@@ -166,12 +169,12 @@ fun AuraOrb(
             rotate(degrees = -time * 55f, pivot = c) {
                 drawCircle(
                     brush = Brush.sweepGradient(
-                        0f to VIOLET.copy(alpha = 0f),
-                        0.22f to VIOLET.copy(alpha = 0.9f),
-                        0.42f to PINK.copy(alpha = 0.85f),
+                        0f to palette.lobes[1].copy(alpha = 0f),
+                        0.22f to palette.lobes[1].copy(alpha = 0.9f),
+                        0.42f to palette.lobes[2].copy(alpha = 0.85f),
                         0.58f to Color.Transparent,
-                        0.78f to CYAN.copy(alpha = 0.8f),
-                        1f to VIOLET.copy(alpha = 0f),
+                        0.78f to palette.lobes[3].copy(alpha = 0.8f),
+                        1f to palette.lobes[1].copy(alpha = 0f),
                         center = c,
                     ),
                     radius = r,
@@ -224,9 +227,9 @@ fun AuraOrb(
                 brush = Brush.sweepGradient(
                     0f to Color.White.copy(alpha = 0.85f),
                     0.2f to Color.Transparent,
-                    0.45f to CYAN.copy(alpha = 0.7f),
+                    0.45f to palette.lobes[3].copy(alpha = 0.7f),
                     0.65f to Color.Transparent,
-                    0.85f to PINK.copy(alpha = 0.6f),
+                    0.85f to palette.lobes[2].copy(alpha = 0.6f),
                     1f to Color.White.copy(alpha = 0.85f),
                     center = c,
                 ),
@@ -262,6 +265,7 @@ fun VoiceWave(modifier: Modifier = Modifier, level: Float, active: Boolean = tru
             }
         }
     }
+    val waveColors = Aura.colors.orb.wave
     Canvas(modifier.graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen, alpha = shown)) {
         if (shown <= 0.01f) return@Canvas
         val mid = size.height / 2f
@@ -281,7 +285,7 @@ fun VoiceWave(modifier: Modifier = Modifier, level: Float, active: Boolean = tru
                 path = path,
                 brush = Brush.horizontalGradient(
                     0f to Color.Transparent,
-                    0.5f to wave.color,
+                    0.5f to waveColors[i % waveColors.size],
                     1f to Color.Transparent,
                 ),
                 style = Stroke(width = size.height * (0.035f - i * 0.006f), cap = StrokeCap.Round),
@@ -292,7 +296,7 @@ fun VoiceWave(modifier: Modifier = Modifier, level: Float, active: Boolean = tru
 }
 
 private class Lobe(
-    val color: Color,
+    val colorIndex: Int,
     val size: Float,
     val distance: Float,
     val speed: Float,
@@ -300,23 +304,19 @@ private class Lobe(
     val alpha: Float,
 )
 
-private val CYAN = Color(0xFF52E5FF)
-private val PINK = Color(0xFFFF5FB3)
-private val VIOLET = Color(0xFF8C4BFF)
-private val HALO = Color(0xFF5B8CFF)
-
+// Las luces de adentro: el color sale de la paleta ([OrbColors.lobes]); -1 es blanco.
 private val LOBES = listOf(
-    Lobe(Color(0xFF3D6BFF), 0.75f, 0.3f, -0.8f, 1.0f, 0.5f),
-    Lobe(VIOLET, 0.8f, 0.5f, 1.0f, 0f, 0.9f),
-    Lobe(PINK, 0.6f, 0.58f, -1.35f, 2.1f, 0.85f),
-    Lobe(CYAN, 0.55f, 0.55f, 1.7f, 4.2f, 0.8f),
-    Lobe(Color.White, 0.3f, 0.35f, 2.3f, 3.0f, 0.45f),
+    Lobe(0, 0.75f, 0.3f, -0.8f, 1.0f, 0.5f),
+    Lobe(1, 0.8f, 0.5f, 1.0f, 0f, 0.9f),
+    Lobe(2, 0.6f, 0.58f, -1.35f, 2.1f, 0.85f),
+    Lobe(3, 0.55f, 0.55f, 1.7f, 4.2f, 0.8f),
+    Lobe(-1, 0.3f, 0.35f, 2.3f, 3.0f, 0.45f),
 )
 
-private class Wave(val color: Color, val frequency: Float, val speed: Float, val phase: Float)
+private class Wave(val frequency: Float, val speed: Float, val phase: Float)
 
 private val WAVES = listOf(
-    Wave(Color(0xFF4D8BFF), 2.2f, 5.0f, 0f),
-    Wave(VIOLET, 3.0f, -6.5f, 1.4f),
-    Wave(PINK, 1.6f, 7.5f, 2.8f),
+    Wave(2.2f, 5.0f, 0f),
+    Wave(3.0f, -6.5f, 1.4f),
+    Wave(1.6f, 7.5f, 2.8f),
 )

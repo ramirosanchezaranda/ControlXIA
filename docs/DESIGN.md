@@ -17,6 +17,18 @@ La interfaz se rehízo tomando como referencia el diseño de iOS (Human Interfac
 | Burbuja flotante | `voice/ListeningOverlay.kt` | Sobre cualquier app: cápsula de vidrio oscuro con la esfera girando, lo que va entendiendo y una ✕. Entra con rebote y sale achicándose. Con ControlXIA abierta no aparece (la esfera de Inicio muestra lo mismo). |
 | Sobre el bloqueo | `ui/AssistantActivity.kt` | Siempre oscuro, como Siri: esfera grande, onda, lo que entendió y la respuesta; en horizontal, esfera y texto lado a lado. |
 
+## Apariencia: claro, oscuro y paletas
+
+Ajustes → **Apariencia**: modo **Automático** (como el teléfono), **Claro** u **Oscuro**, y tres paletas. Cambian en vivo, también la esfera, la burbuja flotante y la barra de estado (`ui/theme/ThemeSettings.kt`, `auraColors()` en `XiaTheme.kt`).
+
+| Paleta | Colores | Claro | Oscuro |
+|---|---|---|---|
+| **Aura** (la de siempre) | Azul de iOS `#007AFF`, violeta, rosa, celeste | Fondo `#F2F3F8` | Fondo `#05060D` |
+| **Studio** | Canvas `#FBFBF8`, Mist `#DBE3E9`, Cornflower `#6AA6DA`, Pear `#E1E5AC`, Black `#000000` | Fondo Canvas, luces Mist/Cornflower/Pear, acento Cornflower (un poco más profundo para que se lea) | Fondo Black, acento Cornflower, botón destacado Pear |
+| **Toscana** | Tuscan Red `#A91B18`, Pale Cerulean `#CEE7F3`, Noir Black `#181717`, Satin Linen `#F8FAED` | Fondo Satin Linen, luces Pale Cerulean, acento Tuscan Red | Fondo Noir, acento rojo más claro (`#D9443D`) para que se lea sobre negro |
+
+Las pantallas sobre el bloqueo (el asistente y la alarma) van siempre en oscuro, con la paleta elegida.
+
 ## Pantallas
 
 - **Inicio**: saludo, la esfera (tocala para hablar sin decir el nombre), la barra para pedir escribiendo, sugerencias, la última charla, el interruptor de la escucha y avisos (permisos que faltan, el cerebro).

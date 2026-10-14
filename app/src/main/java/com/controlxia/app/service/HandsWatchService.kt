@@ -11,6 +11,9 @@ import android.graphics.Matrix
 import android.media.AudioManager
 import android.os.Build
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -26,9 +29,11 @@ import androidx.lifecycle.lifecycleScope
 import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
 import com.controlxia.app.actions.DeviceControl
+import com.controlxia.app.actions.Gestures
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.GestureModel
+import com.controlxia.app.voice.HandSigns
 import com.controlxia.app.voice.WakeWordSettings
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -42,13 +47,17 @@ import java.nio.channels.FileChannel
 import java.util.concurrent.Executors
 
 /**
- * "Pausa con las manos": mientras se reproduce un video o música, la cámara
- * frontal mira si levantás las dos manos (palmas abiertas). Si pasa, pone
- * pausa y el asistente pregunta "¿Qué necesitás?".
+ * "Gestos con las manos": mientras mirás videos o reels, la cámara frontal
+ * mira tus manos.
+ * - Las dos manos arriba (palmas abiertas): pausa y el asistente pregunta
+ *   "¿Qué necesitás?".
+ * - Con una mano ([HandSigns]): dedo para arriba pasa al reel siguiente, para
+ *   abajo vuelve al anterior, al costado pasa de foto o historia, pulgar arriba
+ *   pone "me gusta" y la V pausa y te escucha.
  *
- * La cámara se prende solo mientras algo se está reproduciendo y se apaga a
- * los pocos segundos de que pare (Android muestra el punto verde de cámara
- * mientras está prendida). Todo se procesa en el teléfono: no se guardan ni se
+ * La cámara se prende solo mientras algo se reproduce o hay una app de videos
+ * a la vista, y se apaga a los pocos segundos (Android muestra el punto verde
+ * de cámara mientras está prendida). Todo se procesa en el teléfono: no se guardan ni se
  * mandan imágenes. Es opcional y se activa desde la app (Android solo deja usar
  * la cámara en segundo plano si el servicio arrancó con la app a la vista).
  */
@@ -61,6 +70,9 @@ class HandsWatchService : LifecycleService() {
     private var lastFrameAt = 0L
     private var streak = 0
     private var lastTrigger = 0L
+    private val signs = HandSigns.Trigger()
+    @Volatile
+    private var gesturesOn = true
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
@@ -113,7 +125,9 @@ class HandsWatchService : LifecycleService() {
         lifecycleScope.launch {
             var quietSince = 0L
             while (isActive) {
-                val playing = runCatching { audio.isMusicActive }.getOrDefault(false)
+                gesturesOn = WakeWordSettings(this@HandsWatchService).handGestures
+                // Reels sin sonido también cuentan: alcanza con que haya una app de videos adelante.
+                val playing = runCatching { audio.isMusicActive }.getOrDefault(false) || videoAppInFront()
                 val now = SystemClock.elapsedRealtime()
                 if (playing) {
                     quietSince = 0L
@@ -126,6 +140,10 @@ class HandsWatchService : LifecycleService() {
             }
         }
     }
+
+    private fun videoAppInFront(): Boolean = runCatching {
+        XiaAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() in VIDEO_APPS
+    }.getOrDefault(false)
 
     @SuppressLint("MissingPermission")
     private fun bindCamera() {
@@ -155,6 +173,7 @@ class HandsWatchService : LifecycleService() {
         runCatching { provider?.unbindAll() }
         cameraOn = false
         streak = 0
+        signs.reset()
         AgentLog.add("MANOS cámara apagada (no se reproduce nada)")
     }
 
@@ -182,8 +201,21 @@ class HandsWatchService : LifecycleService() {
             if (streak >= FRAMES_NEEDED && now - lastTrigger > COOLDOWN_MS) {
                 streak = 0
                 lastTrigger = now
+                signs.reset()
                 onHandsUp()
+                return
             }
+            // Con una mano: la seña más clara de las que se ven (con dos palmas arriba, nada).
+            val sign = if (!gesturesOn || raised >= 2) {
+                HandSigns.Sign.NONE
+            } else {
+                result.gestures().indices.map { hand ->
+                    val top = result.gestures()[hand].firstOrNull()
+                    val points = result.landmarks().getOrNull(hand).orEmpty().map { HandSigns.Point(it.x(), it.y()) }
+                    HandSigns.classify(top?.categoryName(), top?.score() ?: 0f, points, frame.width.toFloat() / frame.height)
+                }.firstOrNull { it in ACTIONS } ?: HandSigns.Sign.NONE
+            }
+            signs.feed(sign, now)?.let { perform(it) }
         } catch (e: Exception) {
             AgentLog.add("MANOS error al analizar: ${e.message}")
         } finally {
@@ -195,6 +227,46 @@ class HandsWatchService : LifecycleService() {
         if (degrees == 0) return bitmap
         val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    /** Hace lo que pide la seña, en la app que esté adelante. */
+    private fun perform(sign: HandSigns.Sign) {
+        AgentLog.add("MANOS seña ${sign.name}")
+        vibrate()
+        lifecycleScope.launch {
+            val device = DeviceControl(this@HandsWatchService)
+            when (sign) {
+                HandSigns.Sign.POINT_UP -> device.scroll(DeviceControl.Direction.DOWN)
+                HandSigns.Sign.POINT_DOWN -> device.scroll(DeviceControl.Direction.UP)
+                HandSigns.Sign.POINT_LEFT -> device.scroll(DeviceControl.Direction.LEFT)
+                HandSigns.Sign.POINT_RIGHT -> device.scroll(DeviceControl.Direction.RIGHT)
+                HandSigns.Sign.THUMB_UP -> like()
+                HandSigns.Sign.VICTORY -> {
+                    device.media(DeviceControl.Media.PAUSE)
+                    WakeWordService.listenNow(this@HandsWatchService)
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    /** "Me gusta": dos toques en el medio de la pantalla (reels, TikTok, Shorts). */
+    private fun like() {
+        val service = XiaAccessibilityService.instance ?: return
+        val metrics = resources.displayMetrics
+        Gestures.doubleTapAt(service, metrics.widthPixels / 2f, metrics.heightPixels * 0.45f)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun vibrate() {
+        runCatching {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+            } else {
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+            vibrator.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE))
+        }
     }
 
     private fun onHandsUp() {
@@ -211,8 +283,8 @@ class HandsWatchService : LifecycleService() {
         )
         return NotificationCompat.Builder(this, XiaApplication.CHANNEL_SERVICE)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Pausa con las manos")
-            .setContentText("Levantá las dos manos mientras ves un video para pausarlo")
+            .setContentTitle("Gestos con las manos")
+            .setContentText("☝️ siguiente · 👇 anterior · 👍 me gusta · ✌️ hablarme · 🙌 pausa")
             .setOngoing(true)
             .setSilent(true)
             .addAction(0, "Desactivar", stop)
@@ -238,6 +310,19 @@ class HandsWatchService : LifecycleService() {
         private const val COOLDOWN_MS = 8_000L
         private const val MIN_SCORE = 0.55f
         private const val MAX_WRIST_Y = 0.8f
+
+        /** Las señas que hacen algo (las demás se ignoran). */
+        private val ACTIONS = setOf(
+            HandSigns.Sign.POINT_UP, HandSigns.Sign.POINT_DOWN, HandSigns.Sign.POINT_LEFT,
+            HandSigns.Sign.POINT_RIGHT, HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY,
+        )
+
+        /** Apps de videos: con una de estas adelante la cámara mira aunque no haya sonido. */
+        private val VIDEO_APPS = setOf(
+            "com.instagram.android", "com.zhiliaoapp.musically", "com.ss.android.ugc.trill",
+            "com.google.android.youtube", "com.facebook.katana", "com.netflix.mediaclient",
+            "com.snapchat.android",
+        )
 
         @Volatile
         var running = false

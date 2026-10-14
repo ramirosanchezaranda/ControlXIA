@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.HelpOutline
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Accessibility
+import androidx.compose.material.icons.rounded.BackHand
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Contacts
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -64,7 +65,19 @@ import com.controlxia.app.ui.components.SmallPillButton
 import com.controlxia.app.ui.components.TechTopBar
 import com.controlxia.app.ui.components.glass
 import com.controlxia.app.ui.components.rememberResumeTick
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.draw.clip
+import com.controlxia.app.ui.components.SegmentedControl
 import com.controlxia.app.ui.theme.Aura
+import com.controlxia.app.ui.theme.Palette
+import com.controlxia.app.ui.theme.ThemeMode
+import com.controlxia.app.ui.theme.ThemeSettings
+import com.controlxia.app.ui.theme.auraColors
 import com.controlxia.app.ui.theme.pressable
 import com.controlxia.app.ui.theme.staggerReveal
 import com.controlxia.app.voice.VoiceSettings
@@ -130,7 +143,19 @@ fun SettingsScreen(contentPadding: PaddingValues, onOpen: (Route) -> Unit, onExp
                 SettingsRow(Icons.Rounded.GraphicEq, colors.pink, "Voz", value = voice, onClick = { onOpen(Route.VOICE) })
                 Divider()
                 SettingsRow(Icons.Rounded.Psychology, colors.indigo, "Cerebro (IA)", value = brain, onClick = { onOpen(Route.LLM) })
+                Divider()
+                SettingsRow(
+                    Icons.Rounded.BackHand,
+                    colors.teal,
+                    "Gestos con las manos",
+                    subtitle = "Pasar reels con el dedo, me gusta, pausa",
+                    value = if (wake.handsPause) "Sí" else "No",
+                    onClick = { onOpen(Route.WAKEWORD) },
+                )
             }
+
+            SectionLabel("Apariencia", Modifier.padding(top = 10.dp))
+            AppearanceGroup()
 
             SectionLabel("Sistema", Modifier.padding(top = 10.dp))
             Group(2) {
@@ -153,6 +178,70 @@ fun SettingsScreen(contentPadding: PaddingValues, onOpen: (Route) -> Unit, onExp
                 SettingsRow(Icons.Rounded.Info, colors.gray, "Versión", value = version)
             }
         }
+    }
+}
+
+/** Claro u oscuro, y la paleta de colores (cambia en vivo). */
+@Composable
+private fun AppearanceGroup() {
+    val context = LocalContext.current
+    val choice by ThemeSettings.state.collectAsState()
+    val colors = Aura.colors
+    Column(
+        Modifier.fillMaxWidth().glass().padding(16.dp).staggerReveal(2),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        SegmentedControl(
+            options = ThemeMode.entries.map { it.label },
+            selected = choice.mode.ordinal,
+            onSelect = { ThemeSettings.setMode(context, ThemeMode.entries[it]) },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Palette.entries.forEach { palette ->
+                PaletteCard(
+                    palette = palette,
+                    selected = palette == choice.palette,
+                    onClick = { ThemeSettings.setPalette(context, palette) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Text(
+            Palette.entries.first { it == choice.palette }.description,
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondaryLabel,
+        )
+    }
+}
+
+/** Una paleta: sus colores en círculos superpuestos y el nombre; la elegida, con borde. */
+@Composable
+private fun PaletteCard(palette: Palette, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    val colors = Aura.colors
+    val swatch = auraColors(palette, colors.dark)
+    val border by animateColorAsState(if (selected) colors.blue else Color.Transparent, label = "palette-border")
+    Column(
+        modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(swatch.background)
+            .border(2.dp, border, RoundedCornerShape(18.dp))
+            .pressable(pressedScale = 0.96f, onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+            listOf(swatch.blue, swatch.orb.lobes[1], swatch.orb.lobes[2], swatch.label).forEach { c ->
+                Box(
+                    Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(c)
+                        .border(1.5.dp, swatch.background, CircleShape),
+                )
+            }
+        }
+        Spacer(Modifier.size(8.dp))
+        Text(palette.label, style = MaterialTheme.typography.labelMedium, color = swatch.label, maxLines = 1)
     }
 }
 

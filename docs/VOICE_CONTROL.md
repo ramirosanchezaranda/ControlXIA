@@ -19,7 +19,7 @@ Un pedido con varias partes ("buscá zapatillas y mandale el link a Juan") lo re
 | Audios | "mandale un audio a Rebeca", "mandale un audio a Juan que diga feliz cumpleaños" |
 | Leer y responder | "leeme los mensajes", "leeme los mensajes de Juan", "¿tengo mensajes?", "respondele que sí", "contestale a Juan que en 10 llego" |
 | Notificaciones | "leeme las notificaciones", "leeme las notificaciones de WhatsApp", "¿qué notificaciones tengo?", "¿tengo alguna notificación del banco?", "abrí la notificación de Gmail", "borrá las notificaciones" |
-| Alarmas y temporizadores | "poneme una alarma a las 7 y media de la tarde", "despertame mañana a las 6 y cuarto", "temporizador de 5 minutos", "avisame en media hora" |
+| Alarmas y temporizadores | "poneme una alarma a las 7 y media de la tarde", "despertame mañana a las 6 y cuarto", "temporizador de 5 minutos", "avisame en media hora", "apagá la alarma", "posponela", "¿a qué hora suena mi alarma?" |
 | Calendario | "agendá dentista el jueves a las 4 de la tarde", "recordame comprar pan mañana a las 10", "anotá reunión con Juan el 25 de octubre a las 9" |
 | Cuentas | "cuánto es 25 por 4", "el 15 por ciento de 2000", "raíz de 81", "7 al cuadrado" |
 | Buscar | "buscá zapatillas nike más baratas en Mercado Libre", "buscá en YouTube recetas de pizza", "poné música de Queen en Spotify", "buscá el clima" |
@@ -98,14 +98,39 @@ Usa la app de cámara del teléfono, así las fotos y videos quedan en la galer�
 
 Se graba con el micrófono propio (no apretando el botón de WhatsApp) porque mientras WhatsApp graba, el asistente no puede oír cuándo terminaste. El audio se guarda como **OGG/Opus**, el formato de las notas de voz de WhatsApp (Android 10+; si no hay codificador Opus, M4A/AAC).
 
-## Pausa con las manos
+## Alarmas y temporizadores
 
-Ajustes → Asistente y activación → **Pausa con las manos**. Mientras ves un video o escuchás música, levantá las dos manos con las palmas hacia el teléfono: pone pausa y pregunta "¿Qué necesitás?".
+"Poné una alarma a las 7", "despertame mañana a las 6 y cuarto", "temporizador de 10 minutos". Primero se le pasan a la **app de Reloj** (así aparecen ahí); para saber si la tomó, se mira la próxima alarma del sistema, que el Reloj actualiza. Si el Reloj no la toma (no hay, la rechaza, el teléfono está bloqueado o falta el permiso de mostrar sobre otras apps), **la pone ControlXIA**: alarma exacta con el mismo mecanismo que el Reloj (ícono en la barra, suena aunque el teléfono duerma o se reinicie), con el sonido de alarma del sistema y una pantalla sobre el bloqueo con **Detener** y **Posponer**.
 
-- Usa el **reconocedor de gestos de MediaPipe** (Google, Apache 2.0) con la cámara frontal. Cuenta como "manos arriba" dos palmas abiertas ("Open_Palm") en la parte de arriba de la imagen durante 3 cuadros seguidos (~0,6 s); después espera 8 s antes de volver a disparar.
-- La cámara se prende **solo mientras algo se reproduce** y se apaga a los 8 s de que pare (Android muestra el punto verde de cámara mientras está prendida). Analiza ~5 cuadros por segundo en el teléfono: no se guardan ni se mandan imágenes.
-- El modelo (8 MB) se baja la primera vez que se activa, como el modelo de voz.
-- Android solo deja usar la cámara en segundo plano si el servicio arrancó con la app a la vista: se activa desde la app, y al abrirla se reactiva si quedó apagado.
+Antes no andaba porque faltaba el permiso que exige la app de Reloj para crear alarmas desde otra app (`SET_ALARM`) y no había plan B.
+
+| Decí | Hace |
+|---|---|
+| "apagá la alarma", "pará la alarma" | La apaga (la propia o la del Reloj) |
+| "posponela", "cinco minutos más" | La pospone 10 minutos |
+| "¿a qué hora suena mi alarma?", "¿qué alarmas tengo?" | Dice la próxima (del Reloj o propia) |
+| "cancelá las alarmas" | Cancela las que puso ControlXIA (las del Reloj se borran en el Reloj) |
+
+Mientras suena una alarma propia, el motor de voz oye "apagá la alarma" o "posponela" **sin decir el nombre** y sin internet.
+
+## Gestos con las manos
+
+Ajustes → **Gestos con las manos**. Mientras mirás videos o reels, la cámara frontal mira tus manos:
+
+| Seña | Hace |
+|---|---|
+| ☝️ Dedo índice para arriba | Reel o video siguiente (mantenelo para seguir pasando, uno cada ~2 s) |
+| 👇 Dedo para abajo | El anterior |
+| 👉 Dedo al costado | Foto o historia siguiente o anterior |
+| 👍 Pulgar arriba | Me gusta (dos toques en el medio) |
+| ✌️ V | Pausa y te escucha, sin decir el nombre |
+| 🙌 Las dos manos arriba | Pausa y pregunta "¿Qué necesitás?" |
+
+- Usa el **reconocedor de gestos de MediaPipe** (Google, Apache 2.0). MediaPipe reconoce "dedo para arriba" pero no para abajo ni a los costados: la dirección se calcula con los 21 puntos de la mano (índice estirado, los otros tres doblados, y hacia dónde va del nudillo a la punta). En diagonal no hace nada.
+- Para que no se dispare sin querer: la seña tiene que verse 3 cuadros seguidos (~0,6 s), hay ~1 s entre acciones y, para repetir, hay que bajar la mano (salvo pasar de reel, que se repite si la mantenés). Vibra apenas al actuar.
+- La cámara se prende **solo mientras algo se reproduce o hay una app de videos adelante** (Instagram, TikTok, YouTube, Facebook, Netflix, Snapchat) y se apaga a los 8 s. Analiza ~5 cuadros por segundo en el teléfono: no se guardan ni se mandan imágenes.
+- Las señas que tocan la pantalla necesitan el **control de apps** (accesibilidad).
+- El modelo (8 MB) se baja la primera vez que se activa. Android solo deja usar la cámara en segundo plano si el servicio arrancó con la app a la vista: se activa desde la app y al abrirla se reactiva si quedó apagado.
 
 ## Llamadas
 
@@ -128,7 +153,7 @@ Lo que más rinde para "100 % voz" no es otro agente sino **comandos directos si
 
 ## Límites conocidos
 
-- Todo esto se probó con pruebas automáticas (comandos directos: 134 frases; habilidades locales: 81; lectura de notificaciones: 10 casos; el bucle del agente con un modelo simulado), **no en un teléfono real**. Buscar en cualquier app, tocar por nombre y mandar por Telegram, Messenger, Instagram o Signal se guían por lo que cada app anuncia a la accesibilidad ("Buscar", "Enviar"): en apps que dibujan todo a mano puede no encontrar la lupa; en ese caso lo dice y queda "mostrá los números". Las partes que tocan otras apps (botón de la cámara, interruptores de Wi-Fi, "Enviar a…" de WhatsApp) dependen de cómo dibuja cada fabricante su pantalla: si algo falla, el **Registro del agente** dice en qué paso.
+- Todo esto se probó con pruebas automáticas (comandos directos: 148 frases; habilidades locales: 81; lectura de notificaciones: 10 casos; señas de la mano: 20 casos; el bucle del agente con un modelo simulado), **no en un teléfono real**. Buscar en cualquier app, tocar por nombre y mandar por Telegram, Messenger, Instagram o Signal se guían por lo que cada app anuncia a la accesibilidad ("Buscar", "Enviar"): en apps que dibujan todo a mano puede no encontrar la lupa; en ese caso lo dice y queda "mostrá los números". Las partes que tocan otras apps (botón de la cámara, interruptores de Wi-Fi, "Enviar a…" de WhatsApp) dependen de cómo dibuja cada fabricante su pantalla: si algo falla, el **Registro del agente** dice en qué paso.
 - "Terminá el video" depende de que el teléfono respete la regla de audio compartido para accesibilidad.
 - Atender y cortar llamadas por voz: con el teléfono sonando el micrófono está libre; en plena llamada, el audio lo tiene la llamada.
 - El APK para el teléfono se arma solo para arm64 (casi todos los teléfonos de los últimos años): con MediaPipe para las dos arquitecturas superaba el tamaño que se puede mandar por chat. Para otros equipos: `./gradlew assembleDebug -Pcontrolxia.abis=arm64-v8a,armeabi-v7a`.

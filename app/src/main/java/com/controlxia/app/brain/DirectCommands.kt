@@ -73,6 +73,11 @@ object DirectCommands {
     data object AnswerCall : Command
     data object HangUp : Command
 
+    enum class AlarmAction { STOP, SNOOZE, NEXT, CANCEL }
+
+    /** "Apagá la alarma", "posponela", "¿a qué hora suena mi alarma?", "cancelá las alarmas". */
+    data class AlarmControl(val action: AlarmAction) : Command
+
     /** "Abrí Instagram": si no hay una app con ese nombre, el pedido va al modelo. */
     data class OpenApp(val name: String) : Command
 
@@ -230,6 +235,12 @@ object DirectCommands {
         rule("(?:empeza|empezar|empeza a|inicia|iniciar|comenza|comenzar|arranca|arrancar|activa)(?: a)? (?:grabar|filmar)(?: (?:un )?video)?|(?:empeza|empezar|inicia|iniciar|comenza|comenzar|arranca|arrancar) (?:un |el |la )?(?:video|grabacion|filmacion)|(?:graba|grabar|grabame|filma|filmar|filmame) (?:un )?video|empezar video|grabar|filmar") { Camera(CameraAction.START_VIDEO) },
         rule("(?:termina|terminar|deten|detene|detener|corta|cortar|finaliza|finalizar|frena|frenar)(?: el| la)? (?:video|grabacion|filmacion)|(?:para|parar|termina|terminar|deja|dejar) de (?:grabar|filmar)|terminar video|cortar video") { Camera(CameraAction.STOP_VIDEO) },
         rule("(?:cambia|cambiar|gira|girar|da vuelta|dale vuelta|vuelta|rota|rotar|invertir|invierte)(?: de| a)?(?: la)? camara") { Camera(CameraAction.SWITCH) },
+
+        // Alarmas (antes que "apagá X" de los ajustes rápidos)
+        rule("(?:apaga|apagar|apagame|para|parar|detene|detener|frena|corta|silencia|calla)(?: la| esa| el)? (?:alarma|despertador|temporizador|timer)") { AlarmControl(AlarmAction.STOP) },
+        rule("(?:posponer|pospone|posponela|posponelo|posterga|postergala|aplaza|aplazala)(?: la| el)?(?: alarma| despertador)?(?: \\d+ minutos)?|(?:\\d+) minutos mas|un rato mas") { AlarmControl(AlarmAction.SNOOZE) },
+        rule("(?:a que hora (?:es|suena|sale) (?:mi |la )?(?:proxima )?alarma|cual es (?:mi |la )?proxima alarma|que alarmas? tengo(?: puestas?)?|tengo (?:alguna |una )?alarma(?: puesta)?|(?:a que hora|cuando) me despert(?:as|a|o))") { AlarmControl(AlarmAction.NEXT) },
+        rule("(?:cancela|cancelar|cancelame|borra|borrar|borrame|elimina|eliminar|saca|sacame|quita)(?: la| las| todas las| mi| mis)? alarmas?(?: que (?:te )?pedi| que puse| de las .+| de la .+)?") { AlarmControl(AlarmAction.CANCEL) },
 
         // Llamadas
         rule("(?:atende|atender|atendela|contesta|contestar|contestala)(?: la llamada| el telefono)?") { AnswerCall },

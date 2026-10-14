@@ -22,7 +22,10 @@ import android.view.animation.LinearInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.getSystemService
+import com.controlxia.app.ui.theme.ThemeSettings
+import com.controlxia.app.ui.theme.auraColors
 import kotlin.math.sin
 
 /**
@@ -219,18 +222,20 @@ class ListeningOverlay(private val context: Context) {
 
         override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
             val r = minOf(w, h) / 2f
+            // Los colores de la esfera de la paleta elegida (Ajustes → Apariencia).
+            val orb = auraColors(ThemeSettings.state.value.palette, dark = true).orb
+            fun argb(c: androidx.compose.ui.graphics.Color, alpha: Float = 1f) = c.copy(alpha = alpha).toArgb()
             body.shader = RadialGradient(
                 w / 2f - r * 0.3f, h / 2f - r * 0.4f, r * 1.6f,
-                intArrayOf(Color.parseColor("#8DB9FF"), Color.parseColor("#2F5BFF"), Color.parseColor("#1A1F8F")),
+                intArrayOf(argb(orb.light), argb(orb.mid), argb(orb.deep)),
                 floatArrayOf(0f, 0.45f, 1f),
                 Shader.TileMode.CLAMP,
             )
+            val (a, b, c) = Triple(orb.lobes[1], orb.lobes[2], orb.lobes[3])
             swirl.shader = SweepGradient(
                 w / 2f, h / 2f,
                 intArrayOf(
-                    Color.parseColor("#008C4BFF"), Color.parseColor("#CC8C4BFF"), Color.parseColor("#00FF5FB3"),
-                    Color.parseColor("#CCFF5FB3"), Color.parseColor("#0052E5FF"), Color.parseColor("#CC52E5FF"),
-                    Color.parseColor("#008C4BFF"),
+                    argb(a, 0f), argb(a, 0.8f), argb(b, 0f), argb(b, 0.8f), argb(c, 0f), argb(c, 0.8f), argb(a, 0f),
                 ),
                 null,
             )

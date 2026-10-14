@@ -68,7 +68,7 @@ class AssistantActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         showOverLockScreen()
         setContent {
-            XiaTheme(dark = true) {
+            XiaTheme(forceDark = true) {
                 val ui by AssistantState.state.collectAsState()
                 val level by AssistantState.level.collectAsState()
 

@@ -10,6 +10,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -55,6 +57,55 @@ data class AuraColors(
     val gray: Color,
     /** Luces del fondo (de arriba-izquierda a abajo-derecha). */
     val glows: List<Color>,
+    /** Botones destacados (detener la alarma) y su texto. */
+    val highlight: Color,
+    val onHighlight: Color,
+    /** Los colores de la esfera del asistente. */
+    val orb: OrbColors = AuraOrbColors,
+)
+
+/**
+ * Los colores de la esfera: el cuerpo (de la luz de arriba al borde oscuro),
+ * las luces que giran adentro, el halo y la onda de la voz.
+ */
+@Immutable
+data class OrbColors(
+    val light: Color,
+    val mid: Color,
+    val deep: Color,
+    /** Cuatro luces: la de fondo y tres de color. */
+    val lobes: List<Color>,
+    val halo: Color,
+    val wave: List<Color>,
+)
+
+val AuraOrbColors = OrbColors(
+    light = Color(0xFF7FB2FF),
+    mid = Color(0xFF2F5BFF),
+    deep = Color(0xFF1A1F8F),
+    lobes = listOf(Color(0xFF3D6BFF), Color(0xFF8C4BFF), Color(0xFFFF5FB3), Color(0xFF52E5FF)),
+    halo = Color(0xFF5B8CFF),
+    wave = listOf(Color(0xFF4D8BFF), Color(0xFF8C4BFF), Color(0xFFFF5FB3)),
+)
+
+/** Studio: Canvas #FBFBF8, Mist #DBE3E9, Cornflower #6AA6DA, Pear #E1E5AC, Black. */
+val StudioOrbColors = OrbColors(
+    light = Color(0xFFEAF3FB),
+    mid = Color(0xFF6AA6DA),
+    deep = Color(0xFF2B5C88),
+    lobes = listOf(Color(0xFF4F8FCB), Color(0xFFE1E5AC), Color(0xFFDBE3E9), Color(0xFF9CC8EE)),
+    halo = Color(0xFF6AA6DA),
+    wave = listOf(Color(0xFF6AA6DA), Color(0xFFE1E5AC), Color(0xFF9CC8EE)),
+)
+
+/** Toscana: Tuscan Red #A91B18, Pale Cerulean #CEE7F3, Noir #181717, Satin Linen #F8FAED. */
+val TuscanOrbColors = OrbColors(
+    light = Color(0xFFFFB3AA),
+    mid = Color(0xFFA91B18),
+    deep = Color(0xFF3E0806),
+    lobes = listOf(Color(0xFFC2312C), Color(0xFFCEE7F3), Color(0xFFF8FAED), Color(0xFFE5675F)),
+    halo = Color(0xFFC2312C),
+    wave = listOf(Color(0xFFE5675F), Color(0xFFCEE7F3), Color(0xFFF8FAED)),
 )
 
 val LightAura = AuraColors(
@@ -80,6 +131,8 @@ val LightAura = AuraColors(
     teal = Color(0xFF30B0C7),
     gray = Color(0xFF8E8E93),
     glows = listOf(Color(0xFFBFD7FF), Color(0xFFE4D2FF), Color(0xFFFFD6E8), Color(0xFFCFF3FF)),
+    highlight = Color(0xFFFF9500),
+    onHighlight = Color.Black,
 )
 
 val DarkAura = AuraColors(
@@ -105,7 +158,68 @@ val DarkAura = AuraColors(
     teal = Color(0xFF40C8E0),
     gray = Color(0xFF8E8E93),
     glows = listOf(Color(0xFF1B3FA8), Color(0xFF5A22A8), Color(0xFF9B1F6A), Color(0xFF0E5E8C)),
+    highlight = Color(0xFFFF9F0A),
+    onHighlight = Color.Black,
 )
+
+val StudioLight = LightAura.copy(
+    label = Color(0xFF000000),
+    secondaryLabel = Color(0xFF5E636B),
+    tertiaryLabel = Color(0xFF9CA2AA),
+    background = Color(0xFFFBFBF8),
+    glass = Color(0xC4FFFFFF),
+    blue = Color(0xFF4A8BC8),
+    glows = listOf(Color(0xFFDBE3E9), Color(0xFFC3DDF3), Color(0xFFE9ECC4), Color(0xFFDBE3E9)),
+    highlight = Color(0xFFE1E5AC),
+    onHighlight = Color.Black,
+    orb = StudioOrbColors,
+)
+
+val StudioDark = DarkAura.copy(
+    label = Color(0xFFFBFBF8),
+    secondaryLabel = Color(0xFFA9B0B8),
+    tertiaryLabel = Color(0xFF6B7178),
+    background = Color(0xFF000000),
+    elevated = Color(0xFF111214),
+    blue = Color(0xFF6AA6DA),
+    glows = listOf(Color(0xFF1E3956), Color(0xFF3A3E1F), Color(0xFF253039), Color(0xFF16304A)),
+    highlight = Color(0xFFE1E5AC),
+    onHighlight = Color.Black,
+    orb = StudioOrbColors,
+)
+
+val TuscanLight = LightAura.copy(
+    label = Color(0xFF181717),
+    secondaryLabel = Color(0xFF6E6863),
+    tertiaryLabel = Color(0xFFA7A19B),
+    background = Color(0xFFF8FAED),
+    glass = Color(0xC4FFFFFF),
+    blue = Color(0xFFA91B18),
+    glows = listOf(Color(0xFFCEE7F3), Color(0xFFF2D2CC), Color(0xFFEDF1D8), Color(0xFFCEE7F3)),
+    highlight = Color(0xFFA91B18),
+    onHighlight = Color.White,
+    orb = TuscanOrbColors,
+)
+
+val TuscanDark = DarkAura.copy(
+    label = Color(0xFFF8FAED),
+    secondaryLabel = Color(0xFFB3ADA5),
+    tertiaryLabel = Color(0xFF746E68),
+    background = Color(0xFF181717),
+    elevated = Color(0xFF222020),
+    blue = Color(0xFFD9443D),
+    glows = listOf(Color(0xFF5C1513), Color(0xFF1E3A47), Color(0xFF3B1010), Color(0xFF2B2522)),
+    highlight = Color(0xFFC2312C),
+    onHighlight = Color.White,
+    orb = TuscanOrbColors,
+)
+
+/** Los colores de [palette] en claro u oscuro. */
+fun auraColors(palette: Palette, dark: Boolean): AuraColors = when (palette) {
+    Palette.AURA -> if (dark) DarkAura else LightAura
+    Palette.STUDIO -> if (dark) StudioDark else StudioLight
+    Palette.TUSCAN -> if (dark) TuscanDark else TuscanLight
+}
 
 val LocalAuraColors = staticCompositionLocalOf { LightAura }
 
@@ -167,9 +281,16 @@ private val AuraShapes = Shapes(
     extraLarge = RoundedCornerShape(32.dp),
 )
 
+/**
+ * El tema de la app con la paleta y el modo que eligió el usuario (Ajustes →
+ * Apariencia). [forceDark] fija oscuro (la pantalla sobre el bloqueo, la
+ * alarma) o claro (capturas); null sigue la elección.
+ */
 @Composable
-fun XiaTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    val aura = if (dark) DarkAura else LightAura
+fun XiaTheme(forceDark: Boolean? = null, content: @Composable () -> Unit) {
+    val choice by ThemeSettings.state.collectAsState()
+    val dark = forceDark ?: choice.mode.resolve(isSystemInDarkTheme())
+    val aura = auraColors(choice.palette, dark)
     val scheme = if (dark) {
         darkColorScheme(
             primary = aura.blue,

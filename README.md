@@ -26,7 +26,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Cámara por voz**: abrir, foto, selfie, empezar y terminar un video ("terminá el video" se escucha sin internet mientras graba), cambiar de cámara.
 - ✅ **Audios de WhatsApp**: graba tu voz hasta que te callás, o lo dice la voz del asistente; confirma y lo manda (también a grupos).
 - ✅ **Llamadas**: "llamá a mamá", "atendé", "colgá".
-- ✅ **Pausa con las manos** (opcional): mirando un video, levantá las dos manos y pone pausa y te pregunta qué necesitás (cámara frontal + MediaPipe, todo en el teléfono).
+- ✅ **Pausa con las manos** (opcional): mirando un video, levantá las dos manos y pone pausa y te pregunta qué necesitás (cámara frontal + MediaPipe, todo en el teléfono). Ahora también señas con una mano (ver abajo).
 - ✅ **Frenarlo por voz**: "pará", "basta" o "cancelá" mientras trabaja o habla (o su nombre para interrumpirlo); también tocando la píldora o "Frenar" en la notificación. Se entera de que lo frenaron y de qué alcanzó a hacer.
 - ✅ **Modelos recomendados** al elegir proveedor y modelo, con una nota de para qué sirve cada uno (gratis: Groq gpt-oss-120b o Gemini 3.8 Flash; pago y eficiente: Claude Haiku 5.5 o GPT-6 Luna).
 - ✅ **WhatsApp por nombre**: abre chats y grupos buscándolos en WhatsApp, aunque el reconocimiento de voz entienda mal el nombre ("fulgo 2" → «Fútbol 2 ⚽»), y confirma con el nombre real antes de enviar.
@@ -35,6 +35,9 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Notificaciones**: "leeme las notificaciones" (todas, agrupadas por app), "las de WhatsApp", "abrí la notificación de Gmail", "borrá las notificaciones".
 - ✅ **Cualquier app sin el modelo**: "buscá pizza en PedidosYa" (toca la lupa de la app y busca), "en Spotify tocá Biblioteca", mensajes por Telegram, Messenger, Instagram o Signal.
 - ✅ **Interfaz estilo Apple / Liquid Glass**: tema claro y oscuro con los colores de iOS, vidrio esmerilado, fondo de luces que se mueven, la esfera del asistente (crece con tu voz, gira al pensar), onda de voz como Siri, pestañas flotantes de vidrio (Inicio, Explorar, Actividad, Ajustes), pedir escribiendo o tocando la esfera, animaciones con resortes y diseño adaptable a teléfonos chicos, horizontal y tablets. Ver [docs/DESIGN.md](docs/DESIGN.md).
+- ✅ **Alarmas que andan siempre**: en el Reloj si las toma y, si no, propias (exactas, con pantalla sobre el bloqueo, Detener/Posponer, sobreviven a un reinicio). "Apagá la alarma" y "posponela" por voz, sin decir el nombre.
+- ✅ **Gestos con una mano** mirando reels y videos: ☝️ siguiente, 👇 anterior, 👉 foto/historia, 👍 me gusta, ✌️ hablarle; 🙌 pausa y pregunta.
+- ✅ **Apariencia a elección**: automático, claro u oscuro, y tres paletas (Aura, Studio, Toscana) que cambian también la esfera.
 - ⏳ Próximo: llamadas, recordatorios, activación con botón home (rol de asistente).
 
 ## Compilar

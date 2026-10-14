@@ -68,6 +68,14 @@ class WakeWordSettings(context: Context) {
         get() = prefs.getBoolean(KEY_HANDS, false)
         set(value) = prefs.edit().putBoolean(KEY_HANDS, value).apply()
 
+    /**
+     * Señas con una mano mientras mira (dedo arriba/abajo para pasar de reel,
+     * pulgar arriba para "me gusta", V para hablarle). Requiere [handsPause].
+     */
+    var handGestures: Boolean
+        get() = prefs.getBoolean(KEY_HAND_GESTURES, true)
+        set(value) = prefs.edit().putBoolean(KEY_HAND_GESTURES, value).apply()
+
     /** 0f = menos sensible (menos falsos positivos), 1f = más sensible. */
     var sensitivity: Float
         get() = prefs.getFloat(KEY_SENS, 0.5f)
@@ -84,6 +92,7 @@ class WakeWordSettings(context: Context) {
         private const val KEY_SPOKEN_ACK = "spoken_ack"
 
         private const val KEY_HANDS = "hands_pause"
+        private const val KEY_HAND_GESTURES = "hand_gestures"
         private const val KEY_CONVERSATION = "conversation_mode"
         private const val KEY_CONVERSATION_SECONDS = "conversation_seconds"
         private const val KEY_AGENT = "agent_name"

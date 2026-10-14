@@ -169,6 +169,8 @@ private val CATEGORIES = listOf(
     )),
     Category("Alarmas y agenda", Icons.Rounded.Alarm, { it.orange }, listOf(
         "Poné una alarma a las 7 y media",
+        "¿A qué hora suena mi alarma?",
+        "Apagá la alarma",
         "Temporizador de 10 minutos",
         "Agendá dentista el jueves a las 4",
     )),

@@ -1,6 +1,7 @@
 package com.controlxia.app.brain
 
 import android.content.Context
+import com.controlxia.app.actions.AlarmActions
 import com.controlxia.app.actions.AppLauncher
 import com.controlxia.app.actions.CameraControl
 import com.controlxia.app.actions.Contacts
@@ -27,6 +28,7 @@ class DirectCommandRunner(private val context: Context) {
     private val apps by lazy { AppLauncher(context) }
     private val calls by lazy { PhoneCalls(context) }
     private val contacts by lazy { Contacts(context) }
+    private val alarms by lazy { AlarmActions(context) }
 
     /** Ejecuta [command]. null = no se pudo resolver acá: que lo intente el modelo. */
     suspend fun run(command: Command): Reply? {
@@ -130,6 +132,12 @@ class DirectCommandRunner(private val context: Context) {
             is DirectCommands.Call -> call(command.who)
             DirectCommands.AnswerCall -> done(calls.answer(), "Llamada atendida")
             DirectCommands.HangUp -> done(calls.hangUp(), "Llamada cortada")
+            is DirectCommands.AlarmControl -> when (command.action) {
+                DirectCommands.AlarmAction.STOP -> alarms.stopRinging().let { if (it.isBlank()) Reply("", shown = "⏰ Alarma apagada") else Reply(it) }
+                DirectCommands.AlarmAction.SNOOZE -> Reply(alarms.snooze())
+                DirectCommands.AlarmAction.NEXT -> Reply(alarms.nextAlarm())
+                DirectCommands.AlarmAction.CANCEL -> Reply(alarms.cancelOwn())
+            }
         }
     }
 
@@ -219,7 +227,7 @@ class DirectCommandRunner(private val context: Context) {
         )
         const val HELP = "Sin internet para el modelo podés decir: mandale a Juan que llego tarde, " +
             "por Telegram también, mandale un audio a Juan, llamá a mamá, leeme los mensajes o las " +
-            "notificaciones, respondele que sí, poné una alarma a las 7, temporizador de 5 minutos, " +
+            "notificaciones, respondele que sí, poné una alarma a las 7, apagá la alarma, temporizador de 5 minutos, " +
             "agendá dentista el jueves a las 4, cuánto es 25 por 4, buscá pizza en cualquier app, en " +
             "Spotify tocá Biblioteca, abrí los reels, sacá una foto, activá no molestar o el wifi, " +
             "subí el volumen, pausa, y para cualquier pantalla: mostrá los números y tocá uno, bajá, " +

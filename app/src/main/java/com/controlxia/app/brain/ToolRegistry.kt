@@ -678,6 +678,10 @@ private val PHONE_ACTIONS: Map<String, DirectCommands.Command?> = mapOf(
     "airplane_on" to DirectCommands.Toggle(DirectCommands.Setting.AIRPLANE, true),
     "airplane_off" to DirectCommands.Toggle(DirectCommands.Setting.AIRPLANE, false),
     "brightness_set" to null,
+    "alarm_stop" to DirectCommands.AlarmControl(DirectCommands.AlarmAction.STOP),
+    "alarm_snooze" to DirectCommands.AlarmControl(DirectCommands.AlarmAction.SNOOZE),
+    "alarm_next" to DirectCommands.AlarmControl(DirectCommands.AlarmAction.NEXT),
+    "alarm_cancel_own" to DirectCommands.AlarmControl(DirectCommands.AlarmAction.CANCEL),
 ) + CALL_ACTIONS
 
 private val CAMERA_ACTIONS = mapOf(

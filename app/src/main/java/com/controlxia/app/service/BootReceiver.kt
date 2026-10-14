@@ -21,6 +21,8 @@ class BootReceiver : BroadcastReceiver() {
         if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_MY_PACKAGE_REPLACED) {
             return
         }
+        // Android olvida las alarmas al reiniciar: las propias se vuelven a programar.
+        com.controlxia.app.actions.OwnAlarms.rescheduleAll(context)
         if (!ServicePrefs.isEnabled(context)) return
 
         val bootOnAndroid15 = action == Intent.ACTION_BOOT_COMPLETED &&

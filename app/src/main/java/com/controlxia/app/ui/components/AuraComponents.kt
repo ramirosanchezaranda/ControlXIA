@@ -410,3 +410,50 @@ fun FadeScale(visible: Boolean, modifier: Modifier = Modifier, content: @Composa
         exit = fadeOut(AuraMotion.smooth()) + scaleOut(AuraMotion.smooth(), targetScale = 0.96f),
     ) { content() }
 }
+
+/**
+ * Control segmentado de iOS: opciones en una cápsula, con un indicador que
+ * se desliza con un resorte hasta la elegida.
+ */
+@Composable
+fun SegmentedControl(
+    options: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = Aura.colors
+    BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(CircleShape)
+            .background(colors.label.copy(alpha = if (colors.dark) 0.12f else 0.06f))
+            .padding(3.dp),
+    ) {
+        val itemWidth = maxWidth / options.size
+        val x by animateDpAsState(itemWidth * selected, AuraMotion.snappy(), label = "segment")
+        Box(
+            Modifier
+                .offset(x = x)
+                .width(itemWidth)
+                .fillMaxSize()
+                .glass(CircleShape, strong = true),
+        )
+        Row(Modifier.fillMaxSize()) {
+            options.forEachIndexed { index, option ->
+                Box(
+                    Modifier.weight(1f).fillMaxSize().pressable(pressedScale = 0.95f, onClick = { onSelect(index) }),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        option,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (index == selected) colors.label else colors.secondaryLabel,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}

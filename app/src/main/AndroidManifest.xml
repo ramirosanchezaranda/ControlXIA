@@ -16,6 +16,11 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Alarmas: crear las del Reloj desde otra app (sin esto la app de Reloj
+         la rechaza), y las propias exactas que suenan en pantalla completa. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Permite abrir apps / disparar acciones con la pantalla bloqueada o en
          segundo plano (background activity start). Opcional: sin esto, abrir
@@ -36,6 +41,13 @@
         <!-- Servicio de reconocimiento de voz (SpeechRecognizer). -->
         <intent>
             <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <!-- La app de Reloj que toma alarmas y temporizadores. -->
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER" />
         </intent>
         <!-- Apps con ícono de lanzador, para resolver "abrí <app>" por nombre. -->
         <intent>
@@ -75,6 +87,21 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@style/Theme.ControlXIA.Transparent" />
+
+        <!-- La alarma sonando, sobre el bloqueo: Detener y Posponer. -->
+        <activity
+            android:name=".ui.AlarmRingActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity="com.controlxia.app.alarm"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.ControlXIA.Transparent" />
+
+        <receiver
+            android:name=".service.AlarmReceiver"
+            android:exported="false" />
 
         <!-- Invisible: aparece sobre el bloqueo solo para pedir la huella o el
              PIN cuando un pedido necesita la pantalla, y se cierra sola. -->

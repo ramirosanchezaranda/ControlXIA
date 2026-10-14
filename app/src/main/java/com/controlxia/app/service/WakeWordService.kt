@@ -28,6 +28,7 @@ import androidx.core.content.ContextCompat
 import com.controlxia.app.R
 import com.controlxia.app.XiaApplication
 import com.controlxia.app.actions.CameraControl
+import com.controlxia.app.actions.OwnAlarms
 import com.controlxia.app.actions.UnlockGate
 import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.brain.Reply
@@ -160,6 +161,10 @@ class WakeWordService : Service() {
             } else if (processingJob?.isActive == true) {
                 startStopListener()
             }
+        }
+        // Una alarma empieza o deja de sonar: el motor de voz pasa a oír "apagá la alarma".
+        OwnAlarms.onRingingChanged = {
+            main.post { if (listeningCommand) reloadPending = true else startListeningFresh() }
         }
         // Se desbloqueó en medio de un pedido (para usar una app): seguir con la burbuja.
         UnlockGate.onUnlocked = { main.post { onPhoneUnlocked() } }
@@ -381,14 +386,20 @@ class WakeWordService : Service() {
         val settings = WakeWordSettings(this)
         agentName = settings.agentName
         val recording = CameraControl.recording
+        val alarm = OwnAlarms.ringing.value != null
         val engine = VoskWakeWordEngine(
             context = applicationContext,
             phrase = settings.spokenWakeWord(),
             sensitivity = settings.sensitivity,
             // Grabando, el reconocedor de Google no recibe audio: "terminá el video" se oye acá.
-            commands = if (recording) CameraControl.STOP_VIDEO_PHRASES else emptyList(),
-            echoCancel = recording,
-            onCommand = { phrase -> main.post { onStopVideoHeard(phrase) } },
+            // Sonando una alarma: "apagá la alarma" o "posponela", sin decir el nombre.
+            commands = when {
+                recording -> CameraControl.STOP_VIDEO_PHRASES
+                alarm -> OwnAlarms.VOICE_PHRASES
+                else -> emptyList()
+            },
+            echoCancel = recording || alarm,
+            onCommand = { phrase -> main.post { if (alarm) onAlarmPhrase(phrase) else onStopVideoHeard(phrase) } },
         )
         wakeEngine = engine
         setWakeStatus(false, "Preparando el reconocimiento de voz…")
@@ -755,6 +766,13 @@ class WakeWordService : Service() {
         transcribeCommand()
     }
 
+    /** "Apagá la alarma" / "posponela" mientras suena una alarma propia. */
+    private fun onAlarmPhrase(phrase: String) {
+        AgentLog.add("ESCUCHÉ «$phrase» con la alarma sonando")
+        vibrate(60)
+        if (OwnAlarms.isSnooze(phrase)) OwnAlarms.snooze(this) else OwnAlarms.stop(this)
+    }
+
     /** "Terminá el video" mientras la cámara graba (lo oye el motor de voz, sin internet). */
     private fun onStopVideoHeard(phrase: String) {
         AgentLog.add("ESCUCHÉ «$phrase» mientras grababa")
@@ -955,6 +973,7 @@ class WakeWordService : Service() {
         VoiceBridge.speaker = null
         VoiceBridge.micClaim = null
         UnlockGate.onUnlocked = null
+        OwnAlarms.onRingingChanged = null
         CameraControl.onRecordingChanged = null
         running = false
         wakeWordActive = false

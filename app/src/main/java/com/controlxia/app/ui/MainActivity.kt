@@ -3,7 +3,11 @@ package com.controlxia.app.ui
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -12,6 +16,7 @@ import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.HandsWatchService
 import com.controlxia.app.service.ServicePrefs
 import com.controlxia.app.service.WakeWordService
+import com.controlxia.app.ui.theme.ThemeSettings
 import com.controlxia.app.ui.theme.XiaTheme
 import com.controlxia.app.voice.GestureModel
 import com.controlxia.app.voice.WakeWordSettings
@@ -23,6 +28,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
+            // Los íconos de la barra de estado, oscuros o claros según el tema elegido (no el del teléfono).
+            val choice by ThemeSettings.state.collectAsState()
+            val dark = choice.mode.resolve(isSystemInDarkTheme())
+            LaunchedEffect(dark) {
+                val style = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT) { dark }
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
             XiaTheme {
                 var onboarded by remember {
                     mutableStateOf(ServicePrefs.isOnboarded(this@MainActivity))

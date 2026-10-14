@@ -69,6 +69,32 @@ class ScreenshotTest {
         AssistantState.idle()
     }
 
+    @Test
+    @Config(qualifiers = PHONE_NIGHT)
+    fun alarm() {
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        stillFrames(app)
+        com.controlxia.app.actions.OwnAlarms.ring(app, 1)
+        val activity = Robolectric.buildActivity(AlarmRingActivity::class.java).setup().get()
+        settle()
+        save("phone-alarm", capture(activity))
+        com.controlxia.app.actions.OwnAlarms.stop(app)
+    }
+
+    @Test
+    @Config(qualifiers = PHONE)
+    fun palettes() {
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        listOf(com.controlxia.app.ui.theme.Palette.STUDIO, com.controlxia.app.ui.theme.Palette.TUSCAN).forEach { palette ->
+            com.controlxia.app.ui.theme.ThemeSettings.setPalette(app, palette)
+            val name = palette.name.lowercase()
+            shoot("palette-$name-light-home", dark = false) { AuraApp(onboarded = true, onOnboarded = {}) }
+            shoot("palette-$name-dark-home", dark = true) { AuraApp(onboarded = true, onOnboarded = {}) }
+            shoot("palette-$name-light-settings", dark = false) { AuraApp(onboarded = true, onOnboarded = {}, initialTab = Tab.SETTINGS) }
+        }
+        com.controlxia.app.ui.theme.ThemeSettings.setPalette(app, com.controlxia.app.ui.theme.Palette.AURA)
+    }
+
     private fun shootTabs(prefix: String, dark: Boolean) {
         Tab.entries.forEach { tab ->
             shoot("$prefix-${tab.name.lowercase()}", dark) {
@@ -82,7 +108,7 @@ class ScreenshotTest {
         val activity = controller.get()
         stillFrames(activity)
         ServicePrefs.setOnboarded(activity, true)
-        activity.setContent { XiaTheme(dark = dark) { content() } }
+        activity.setContent { XiaTheme(forceDark = dark) { content() } }
         settle()
         save(name, capture(activity))
         controller.pause().stop().destroy()

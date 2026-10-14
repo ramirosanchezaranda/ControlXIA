@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import com.controlxia.app.ui.components.AuraSwitch
+import com.controlxia.app.ui.components.glass
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -326,6 +327,7 @@ private fun checkName(context: Context, phrase: String): NameCheck {
 private fun HandsPauseContent(settings: WakeWordSettings) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(settings.handsPause) }
+    var oneHand by remember { mutableStateOf(settings.handGestures) }
     val download by GestureModel.state.collectAsState()
 
     fun turnOn() {
@@ -340,18 +342,18 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
         ActivityResultContracts.RequestPermission()
     ) { granted -> if (granted) turnOn() }
 
-    SectionLabel("Pausa con las manos")
+    SectionLabel("Gestos con las manos")
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Levantar las dos manos", style = MaterialTheme.typography.titleSmall)
+            Text("Mirar mis manos mientras veo videos", style = MaterialTheme.typography.titleSmall)
             Text(
-                "Mientras ves un video o escuchás música, levantá las dos manos con las " +
-                    "palmas hacia el teléfono: pone pausa y te pregunta qué necesitás. La " +
-                    "cámara frontal se prende solo mientras algo se reproduce y todo se " +
-                    "analiza en el teléfono, sin guardar imágenes.",
+                "La cámara frontal se prende solo mientras se reproduce algo o hay una app de " +
+                    "videos adelante (Instagram, TikTok, YouTube…). Todo se analiza en el " +
+                    "teléfono, sin guardar imágenes. Las señas que tocan la pantalla necesitan " +
+                    "el control de apps.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Muted,
             )
@@ -370,6 +372,27 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
             },
         )
     }
+    if (enabled) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Señas con una mano", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            AuraSwitch(
+                checked = oneHand,
+                onCheckedChange = {
+                    oneHand = it
+                    settings.handGestures = it
+                },
+            )
+        }
+        Column(Modifier.fillMaxWidth().glass().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HAND_LEGEND.forEachIndexed { i, (sign, meaning) ->
+                if (!oneHand && i < HAND_LEGEND.size - 1) return@forEachIndexed
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(sign, style = MaterialTheme.typography.titleLarge, modifier = Modifier.width(44.dp))
+                    Text(meaning, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
     when (val state = download) {
         is GestureModel.State.Downloading -> Text(
             "Bajando el modelo de gestos… ${(state.progress * 100).roundToInt()}%",
@@ -380,3 +403,13 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
         else -> Unit
     }
 }
+
+/** Qué hace cada seña (la última, las dos manos, siempre está). */
+private val HAND_LEGEND = listOf(
+    "☝️" to "Dedo para arriba: el reel o video siguiente (mantenelo para seguir pasando)",
+    "👇" to "Dedo para abajo: el anterior",
+    "👉" to "Dedo al costado: la foto o historia siguiente o anterior",
+    "👍" to "Pulgar arriba: me gusta",
+    "✌️" to "V: pausa y te escucho, sin decir mi nombre",
+    "🙌" to "Las dos manos arriba: pausa y te pregunto qué necesitás",
+)

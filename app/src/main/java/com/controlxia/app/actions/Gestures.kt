@@ -12,6 +12,19 @@ object Gestures {
     fun tapAt(service: AccessibilityService, x: Float, y: Float, durationMs: Long = 60): Boolean =
         stroke(service, Path().apply { moveTo(x, y) }, durationMs)
 
+    /** Dos toques rápidos en el mismo lugar ("me gusta" en reels y videos cortos). */
+    fun doubleTapAt(service: AccessibilityService, x: Float, y: Float): Boolean {
+        val path = Path().apply { moveTo(x, y) }
+        return service.dispatchGesture(
+            GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
+                .addStroke(GestureDescription.StrokeDescription(path, 140, 50))
+                .build(),
+            null,
+            null,
+        )
+    }
+
     /** Toca el centro del elemento. */
     fun tap(service: AccessibilityService, node: AccessibilityNodeInfo, durationMs: Long = 60): Boolean {
         val bounds = Rect().also { node.getBoundsInScreen(it) }
