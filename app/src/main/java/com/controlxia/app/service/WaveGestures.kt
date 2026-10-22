@@ -46,7 +46,9 @@ class WaveGestures(
     private val sensors = this.context.getSystemService(SensorManager::class.java)
     private val power = this.context.getSystemService(PowerManager::class.java)
     private val audio = this.context.getSystemService(AudioManager::class.java)
-    private val sensor: Sensor? = sensors?.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+    // El que despierta al teléfono, si existe: con la pantalla apagada es el único que avisa seguro.
+    private val sensor: Sensor? = sensors?.let { it.getDefaultSensor(Sensor.TYPE_PROXIMITY, true) ?: it.getDefaultSensor(Sensor.TYPE_PROXIMITY) }
+    private var offEvents = 0
     private val detector = WaveDetector()
     private val feedback = Feedback(this.context)
     private val handler = Handler(Looper.getMainLooper())
@@ -66,7 +68,9 @@ class WaveGestures(
         if (listening || sensor == null) return
         detector.reset()
         listening = sensors?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL, handler) == true
-        if (listening) AgentLog.add("SALUDOS escuchando el sensor de proximidad")
+        if (listening) {
+            AgentLog.add("SALUDOS escuchando el sensor «${sensor.name}» (${sensor.vendor}, despierta: ${if (sensor.isWakeUpSensor) "sí" else "no"})")
+        }
     }
 
     fun stop() {
@@ -78,6 +82,14 @@ class WaveGestures(
 
     override fun onSensorChanged(event: SensorEvent) {
         val now = SystemClock.elapsedRealtime()
+        events++
+        lastEventAt = now
+        // Para el diagnóstico: si el sensor avisa con la pantalla apagada (en algunos teléfonos no).
+        if (power?.isInteractive == false) {
+            if (offEvents++ == 0) AgentLog.add("SALUDOS el sensor avisa con la pantalla apagada")
+        } else {
+            offEvents = 0
+        }
         val result = detector.feed(isNear(event), now)
         if (detector.isNear) {
             handler.removeCallbacks(checkCover)
@@ -184,6 +196,24 @@ class WaveGestures(
          */
         fun wakesUp(context: Context): Boolean =
             context.getSystemService(SensorManager::class.java)?.getDefaultSensor(Sensor.TYPE_PROXIMITY)?.isWakeUpSensor == true
+
+        /** Para el diagnóstico: cuántas veces avisó el sensor y cuándo fue la última. */
+        @Volatile
+        var events = 0
+            private set
+
+        @Volatile
+        var lastEventAt = 0L
+            private set
+
+        /** El sensor que se usa, para el diagnóstico. */
+        fun describe(context: Context): String {
+            val sensors = context.getSystemService(SensorManager::class.java) ?: return "sin servicio de sensores"
+            val wake = sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY, true)
+            val any = wake ?: sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY) ?: return "no hay sensor de proximidad"
+            return "«${any.name}» de ${any.vendor}, despierta al teléfono: ${if (any.isWakeUpSensor) "sí" else "no"}, " +
+                "alcance ${any.maximumRange} cm"
+        }
 
         /** Si el teléfono tiene sensor de proximidad. */
         fun available(context: Context): Boolean =

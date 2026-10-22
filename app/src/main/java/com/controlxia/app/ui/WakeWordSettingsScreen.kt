@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.controlxia.app.diagnostics.GestureDiagnostics
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.HandsWatchService
 import com.controlxia.app.service.WakeWordService
@@ -206,6 +207,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
             SectionLabel("Gestos con las manos")
             WaveContent(settings)
             HandsPauseContent(settings)
+            GestureDiagnosticsButton()
 
             // Privacidad con el teléfono bloqueado
             SectionLabel("Privacidad")
@@ -451,7 +453,28 @@ private fun CameraTester() {
                 Text("Última seña: $sign (hace $ago s)", style = MaterialTheme.typography.bodySmall, color = Muted)
             }
         }
-        TechButton("Probar", filled = false, onClick = { HandsWatchService.test() })
+    }
+    var testing by remember { mutableStateOf(false) }
+    TechButton("Probar con la cámara", onClick = { testing = true })
+    if (testing) GestureTestDialog(onClose = { testing = false })
+}
+
+/** Copia un resumen de cómo están los gestos en este teléfono, para pegarlo en un chat. */
+@Composable
+private fun GestureDiagnosticsButton() {
+    val context = LocalContext.current
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "¿Algún gesto no anda? Probalo, tocá «Copiar diagnóstico» y pegalo en el chat.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+            modifier = Modifier.weight(1f),
+        )
+        TechButton("Copiar diagnóstico", filled = false, onClick = {
+            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+            clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Diagnóstico de gestos", GestureDiagnostics.report(context)))
+            android.widget.Toast.makeText(context, "Copiado: pegalo en el chat", android.widget.Toast.LENGTH_LONG).show()
+        })
     }
 }
 
@@ -707,10 +730,11 @@ private val ANSWER_LEGEND = listOf(
 
 /** Qué hace cada seña frente a la cámara (la última, las dos manos, siempre está). */
 private val HAND_LEGEND = listOf(
+    "✋⬆️" to "Deslizar en el aire: mano quieta frente a la cámara hasta que vibre apenas… y movela rápido para arriba (siguiente), abajo (anterior) o a un costado. Hace el mismo deslizamiento que el dedo",
     "☝️" to "Dedo para arriba: el reel o video siguiente (mantenelo para seguir pasando)",
     "👇" to "Dedo para abajo: el anterior",
     "👉" to "Dedo al costado: la foto o historia siguiente o anterior",
-    "✋" to "Palma abierta: pausa o sigue el video",
+    "✋" to "Palma abierta quieta 1 segundo: pausa o sigue el video",
     "👍" to "Pulgar arriba: me gusta",
     "✌️" to "V: pausa y te escucho, sin decir mi nombre",
     "🙌" to "Las dos manos arriba: pausa y te pregunto qué necesitás",

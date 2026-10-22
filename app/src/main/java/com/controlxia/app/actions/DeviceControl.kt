@@ -74,6 +74,11 @@ class DeviceControl(private val context: Context) {
         val ok = when (direction) {
             Direction.DOWN, Direction.UP -> {
                 val forward = direction == Direction.DOWN
+                // En reels y videos cortos, "desplazar" de la accesibilidad a veces dice que
+                // anduvo y no pasa de video: ahí, como el dedo.
+                if (XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO) {
+                    return@withContext if (Gestures.flingVertical(service, up = forward)) null else "No pude desplazar la pantalla."
+                }
                 val target = service.rootInActiveWindow?.let { largestScrollable(it) }
                 val action = if (forward) {
                     AccessibilityNodeInfo.ACTION_SCROLL_FORWARD

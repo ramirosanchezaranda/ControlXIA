@@ -38,6 +38,28 @@ object Gestures {
         return tap(service, node, durationMs = 900)
     }
 
+    /**
+     * Un deslizamiento rápido como el del dedo ([up]: el contenido sube, el
+     * reel siguiente). Las apps de videos (Instagram, TikTok, Shorts) pasan de
+     * video con esto aunque no respondan a "desplazar" de la accesibilidad.
+     */
+    fun flingVertical(service: AccessibilityService, up: Boolean): Boolean {
+        val metrics = service.resources.displayMetrics
+        val x = metrics.widthPixels / 2f
+        val (from, to) = if (up) 0.72f to 0.25f else 0.28f to 0.75f
+        return swipe(service, x, metrics.heightPixels * from, x, metrics.heightPixels * to, FLING_MS)
+    }
+
+    /** Deslizar de costado como el dedo ([toLeft]: la foto o historia siguiente). */
+    fun flingHorizontal(service: AccessibilityService, toLeft: Boolean): Boolean {
+        val metrics = service.resources.displayMetrics
+        val y = metrics.heightPixels / 2f
+        val (from, to) = if (toLeft) 0.85f to 0.15f else 0.15f to 0.85f
+        return swipe(service, metrics.widthPixels * from, y, metrics.widthPixels * to, y, FLING_MS)
+    }
+
+    private const val FLING_MS = 180L
+
     /** Desliza de (x1, y1) a (x2, y2). */
     fun swipe(
         service: AccessibilityService,

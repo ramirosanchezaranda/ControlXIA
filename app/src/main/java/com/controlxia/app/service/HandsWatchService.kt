@@ -1,14 +1,13 @@
 package com.controlxia.app.service
 
 import android.annotation.SuppressLint
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
-import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
 import android.media.AudioManager
@@ -18,6 +17,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Range
 import android.util.Size
+import android.widget.Toast
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
@@ -42,57 +42,60 @@ import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.ConfirmState
 import com.controlxia.app.voice.FaceSigns
 import com.controlxia.app.voice.Feedback
-import com.controlxia.app.voice.GestureModel
+import com.controlxia.app.voice.HandAnalyzer
+import com.controlxia.app.voice.HandMotion
 import com.controlxia.app.voice.HandSigns
 import com.controlxia.app.voice.WakeWordSettings
-import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.google.mediapipe.tasks.core.BaseOptions
-import com.google.mediapipe.tasks.vision.core.RunningMode
-import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
-import com.google.mediapipe.tasks.vision.gesturerecognizer.GestureRecognizer
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.io.RandomAccessFile
-import java.nio.channels.FileChannel
+import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 
 /**
- * "Gestos con las manos": mientras mirás videos o reels, la cámara frontal
- * mira tus manos.
- * - Las dos manos arriba (palmas abiertas): pausa y el asistente pregunta
- *   "¿Qué necesitás?".
- * - Con una mano ([HandSigns]): dedo para arriba pasa al reel siguiente, para
- *   abajo vuelve al anterior, al costado pasa de foto o historia, pulgar arriba
- *   pone "me gusta" y la V pausa y te escucha.
+ * Gestos con la cámara frontal, como los gestos aéreos de los teléfonos:
  *
- * La cámara se prende solo mientras algo se reproduce o hay una app de videos
- * a la vista, y se apaga a los pocos segundos (Android muestra el punto verde
- * de cámara mientras está prendida). Todo se procesa en el teléfono: no se guardan ni se
- * mandan imágenes. Es opcional y se activa desde la app (Android solo deja usar
- * la cámara en segundo plano si el servicio arrancó con la app a la vista).
+ * - **Deslizar en el aire** ([HandMotion]): dejás la mano quieta un instante y
+ *   la movés rápido arriba, abajo o a un costado; la app hace el mismo
+ *   deslizamiento con el dedo en la pantalla (reel siguiente o anterior, foto o
+ *   historia). También con el índice apuntando ([HandSigns]).
+ * - 👍 me gusta (dos toques en el video), ✋ sostenida pausa o sigue, ✌️ pausa
+ *   y te escucha, 🙌 las dos manos pausan y preguntan "¿Qué necesitás?".
+ * - Cuando el asistente pregunta algo: guiño o asentir = sí, negar = no, 👍/👎.
+ * - Con el teléfono bloqueado y música sonando: deslizar a los costados cambia
+ *   de tema, arriba y abajo el volumen.
+ *
+ * La cámara mira solo con la pantalla prendida y algo reproduciéndose, una app
+ * de videos adelante, una pregunta esperando, una prueba, o el ajuste "con
+ * cualquier app"; se apaga a los segundos de que no. Todo se analiza en el
+ * teléfono: no se guardan ni se mandan imágenes.
  */
 class HandsWatchService : LifecycleService() {
 
     private val analysisExecutor = Executors.newSingleThreadExecutor()
-    private var recognizer: GestureRecognizer? = null
+    private var analyzer: HandAnalyzer? = null
     private var provider: ProcessCameraProvider? = null
+    private var useCase: ImageAnalysis? = null
     private var cameraOn = false
     private var lastFrameAt = 0L
     private var streak = 0
     private var lastTrigger = 0L
     private var lastHandAt = 0L
-    private val signs = HandSigns.Trigger()
+    private val signs = HandSigns.Trigger(framesNeeded = 4, framesFor = mapOf(HandSigns.Sign.OPEN_PALM to 10))
+    private val motion = HandMotion()
     private val feedback by lazy { Feedback(this) }
+
     @Volatile
     private var gesturesOn = true
+
     @Volatile
     private var always = false
+
     @Volatile
     private var confirmOn = true
-    private var faces: FaceLandmarker? = null
     private val faceSigns = FaceSigns()
-    private val answerSigns = HandSigns.Trigger(repeatable = emptySet())
+    private val answerSigns = HandSigns.Trigger(framesNeeded = 3, repeatable = emptySet())
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
@@ -106,39 +109,24 @@ class HandsWatchService : LifecycleService() {
         if (started.isFailure) {
             // Sin permiso de cámara, o Android no deja (arranque desde segundo plano).
             AgentLog.add("MANOS no pude arrancar: ${started.exceptionOrNull()?.message}")
+            publish("no pude arrancar: ${started.exceptionOrNull()?.message}")
             stopSelf()
             return START_NOT_STICKY
         }
         running = true
-        current = java.lang.ref.WeakReference(this)
-        if (recognizer == null) loadRecognizer()
-        if (faces == null) loadFaces()
+        current = WeakReference(this)
+        readSettings()
+        if (analyzer == null) analyzer = HandAnalyzer.create(this)
         if (provider == null) {
             val future = ProcessCameraProvider.getInstance(this)
-            future.addListener({ provider = runCatching { future.get() }.getOrNull() }, ContextCompat.getMainExecutor(this))
+            future.addListener({
+                provider = runCatching { future.get() }.getOrNull()
+                // Recién ahora se puede prender la cámara.
+                evaluate()
+            }, ContextCompat.getMainExecutor(this))
             watchPlayback()
         }
-        return START_NOT_STICKY
-    }
-
-    private fun loadRecognizer() {
-        val model = GestureModel.file(this)
-        if (!GestureModel.isInstalled(this)) {
-            AgentLog.add("MANOS falta el modelo de gestos")
-            return
-        }
-        recognizer = runCatching {
-            val buffer = RandomAccessFile(model, "r").channel.use { it.map(FileChannel.MapMode.READ_ONLY, 0, it.size()) }
-            GestureRecognizer.createFromOptions(
-                this,
-                GestureRecognizer.GestureRecognizerOptions.builder()
-                    .setBaseOptions(BaseOptions.builder().setModelAssetBuffer(buffer).build())
-                    .setRunningMode(RunningMode.IMAGE)
-                    .setNumHands(2)
-                    .setMinHandDetectionConfidence(0.5f)
-                    .build(),
-            )
-        }.onFailure { AgentLog.add("MANOS no pude cargar el modelo: ${it.message}") }.getOrNull()
+        return START_STICKY
     }
 
     private fun readSettings() {
@@ -148,28 +136,10 @@ class HandsWatchService : LifecycleService() {
         confirmOn = settings.confirmGestures
     }
 
-    /** El modelo de la cara (guiño, cabeza), si está bajado. */
-    private fun loadFaces() {
-        if (!GestureModel.isFaceInstalled(this)) return
-        faces = runCatching {
-            val buffer = RandomAccessFile(GestureModel.faceFile(this), "r").channel.use { it.map(FileChannel.MapMode.READ_ONLY, 0, it.size()) }
-            FaceLandmarker.createFromOptions(
-                this,
-                FaceLandmarker.FaceLandmarkerOptions.builder()
-                    .setBaseOptions(BaseOptions.builder().setModelAssetBuffer(buffer).build())
-                    .setRunningMode(RunningMode.IMAGE)
-                    .setNumFaces(1)
-                    .setOutputFaceBlendshapes(true)
-                    .build(),
-            )
-        }.onFailure { AgentLog.add("MANOS no pude cargar el modelo de la cara: ${it.message}") }.getOrNull()
-    }
-
     /**
-     * Prende la cámara mientras algo se reproduce o hay una app de videos
-     * adelante, con la pantalla prendida; la apaga a los segundos de que no.
-     * Reacciona a avisos del sistema (reproducción, app adelante, pantalla) en
-     * vez de revisar todo el tiempo; un control lento cubre lo que se escape.
+     * Reacciona a avisos del sistema (reproducción, app adelante, pantalla,
+     * preguntas) en vez de revisar todo el tiempo; un control lento cubre lo
+     * que se escape.
      */
     private fun watchPlayback() {
         audio.registerAudioPlaybackCallback(playbackCallback, handler)
@@ -179,6 +149,7 @@ class HandsWatchService : LifecycleService() {
             IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_USER_PRESENT)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
@@ -202,6 +173,7 @@ class HandsWatchService : LifecycleService() {
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val audio by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private val power by lazy { getSystemService(PowerManager::class.java) }
+    private val keyguard by lazy { getSystemService(KeyguardManager::class.java) }
     private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
         override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) = evaluate()
     }
@@ -211,27 +183,36 @@ class HandsWatchService : LifecycleService() {
     }
     private val turnOffIfQuiet = Runnable { if (!wanted() && cameraOn) unbindCamera() }
 
+    private fun musicPlaying(): Boolean = runCatching { audio.isMusicActive }.getOrDefault(false)
+
+    private fun locked(): Boolean = keyguard?.isKeyguardLocked == true
+
     /**
      * Hace falta mirar: pantalla prendida y algo reproduciéndose, una app de
      * videos adelante, una pregunta esperando el "sí", una prueba desde
-     * Ajustes, o el ajuste "con cualquier app".
+     * Ajustes, o el ajuste "con cualquier app". Bloqueado, solo con música (la
+     * cámara frontal también la usa el desbloqueo con la cara).
      */
-    private fun wanted(): Boolean =
-        power.isInteractive &&
-            (always || testing() || (confirmOn && ConfirmState.waiting) ||
-                runCatching { audio.isMusicActive }.getOrDefault(false) ||
-                XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO)
-
-    private fun testing(): Boolean = SystemClock.elapsedRealtime() < testUntil
+    private fun wanted(): Boolean {
+        if (paused || !power.isInteractive) return false
+        if (locked()) return musicPlaying() || (confirmOn && ConfirmState.waiting)
+        return always || (confirmOn && ConfirmState.waiting) || musicPlaying() ||
+            XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO
+    }
 
     /** Por qué la cámara está como está (para Ajustes). */
     private fun reason(): String = when {
+        paused -> "en pausa: la está usando la prueba"
         !power.isInteractive -> "apagada: la pantalla está apagada"
+        analyzer == null -> "apagada: falta el modelo de gestos (activá de nuevo «Señas con la cámara»)"
         confirmOn && ConfirmState.waiting -> "mirando: esperando tu sí o no"
-        testing() -> "mirando: prueba"
+        locked() && musicPlaying() -> "mirando: bloqueado con música"
+        locked() -> "apagada: el teléfono está bloqueado y no suena nada"
         always -> "mirando: con cualquier app"
-        runCatching { audio.isMusicActive }.getOrDefault(false) -> "mirando: se está reproduciendo algo"
+        musicPlaying() -> "mirando: se está reproduciendo algo"
         XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO -> "mirando: app de videos adelante"
+        XiaAccessibilityService.instance == null ->
+            "apagada: no suena nada, y sin el control de apps no sé si hay una app de videos adelante"
         else -> "apagada: no hay video ni música"
     }
 
@@ -241,9 +222,9 @@ class HandsWatchService : LifecycleService() {
             handler.removeCallbacks(turnOffIfQuiet)
             if (!cameraOn) bindCamera()
         } else if (cameraOn) {
-            // Con la pantalla apagada, enseguida; si no, unos segundos (puede ser un corte entre videos).
+            // Pantalla apagada o prueba: enseguida; si no, unos segundos (puede ser un corte entre videos).
             handler.removeCallbacks(turnOffIfQuiet)
-            handler.postDelayed(turnOffIfQuiet, if (power.isInteractive) CAMERA_OFF_AFTER_MS else 0L)
+            handler.postDelayed(turnOffIfQuiet, if (power.isInteractive && !paused) CAMERA_OFF_AFTER_MS else 0L)
         }
     }
 
@@ -251,33 +232,38 @@ class HandsWatchService : LifecycleService() {
     @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
     private fun bindCamera() {
         val cameras = provider ?: return
-        if (recognizer == null) return
+        if (analyzer == null) analyzer = HandAnalyzer.create(this)
+        if (analyzer == null) {
+            publish(reason())
+            return
+        }
         val builder = ImageAnalysis.Builder()
             .setResolutionSelector(
                 ResolutionSelector.Builder()
                     .setResolutionStrategy(
-                        ResolutionStrategy(Size(480, 360), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER)
+                        ResolutionStrategy(Size(480, 360), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
                     )
-                    .build()
+                    .build(),
             )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-        // Solo se analizan unos 5 cuadros por segundo: que la cámara tampoco saque 30.
+        // Para ver un deslizamiento hacen falta ~10 cuadros por segundo; que la cámara no saque 30.
         lowestFpsRange(cameras)?.let { range ->
             Camera2Interop.Extender(builder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
         }
         val analysis = builder.build()
         analysis.setAnalyzer(analysisExecutor) { image -> analyze(image) }
         val ok = runCatching {
-            cameras.unbindAll()
+            useCase?.let { cameras.unbind(it) }
             cameras.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
         }
+        useCase = analysis.takeIf { ok.isSuccess }
         cameraOn = ok.isSuccess
         AgentLog.add(if (cameraOn) "MANOS cámara prendida (${reason()})" else "MANOS no pude usar la cámara: ${ok.exceptionOrNull()?.message}")
         publish(if (cameraOn) reason() else "no pude usar la cámara: ${ok.exceptionOrNull()?.message}")
     }
 
-    /** El rango de cuadros por segundo más bajo que acepta la cámara frontal (al menos 8). */
+    /** El rango de cuadros por segundo más bajo que acepta la cámara frontal (al menos 15). */
     @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
     private fun lowestFpsRange(cameras: ProcessCameraProvider): Range<Int>? = runCatching {
         val front = cameras.availableCameraInfos.firstOrNull {
@@ -290,10 +276,13 @@ class HandsWatchService : LifecycleService() {
     }.getOrNull()
 
     private fun unbindCamera() {
-        runCatching { provider?.unbindAll() }
+        // Solo lo propio: la pantalla de prueba puede estar usando la cámara.
+        useCase?.let { runCatching { provider?.unbind(it) } }
+        useCase = null
         cameraOn = false
         streak = 0
         signs.reset()
+        motion.reset()
         AgentLog.add("MANOS cámara apagada (${reason()})")
         publish(reason())
     }
@@ -302,55 +291,55 @@ class HandsWatchService : LifecycleService() {
         try {
             val now = SystemClock.elapsedRealtime()
             val confirming = confirmOn && ConfirmState.waiting
-            // ~5 cuadros por segundo con una mano a la vista; ~3 si hace rato que no hay ninguna;
-            // ~10 esperando un sí o un no (para ver el movimiento de la cabeza).
-            val interval = when {
-                confirming -> CONFIRM_FRAME_MS
-                now - lastHandAt < ACTIVE_WINDOW_MS -> FRAME_MS
-                else -> IDLE_FRAME_MS
-            }
+            // ~10 cuadros por segundo con una mano a la vista (para ver el movimiento) o
+            // esperando un sí o un no; ~3 si hace rato que no hay ninguna.
+            val interval = if (confirming || now - lastHandAt < ACTIVE_WINDOW_MS) ACTIVE_FRAME_MS else IDLE_FRAME_MS
             if (now - lastFrameAt < interval) return
             lastFrameAt = now
-            val engine = recognizer ?: return
+            val engine = analyzer ?: return
             if (confirming) {
-                val frame = upright(image.toBitmap(), image.imageInfo.rotationDegrees)
-                confirmByGesture(engine, BitmapImageBuilder(frame).build(), frame, now)
+                confirmByGesture(engine.analyze(HandAnalyzer.upright(image), withFace = true), now)
                 return
             }
             // Mientras el asistente atiende, no hace falta mirar.
             if (AssistantState.state.value.phase != AssistantState.Phase.IDLE) {
                 streak = 0
+                motion.reset()
                 return
             }
-            val frame = upright(image.toBitmap(), image.imageInfo.rotationDegrees)
-            val mpImage = BitmapImageBuilder(frame).build()
-            val result = engine.recognize(mpImage)
-            if (result.landmarks().isNotEmpty()) lastHandAt = now
-            // Dos palmas abiertas, con la muñeca en la parte de arriba de la imagen.
-            val raised = result.gestures().indices.count { hand ->
-                val top = result.gestures()[hand].firstOrNull() ?: return@count false
-                val wristY = result.landmarks().getOrNull(hand)?.firstOrNull()?.y() ?: 1f
-                top.categoryName() == "Open_Palm" && top.score() >= MIN_SCORE && wristY < MAX_WRIST_Y
-            }
-            streak = if (raised >= 2) streak + 1 else 0
+            val result = engine.analyze(HandAnalyzer.upright(image))
+            if (result.hands.isNotEmpty()) lastHandAt = now
+            // Dos palmas abiertas levantadas: pausa y pregunta.
+            streak = if (result.raised >= 2) streak + 1 else 0
             if (streak >= FRAMES_NEEDED && now - lastTrigger > COOLDOWN_MS) {
                 streak = 0
                 lastTrigger = now
                 signs.reset()
+                motion.reset()
                 onHandsUp()
                 return
             }
-            // Con una mano: la seña más clara de las que se ven (con dos palmas arriba, nada).
-            val sign = if (!gesturesOn || raised >= 2) {
-                HandSigns.Sign.NONE
-            } else {
-                result.gestures().indices.map { hand ->
-                    val top = result.gestures()[hand].firstOrNull()
-                    val points = result.landmarks().getOrNull(hand).orEmpty().map { HandSigns.Point(it.x(), it.y()) }
-                    HandSigns.classify(top?.categoryName(), top?.score() ?: 0f, points, frame.width.toFloat() / frame.height)
-                }.firstOrNull { it in ACTIONS } ?: HandSigns.Sign.NONE
+            if (!gesturesOn || result.raised >= 2) {
+                motion.reset()
+                signs.feed(HandSigns.Sign.NONE, now)
+                return
             }
-            if (sign != HandSigns.Sign.NONE) seen(SIGN_NAMES[sign] ?: sign.name)
+            // Deslizar en el aire (con la mano que se ve más).
+            val hand = result.hands.firstOrNull()
+            val wasArmed = motion.armed
+            motion.feed(hand?.x, hand?.y, now)?.let { swipe ->
+                signs.reset()
+                act(swipe)
+                return
+            }
+            if (motion.armed && !wasArmed) {
+                // Un "tic" apenas: ya se puede deslizar.
+                seen("✋ lista para deslizar")
+                feedback.vibrate(12)
+            }
+            // Señas quietas: índice apuntando, pulgar, palma sostenida, V.
+            val sign = hand?.sign?.takeIf { it in ACTIONS } ?: HandSigns.Sign.NONE
+            if (sign != HandSigns.Sign.NONE && !motion.armed) seen(SIGN_NAMES[sign] ?: sign.name)
             signs.feed(sign, now)?.let { perform(it) }
         } catch (e: Exception) {
             AgentLog.add("MANOS error al analizar: ${e.message}")
@@ -359,45 +348,24 @@ class HandsWatchService : LifecycleService() {
         }
     }
 
-    private fun upright(bitmap: Bitmap, degrees: Int): Bitmap {
-        if (degrees == 0) return bitmap
-        val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-    }
-
     /**
      * Hay una pregunta esperando: guiño o asentir = sí, negar = no; también
      * pulgar arriba o abajo. Mientras tanto no se hacen las otras señas.
      */
-    private fun confirmByGesture(engine: GestureRecognizer, image: com.google.mediapipe.framework.image.MPImage, frame: Bitmap, now: Long) {
-        val face = faces?.let { landmarker ->
-            runCatching { landmarker.detect(image) }.getOrNull()?.let { result ->
-                val shapes = result.faceBlendshapes().orElse(null)?.firstOrNull()
-                val nose = result.faceLandmarks().firstOrNull()?.getOrNull(NOSE_TIP)
-                if (shapes == null || nose == null) {
-                    null
-                } else {
-                    fun score(name: String) = shapes.firstOrNull { it.categoryName() == name }?.score() ?: 0f
-                    FaceSigns.Face(score("eyeBlinkLeft"), score("eyeBlinkRight"), nose.x(), nose.y())
-                }
-            }
-        }
-        faceSigns.feed(face, now)?.let { answer ->
+    private fun confirmByGesture(result: HandAnalyzer.Result, now: Long) {
+        faceSigns.feed(result.face, now)?.let { answer ->
             answer(answer == FaceSigns.Answer.YES, if (answer == FaceSigns.Answer.YES) "😉 sí" else "🙅 no")
             return
         }
-        val result = runCatching { engine.recognize(image) }.getOrNull() ?: return
-        val sign = result.gestures().indices.map { hand ->
-            val top = result.gestures()[hand].firstOrNull()
-            val points = result.landmarks().getOrNull(hand).orEmpty().map { HandSigns.Point(it.x(), it.y()) }
-            HandSigns.classify(top?.categoryName(), top?.score() ?: 0f, points, frame.width.toFloat() / frame.height)
-        }.firstOrNull { it == HandSigns.Sign.THUMB_UP || it == HandSigns.Sign.THUMB_DOWN } ?: HandSigns.Sign.NONE
+        val sign = result.hands.map { it.sign }
+            .firstOrNull { it == HandSigns.Sign.THUMB_UP || it == HandSigns.Sign.THUMB_DOWN } ?: HandSigns.Sign.NONE
         answerSigns.feed(sign, now)?.let { answer(it == HandSigns.Sign.THUMB_UP, if (it == HandSigns.Sign.THUMB_UP) "👍 sí" else "👎 no") }
     }
 
     private fun answer(yes: Boolean, shown: String) {
         AgentLog.add("MANOS respuesta con gesto: $shown")
         seen(shown)
+        show(shown)
         feedback.vibrate(40)
         WakeWordService.answer(this, if (yes) "sí" else "no")
     }
@@ -410,25 +378,71 @@ class HandsWatchService : LifecycleService() {
         live.value = live.value.copy(camera = cameraOn, reason = reason)
     }
 
+    /** Un cartel corto con lo que entendió, para saber que vio el gesto aunque la app no reaccione. */
+    private fun show(text: String) {
+        handler.post { runCatching { Toast.makeText(applicationContext, text, Toast.LENGTH_SHORT).show() } }
+    }
+
+    /** Un deslizamiento en el aire: el mismo deslizamiento con el dedo (o, bloqueado, música y volumen). */
+    private fun act(swipe: HandMotion.Swipe) {
+        val shown = when (swipe) {
+            HandMotion.Swipe.UP -> "⬆️ siguiente"
+            HandMotion.Swipe.DOWN -> "⬇️ anterior"
+            HandMotion.Swipe.LEFT -> "⬅️"
+            HandMotion.Swipe.RIGHT -> "➡️"
+        }
+        seen("$shown (deslizar)")
+        feedback.vibrate(25)
+        val device = DeviceControl(this)
+        if (locked()) {
+            // Bloqueado no se puede tocar la pantalla de otras apps: música y volumen.
+            when (swipe) {
+                HandMotion.Swipe.LEFT -> device.media(DeviceControl.Media.NEXT)
+                HandMotion.Swipe.RIGHT -> device.media(DeviceControl.Media.PREVIOUS)
+                HandMotion.Swipe.UP -> device.volumeStep(1)
+                HandMotion.Swipe.DOWN -> device.volumeStep(-1)
+            }
+            AgentLog.add("MANOS deslizar ${swipe.name} (bloqueado: música/volumen)")
+            show(shown)
+            return
+        }
+        val service = XiaAccessibilityService.instance
+        if (service == null) {
+            AgentLog.add("MANOS deslizar ${swipe.name}, pero el control de apps está apagado")
+            show("Para deslizar necesito el control de apps (Accesibilidad)")
+            return
+        }
+        val ok = when (swipe) {
+            HandMotion.Swipe.UP -> Gestures.flingVertical(service, up = true)
+            HandMotion.Swipe.DOWN -> Gestures.flingVertical(service, up = false)
+            HandMotion.Swipe.LEFT -> Gestures.flingHorizontal(service, toLeft = true)
+            HandMotion.Swipe.RIGHT -> Gestures.flingHorizontal(service, toLeft = false)
+        }
+        AgentLog.add("MANOS deslizar ${swipe.name} → ${if (ok) "hecho" else "Android no dejó hacer el gesto"}")
+        show(shown)
+    }
+
     /** Hace lo que pide la seña, en la app que esté adelante. */
     private fun perform(sign: HandSigns.Sign) {
         AgentLog.add("MANOS seña ${sign.name}")
+        // El índice apuntando: como deslizar el dedo para ese lado.
+        when (sign) {
+            HandSigns.Sign.POINT_UP -> return act(HandMotion.Swipe.UP)
+            HandSigns.Sign.POINT_DOWN -> return act(HandMotion.Swipe.DOWN)
+            HandSigns.Sign.POINT_LEFT -> return act(HandMotion.Swipe.LEFT)
+            HandSigns.Sign.POINT_RIGHT -> return act(HandMotion.Swipe.RIGHT)
+            else -> Unit
+        }
         feedback.vibrate(25)
-        lifecycleScope.launch {
-            val device = DeviceControl(this@HandsWatchService)
-            when (sign) {
-                HandSigns.Sign.POINT_UP -> device.scroll(DeviceControl.Direction.DOWN)
-                HandSigns.Sign.POINT_DOWN -> device.scroll(DeviceControl.Direction.UP)
-                HandSigns.Sign.POINT_LEFT -> device.scroll(DeviceControl.Direction.LEFT)
-                HandSigns.Sign.POINT_RIGHT -> device.scroll(DeviceControl.Direction.RIGHT)
-                HandSigns.Sign.THUMB_UP -> like()
-                HandSigns.Sign.OPEN_PALM -> device.media(DeviceControl.Media.TOGGLE)
-                HandSigns.Sign.VICTORY -> {
-                    device.media(DeviceControl.Media.PAUSE)
-                    WakeWordService.listenNow(this@HandsWatchService)
-                }
-                else -> Unit
+        show(SIGN_NAMES[sign] ?: sign.name)
+        when (sign) {
+            HandSigns.Sign.THUMB_UP -> if (!locked()) like()
+            HandSigns.Sign.OPEN_PALM -> DeviceControl(this).media(DeviceControl.Media.TOGGLE)
+            HandSigns.Sign.VICTORY -> {
+                DeviceControl(this).media(DeviceControl.Media.PAUSE)
+                WakeWordService.listenNow(this)
             }
+            else -> Unit
         }
     }
 
@@ -441,6 +455,8 @@ class HandsWatchService : LifecycleService() {
 
     private fun onHandsUp() {
         AgentLog.add("MANOS levantaste las dos manos: pongo pausa y pregunto")
+        seen("🙌 las dos manos")
+        show("🙌 pausa")
         DeviceControl(this).media(DeviceControl.Media.PAUSE)
         WakeWordService.handsUp(this)
     }
@@ -454,7 +470,7 @@ class HandsWatchService : LifecycleService() {
         return NotificationCompat.Builder(this, XiaApplication.CHANNEL_SERVICE)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Gestos con las manos")
-            .setContentText("☝️ siguiente · 👇 anterior · ✋ pausa · 👍 me gusta · ✌️ hablarme")
+            .setContentText("Mano quieta y deslizá ⬆️⬇️⬅️➡️ · 👍 me gusta · ✋ pausa · ✌️ hablarme")
             .setOngoing(true)
             .setSilent(true)
             .addAction(0, "Desactivar", stop)
@@ -467,40 +483,46 @@ class HandsWatchService : LifecycleService() {
         runCatching { audio.unregisterAudioPlaybackCallback(playbackCallback) }
         XiaAccessibilityService.foregroundListeners -= foregroundListener
         runCatching { unregisterReceiver(screenReceiver) }
-        runCatching { provider?.unbindAll() }
+        useCase?.let { runCatching { provider?.unbind(it) } }
+        useCase = null
+        // Los modelos se cierran en el hilo del análisis, después del último cuadro.
+        val closing = analyzer
+        analyzer = null
+        runCatching { analysisExecutor.execute { closing?.close() } }
         analysisExecutor.shutdown()
-        runCatching { recognizer?.close() }
-        recognizer = null
-        runCatching { faces?.close() }
-        faces = null
+        cameraOn = false
         if (current?.get() === this) current = null
-        publish("apagada: los gestos con la cámara están desactivados")
+        publish("apagada: los gestos con la cámara no están andando")
         super.onDestroy()
     }
 
     companion object {
         private const val NOTIFICATION_ID = 1003
         private const val ACTION_STOP = "com.controlxia.app.action.HANDS_STOP"
+
         /** Control lento por si se escapa algún aviso del sistema. */
         private const val HEARTBEAT_MS = 10_000L
-        private const val IDLE_FRAME_MS = 350L
+        private const val IDLE_FRAME_MS = 300L
+        private const val ACTIVE_FRAME_MS = 100L
         private const val ACTIVE_WINDOW_MS = 4_000L
-        private const val MIN_CAMERA_FPS = 8
+        private const val MIN_CAMERA_FPS = 15
         private const val CAMERA_OFF_AFTER_MS = 8_000L
-        private const val FRAME_MS = 200L
-        private const val CONFIRM_FRAME_MS = 100L
-        private const val FRAMES_NEEDED = 3
+        private const val FRAMES_NEEDED = 4
         private const val COOLDOWN_MS = 8_000L
-        private const val MIN_SCORE = 0.55f
-        private const val MAX_WRIST_Y = 0.8f
 
-        /** Las señas que hacen algo (las demás se ignoran). */
+        /** Las señas quietas que hacen algo (las demás se ignoran). */
         private val ACTIONS = setOf(
             HandSigns.Sign.POINT_UP, HandSigns.Sign.POINT_DOWN, HandSigns.Sign.POINT_LEFT,
             HandSigns.Sign.POINT_RIGHT, HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY,
             HandSigns.Sign.OPEN_PALM,
         )
 
+        private val SIGN_NAMES = mapOf(
+            HandSigns.Sign.POINT_UP to "☝️ dedo arriba", HandSigns.Sign.POINT_DOWN to "👇 dedo abajo",
+            HandSigns.Sign.POINT_LEFT to "👈 dedo a la izquierda", HandSigns.Sign.POINT_RIGHT to "👉 dedo a la derecha",
+            HandSigns.Sign.THUMB_UP to "👍 pulgar arriba", HandSigns.Sign.THUMB_DOWN to "👎 pulgar abajo",
+            HandSigns.Sign.VICTORY to "✌️ V", HandSigns.Sign.OPEN_PALM to "✋ palma", HandSigns.Sign.FIST to "✊ puño",
+        )
 
         @Volatile
         var running = false
@@ -509,41 +531,30 @@ class HandsWatchService : LifecycleService() {
         /** Lo que se ve en Ajustes: si la cámara mira, por qué, y la última seña que vio. */
         data class Live(val camera: Boolean = false, val reason: String = "", val seen: String? = null, val seenAt: Long = 0L)
 
-        val live = kotlinx.coroutines.flow.MutableStateFlow(Live())
+        val live = MutableStateFlow(Live())
+
+        /** La pantalla de prueba usa la cámara: el servicio la suelta mientras tanto. */
+        @Volatile
+        private var paused = false
 
         @Volatile
-        private var testUntil = 0L
-
-        @Volatile
-        private var current: java.lang.ref.WeakReference<HandsWatchService>? = null
+        private var current: WeakReference<HandsWatchService>? = null
 
         /** Cambió un ajuste de los gestos: aplicarlo ya (sin esperar el control lento). */
         fun refresh() {
             current?.get()?.let { service ->
                 service.handler.post {
                     service.readSettings()
-                    if (service.faces == null) service.loadFaces()
                     service.evaluate()
                 }
             }
         }
 
-        /** Prende la cámara unos segundos para probar las señas desde Ajustes. */
-        fun test() {
-            testUntil = SystemClock.elapsedRealtime() + TEST_MS
+        /** La pantalla de prueba con la cámara a la vista: el servicio suelta la cámara ([on]) o la retoma. */
+        fun pause(on: Boolean) {
+            paused = on
             current?.get()?.let { service -> service.handler.post { service.evaluate() } }
-            current?.get()?.let { service -> service.handler.postDelayed({ service.evaluate() }, TEST_MS + 500) }
         }
-
-        private const val TEST_MS = 20_000L
-        private const val NOSE_TIP = 1
-
-        private val SIGN_NAMES = mapOf(
-            HandSigns.Sign.POINT_UP to "☝️ dedo arriba", HandSigns.Sign.POINT_DOWN to "👇 dedo abajo",
-            HandSigns.Sign.POINT_LEFT to "👈 dedo a la izquierda", HandSigns.Sign.POINT_RIGHT to "👉 dedo a la derecha",
-            HandSigns.Sign.THUMB_UP to "👍 pulgar arriba", HandSigns.Sign.THUMB_DOWN to "👎 pulgar abajo",
-            HandSigns.Sign.VICTORY to "✌️ V", HandSigns.Sign.OPEN_PALM to "✋ palma", HandSigns.Sign.FIST to "✊ puño",
-        )
 
         /** Arranca (con la app a la vista: si no, Android no da la cámara). */
         fun start(context: Context): Boolean = runCatching {

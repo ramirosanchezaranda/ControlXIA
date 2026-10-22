@@ -78,6 +78,8 @@ object HandSigns {
         private val repeatMs: Long = 1_800,
         private val cooldownMs: Long = 900,
         private val repeatable: Set<Sign> = setOf(Sign.POINT_UP, Sign.POINT_DOWN, Sign.POINT_LEFT, Sign.POINT_RIGHT),
+        /** Señas que tienen que sostenerse más (la palma, que también se usa para deslizar). */
+        private val framesFor: Map<Sign, Int> = emptyMap(),
     ) {
         private var current = Sign.NONE
         private var streak = 0
@@ -104,7 +106,7 @@ object HandSigns {
                 streak = 0
             }
             streak++
-            if (streak < framesNeeded) return null
+            if (streak < (framesFor[sign] ?: framesNeeded)) return null
             if (now - lastFireAt < cooldownMs) return null
             if (sign == fired && (sign !in repeatable || now - firedAt < repeatMs)) return null
             fired = sign

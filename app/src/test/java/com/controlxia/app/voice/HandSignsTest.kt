@@ -49,6 +49,17 @@ class HandSignsTest {
         assertEquals(listOf(2 to up, 7 to like), run(listOf(up, up, up, like, like, like, like, like)))
     }
 
+    @Test
+    fun palmNeedsALongerHold() {
+        // La palma también se usa para deslizar: para pausar hay que sostenerla más.
+        val trigger = HandSigns.Trigger(framesNeeded = 4, framesFor = mapOf(Sign.OPEN_PALM to 10))
+        val fired = List(12) { Sign.OPEN_PALM }.mapIndexedNotNull { i, s -> trigger.feed(s, i * 100L)?.let { i to it } }
+        assertEquals(listOf(9 to Sign.OPEN_PALM), fired)
+        val up = HandSigns.Trigger(framesNeeded = 4, framesFor = mapOf(Sign.OPEN_PALM to 10))
+        val point = List(5) { Sign.POINT_UP }.mapIndexedNotNull { i, s -> up.feed(s, i * 100L)?.let { i to it } }
+        assertEquals(listOf(3 to Sign.POINT_UP), point)
+    }
+
     /** Cuadros cada 200 ms; devuelve en qué cuadro disparó cada seña. */
     private fun run(signs: List<Sign>): List<Pair<Int, Sign>> {
         val trigger = HandSigns.Trigger()

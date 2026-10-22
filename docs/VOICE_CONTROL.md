@@ -162,7 +162,13 @@ Pasando la mano por encima de la pantalla, a unos centímetros y sin tocarla. Us
 
 ### Señas frente a la cámara (mirando videos)
 
-Ajustar → Gestos con las manos → **Señas con la cámara**. Mientras mirás videos o reels (o con cualquier app, si activás **Con cualquier app**, que gasta bastante más batería), la cámara frontal mira tus manos. Con **Probar** la cámara se prende 20 segundos y Ajustes muestra en vivo si está mirando, por qué, y la última seña que vio: sirve para ver por qué no responde.
+Ajustar → Gestos con las manos → **Señas con la cámara**. Mientras mirás videos o reels (o con cualquier app, si activás **Con cualquier app**, que gasta bastante más batería), la cámara frontal mira tus manos. Ajustes muestra en vivo si está mirando, por qué, y la última seña que vio.
+
+**Deslizar en el aire (desde la 0.14.0)**, como los gestos aéreos de los teléfonos: poné la mano abierta frente a la cámara (a 30–50 cm), quieta hasta que el teléfono haga un "tic" apenas perceptible, y movela rápido para arriba (reel siguiente), abajo (anterior) o a un costado (foto o historia). La app hace **el mismo deslizamiento que harías con el dedo**, así que anda en Instagram, TikTok, YouTube Shorts y cualquier app (antes usaba el "desplazar" de la accesibilidad, que en Instagram podía decir que había andado sin cambiar el reel). Cada gesto reconocido muestra un cartelito ("⬆️ siguiente") para saber que lo vio.
+
+Con el teléfono **bloqueado y música sonando**, deslizar a los costados cambia de tema y arriba/abajo sube o baja el volumen. Bloqueado y sin música la cámara no mira: el desbloqueo con la cara también usa la cámara frontal.
+
+**Probar con la cámara** abre la cámara como un espejo y muestra dónde ve tu mano (círculo azul; verde cuando está lista para deslizar), qué seña entiende y cada deslizamiento. **Copiar diagnóstico** copia un resumen (qué está activado, si el control de apps está conectado, el sensor, lo último que pasó) para pegarlo en un chat.
 
 **Contestar sí o no con un gesto**: cuando el asistente pregunta algo ("¿Le mando a Juan…?"), la cámara mira tu cara y tus manos un momento (hasta un minuto): **guiñar un ojo o asentir** es "sí", **negar con la cabeza** es "no", y también 👍 / 👎. Un parpadeo no cuenta como guiño. Usa el modelo de la cara de MediaPipe (3,7 MB, se baja con el de gestos).
 
@@ -172,7 +178,7 @@ Ajustar → Gestos con las manos → **Señas con la cámara**. Mientras mirás 
 | ☝️ Dedo índice para arriba | Reel o video siguiente (mantenelo para seguir pasando, uno cada ~2 s) |
 | 👇 Dedo para abajo | El anterior |
 | 👉 Dedo al costado | Foto o historia siguiente o anterior |
-| ✋ Palma abierta | Pausa o sigue el video |
+| ✋ Palma abierta, quieta 1 segundo | Pausa o sigue el video |
 | 👍 Pulgar arriba | Me gusta (dos toques en el medio) |
 | ✌️ V | Pausa y te escucha, sin decir el nombre |
 | 🙌 Las dos manos arriba | Pausa y pregunta "¿Qué necesitás?" |
