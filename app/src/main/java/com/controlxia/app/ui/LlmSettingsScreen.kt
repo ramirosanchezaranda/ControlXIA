@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -45,6 +47,7 @@ import com.controlxia.app.brain.RECOMMENDED
 import com.controlxia.app.brain.Recommendation
 import com.controlxia.app.brain.ToolRegistry
 import com.controlxia.app.brain.modelHint
+import com.controlxia.app.ui.components.AuraSwitch
 import com.controlxia.app.ui.components.SectionLabel
 import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.components.TechTopBar
@@ -66,6 +69,8 @@ fun LlmSettingsScreen(onBack: () -> Unit) {
         ) {
             SectionLabel("Proveedor y modelo")
             LlmSettingsContent(Modifier.padding(top = 16.dp))
+            SectionLabel("Qué hace la IA", Modifier.padding(top = 24.dp))
+            AgentModeContent(Modifier.padding(top = 12.dp))
         }
     }
 }
@@ -326,5 +331,36 @@ private fun TwoLines(title: String, detail: String) {
     Column(Modifier.padding(vertical = 4.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
         Text(detail, style = MaterialTheme.typography.bodySmall, color = Muted)
+    }
+}
+
+/**
+ * Si la IA puede manejar las apps sola. Apagado, responde preguntas y pasa el
+ * pedido a pasos que hace la app (mucho más confiable con modelos chicos).
+ */
+@Composable
+private fun AgentModeContent(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val settings = remember { LlmSettings(context) }
+    var agent by remember { mutableStateOf(settings.agentMode) }
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Dejar que la IA maneje las apps", style = MaterialTheme.typography.titleSmall)
+            Text(
+                if (agent) {
+                    "La IA lee la pantalla y toca por su cuenta. Solo conviene con modelos grandes " +
+                        "(Claude, GPT); con los chicos se equivoca seguido."
+                } else {
+                    "La app hace las cosas: abrir, buscar, ordenar, capturar, guardar notas, escribir y " +
+                        "mandar. La IA solo responde preguntas o traduce un pedido raro a pasos que la app sabe hacer."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+            )
+        }
+        AuraSwitch(checked = agent, onCheckedChange = {
+            agent = it
+            settings.agentMode = it
+        })
     }
 }

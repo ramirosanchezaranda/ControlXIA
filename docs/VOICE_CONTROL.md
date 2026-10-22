@@ -2,6 +2,20 @@
 
 Objetivo: que todo el teléfono se pueda usar sin tocarlo. La referencia es el **Acceso por voz** de Google (Voice Access); encima de eso, el agente con LLM resuelve los pedidos complejos.
 
+## Varias cosas en un solo pedido (sin el modelo)
+
+"Necesito que entres en Mercado Libre, busques zapatillas, filtres de menor a mayor precio, saques captura de los primeros 4 y lo guardes en un archivo de notas" lo hace la app sola, paso a paso (ver [AGENT.md](AGENT.md)). Más ejemplos:
+
+| Decí | Hace |
+|---|---|
+| "abrí mercado libre, buscá auriculares, ordená de menor a mayor y sacá captura de los primeros 5" | Busca, ordena, saca las capturas que hagan falta (baja si no entran) y anota los 5 productos |
+| "…y guardalo en una nota" | Guarda la búsqueda, los productos con su precio y dónde quedaron las capturas en `Documentos/ControlXIA` |
+| "abrí el chat de Juan, escribile que llego tarde y mandalo" | Abre el chat, escribe y pregunta antes de mandar |
+| "entrá al chat de Rebeca y mandale un audio que diga feliz cumpleaños" | Arma el audio y pregunta antes de mandar |
+| "poné una alarma a las 7, subí el volumen y abrí Spotify" | Las tres cosas, en orden |
+
+Las capturas las saca el control de apps (Android 11 o más nuevo) y quedan en `Imágenes/ControlXIA`. Si después de actualizar no saca capturas, apagá y volvé a prender el control de apps en Accesibilidad.
+
 ## Sin el modelo (sin créditos ni cupo)
 
 Casi todo lo cotidiano anda **sin LLM**, y cuando hace falta el modelo el asistente pasa solo por los gratis antes de rendirse:
@@ -83,8 +97,11 @@ Anda **sin desbloquear**: atender o cortar llamadas, alarmas, temporizadores, ca
 | Opción | Qué hace |
 |---|---|
 | No | Bloqueado no lo hace: hay que desbloquear y volver a pedirlo |
-| **Con huella** (por defecto) | Pide la huella (o cara o PIN) y sigue solo |
+| **Huella** (por defecto) | Pide la huella (o cara o PIN) y sigue solo |
+| Mi voz | Pide decir tu **contraseña**: comprueba que dijiste la contraseña y que es tu voz. Si no te reconoce en dos intentos, pide la huella. Después de reconocerte no vuelve a pedirlo por 2 minutos |
 | Siempre | Lo hace sin desbloquear, como antes |
+
+**Mi voz**: elegís una contraseña de 2 a 4 palabras comunes y la decís 3 veces para que aprenda tu voz (baja una vez un modelo de 13 MB de Vosk que saca la "huella" de la voz; todo queda cifrado en el teléfono). El nivel de parecido que pide se ajusta a cuánto se parecen entre sí tus grabaciones. Con **Probar** ves cuánto se pareció ("parecido 78 %, pide 62 %"). Es más cómodo que la huella pero menos seguro: una grabación buena de tu voz diciendo la contraseña podría pasar, así que no la digas delante de otros.
 
 "Mostrar contenido bloqueado" solo oculta el texto en la pantalla; la voz igual lo dice.
 
@@ -145,7 +162,10 @@ Pasando la mano por encima de la pantalla, a unos centímetros y sin tocarla. Us
 
 ### Señas frente a la cámara (mirando videos)
 
-Mientras mirás videos o reels, la cámara frontal mira tus manos:
+Ajustar → Gestos con las manos → **Señas con la cámara**. Mientras mirás videos o reels (o con cualquier app, si activás **Con cualquier app**, que gasta bastante más batería), la cámara frontal mira tus manos. Con **Probar** la cámara se prende 20 segundos y Ajustes muestra en vivo si está mirando, por qué, y la última seña que vio: sirve para ver por qué no responde.
+
+**Contestar sí o no con un gesto**: cuando el asistente pregunta algo ("¿Le mando a Juan…?"), la cámara mira tu cara y tus manos un momento (hasta un minuto): **guiñar un ojo o asentir** es "sí", **negar con la cabeza** es "no", y también 👍 / 👎. Un parpadeo no cuenta como guiño. Usa el modelo de la cara de MediaPipe (3,7 MB, se baja con el de gestos).
+
 
 | Seña | Hace |
 |---|---|

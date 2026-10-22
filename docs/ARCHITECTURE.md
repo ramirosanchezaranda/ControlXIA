@@ -14,9 +14,11 @@ micrófono ─▶ SpeechGate ─▶ WakePhraseDetector (Vosk) ─▶ "Beto"
                                   AndroidSpeechToText: el pedido en texto
                                                          │
                                                          ▼
- CommandProcessor ─▶ 1. DirectCommands  (atrás, bajá, volumen…)  ─▶ DirectCommandRunner
-                  ─▶ 2. LocalSkills     (alarmas, mensajes, cuentas…) ─▶ ToolRegistry
-                  ─▶ 3. modelo (Groq, Gemini, Claude, OpenAI…) con herramientas ─▶ ToolRegistry
+ CommandProcessor ─▶ 1. TaskPlanner    (varios pasos: abrir, buscar, ordenar, capturar, anotar, chatear) ─▶ PlanRunner
+                  ─▶ 2. DirectCommands (atrás, bajá, volumen…)  ─▶ DirectCommandRunner
+                  ─▶ 3. LocalSkills    (alarmas, mensajes, cuentas…) ─▶ ToolRegistry
+                  ─▶ 4. modelo: responde preguntas o traduce a frases de 1–3 (LlmPlanner)
+                       (con "Dejar que la IA maneje las apps": agente con herramientas)
                                                          │
                                                          ▼
                                actions/*  (accesibilidad, intents, sistema)
@@ -25,15 +27,15 @@ micrófono ─▶ SpeechGate ─▶ WakePhraseDetector (Vosk) ─▶ "Beto"
                                      Reply ─▶ Speaker (voz) + pantalla
 ```
 
-Los pasos 1 y 2 son instantáneos y no usan internet; solo lo que no entienden va al modelo.
+Los pasos 1 a 3 no usan internet; solo lo que no entienden va al modelo, y el modelo no toca nada: lo que hay que hacer lo hace la app.
 
 ## Paquetes
 
 | Paquete | Qué tiene | Depende de Android |
 |---|---|---|
-| `brain/` | Entender el pedido y decidir: `DirectCommands`, `LocalSkills`, `Calculator`, `NotificationSummary`, `TaskCheck` (sin Android, con pruebas), `CommandProcessor` (el agente), `ToolRegistry` (las herramientas) y los proveedores de modelos. | Solo `CommandProcessor`, `ToolRegistry` y los proveedores |
-| `actions/` | Hacer cosas en el teléfono: abrir apps, tocar y escribir por accesibilidad (`Nodes`, `Gestures`, `ScreenControl`, `ScreenNumbers`, `AppUi`, `WhatsAppUi`), alarmas, llamadas, cámara, mensajes. | Sí |
-| `voice/` | Escuchar y hablar: `SpeechGate` y `WakePhraseDetector` (sin Android), el motor Vosk, el reconocimiento del pedido, `Speaker` (voz), `Feedback` (tono y vibración), `HandSigns` y `WaveDetector` (señas y saludos, sin Android), ajustes. | En parte |
+| `brain/` | Entender el pedido y decidir: `TaskPlanner`, `LlmPlanner`, `DirectCommands`, `LocalSkills`, `Calculator`, `NotificationSummary`, `TaskCheck` (sin Android, con pruebas), `PlanRunner` (hace los pasos), `CommandProcessor` (el agente), `ToolRegistry` (las herramientas) y los proveedores de modelos. | Solo `CommandProcessor`, `ToolRegistry` y los proveedores |
+| `actions/` | Hacer cosas en el teléfono: abrir apps, tocar y escribir por accesibilidad (`Nodes`, `Gestures`, `ScreenControl`, `ScreenNumbers`, `AppUi`, `ChatUi`, `WhatsAppUi`), capturas (`Screenshots`), productos en pantalla (`ScreenItems`), notas (`NotesStore`), lo privado bloqueado (`PrivateGate`), alarmas, llamadas, cámara, mensajes. | Sí |
+| `voice/` | Escuchar y hablar: `SpeechGate` y `WakePhraseDetector` (sin Android), el motor Vosk, el reconocimiento del pedido, `Speaker` (voz), `Feedback` (tono y vibración), `HandSigns`, `FaceSigns` y `WaveDetector` (señas, guiño/cabeza y saludos, sin Android), `VoiceId` y `VoicePrint` (tu voz con contraseña), ajustes. | En parte |
 | `service/` | Lo que corre en segundo plano: `WakeWordService`, `HandsWatchService` (cámara para las señas), `WaveGestures` (saludos con el sensor de proximidad), `XiaAccessibilityService`, el lector de notificaciones, `ListeningPolicy` (cuándo escuchar), `ServiceStatus` (estado para la interfaz) y los receptores (arranque, alarmas, vigilancia). | Sí |
 | `ui/` | Compose: pantallas, tema (`theme/`) y componentes (`components/`). Solo lee estado y llama al servicio. | Sí |
 | `diagnostics/` | `AgentLog`: el registro paso a paso que se ve en Actividad. | No |

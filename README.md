@@ -40,7 +40,10 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Gestos con una mano** mirando reels y videos: ☝️ siguiente, 👇 anterior, 👉 foto/historia, ✋ pausa, 👍 me gusta, ✌️ hablarle; 🙌 pausa y pregunta.
 - ✅ **Apariencia a elección**: automático, claro u oscuro, y tres paletas (Aura, Studio, Toscana) que cambian también la esfera.
 - ✅ **Gasta menos batería**: el reconocedor del nombre no trabaja en silencio, la escucha se pausa con la pantalla apagada si la batería está baja o en ahorro (configurable), la cámara de los gestos solo se prende con video o música en pantalla y a pocos cuadros por segundo, y las animaciones se redibujan menos y se quedan quietas con el ahorro de batería. Ver [docs/WAKE_WORD.md](docs/WAKE_WORD.md#batería).
-- ⏳ Próximo: tareas de varios pasos sin el modelo, reconocer tu voz con contraseña, guiño = «sí», recordatorios, activación con botón home (rol de asistente).
+- ✅ **Varias cosas en un pedido, sin IA**: "entrá en Mercado Libre, buscá zapatillas, ordená de menor a mayor, sacá captura de los primeros 4 y guardalo en una nota"; "abrí el chat de Juan, escribile que llego tarde y mandalo". La IA solo responde preguntas o traduce pedidos raros a pasos que hace la app. Ver [docs/AGENT.md](docs/AGENT.md).
+- ✅ **Tu voz con contraseña**: con el teléfono bloqueado, para leer o mandar mensajes podés decir tu contraseña y te reconoce por la voz (si no, pide la huella).
+- ✅ **Sí o no con gestos**: guiñar o asentir = sí, negar con la cabeza = no, 👍/👎; señas con la cámara también fuera de videos (opcional) y un probador en vivo.
+- ⏳ Próximo: recordatorios, activación con botón home (rol de asistente).
 
 ## Compilar
 

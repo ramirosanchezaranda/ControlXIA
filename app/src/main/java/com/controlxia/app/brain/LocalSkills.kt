@@ -135,7 +135,7 @@ object LocalSkills {
     }
 
     /** Las palabras de [phrase] (normalizada) tal como se dijeron, con tildes. */
-    private fun originalWords(original: String, phrase: String): String {
+    internal fun originalWords(original: String, phrase: String): String {
         val words = original.trim().split(Regex("\\s+"))
         val plainWords = words.map { plain(it) }
         val wanted = phrase.split(' ')
@@ -220,7 +220,7 @@ object LocalSkills {
     }
 
     /** "llego tarde" → "Llego tarde". */
-    private fun sentence(text: String): String =
+    internal fun sentence(text: String): String =
         text.trim().replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("es")) else it.toString() }
 
     private fun question(text: String): String {
@@ -252,7 +252,14 @@ object LocalSkills {
     )
     private val APP_NAMES = APPS.keys.sortedByDescending { it.length }.joinToString("|")
 
-    private fun search(app: String, rawQuery: String): Skill? {
+    /** El id de las apps con enlaces directos ("mercado libre" → "mercadolibre"); el resto, como se dijo. */
+    internal fun appId(name: String): String = plain(name).let { APPS[it] ?: APPS[it.removePrefix("la app ")] ?: it }
+
+    /** Si [app] tiene búsqueda con enlace directo (más rápida y confiable que tocar su lupa). */
+    internal fun hasDeepSearch(app: String): Boolean = app in APPS.values
+
+    /** Buscar [rawQuery] en [app] (con "más baratos" → ordenado por precio en Mercado Libre). */
+    internal fun search(app: String, rawQuery: String): Skill? {
         var query = rawQuery.trim()
         var sort: String? = null
         Regex("\\b(?:(?:lo|la|el|los|las) )?mas barat[oa]s?\\b").find(query)?.let {

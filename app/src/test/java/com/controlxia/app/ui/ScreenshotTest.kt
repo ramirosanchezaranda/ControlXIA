@@ -103,6 +103,8 @@ class ScreenshotTest {
         val app = org.robolectric.RuntimeEnvironment.getApplication()
         val sensors = app.getSystemService(android.hardware.SensorManager::class.java)!!
         shadowOf(sensors).addSensor(org.robolectric.shadows.ShadowSensor.newInstance(android.hardware.Sensor.TYPE_PROXIMITY))
+        // Con "Mi voz" elegido, para ver la inscripción.
+        com.controlxia.app.voice.WakeWordSettings(app).lockedAccess = com.controlxia.app.voice.LockedAccess.VOICE
         shoot("listening-settings", dark = false) { WakeWordSettingsScreen(onBack = {}) }
     }
 
@@ -162,6 +164,6 @@ class ScreenshotTest {
         const val SMALL = "w320dp-h640dp-port-hdpi"
         const val LANDSCAPE = "w852dp-h393dp-land-xxhdpi"
         const val TABLET = "w1024dp-h768dp-land-mdpi"
-        const val TALL = "w393dp-h2700dp-port-hdpi"
+        const val TALL = "w393dp-h3000dp-port-hdpi"
     }
 }

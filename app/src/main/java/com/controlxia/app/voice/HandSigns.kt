@@ -137,5 +137,5 @@ object HandSigns {
     private const val FOLDED = 0.62f
     /** Cuánto más tiene que ser un eje que el otro para contar como esa dirección. */
     private const val DOMINANT = 1.3f
-    private const val MIN_SCORE = 0.6f
+    private const val MIN_SCORE = 0.5f
 }

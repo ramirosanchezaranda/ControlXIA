@@ -1,5 +1,20 @@
 # Agente: usar apps y mensajería por voz
 
+## Desde la 0.13.0: la app hace las cosas, la IA solo ayuda
+
+Con modelos chicos (los gratis de Groq o Gemini) el agente que lee la pantalla y toca se equivocaba seguido. Ahora **la app hace los pedidos ella misma**, paso a paso, y la IA queda para responder preguntas o, si un pedido no se entiende, **traducirlo a frases que la app sabe hacer**:
+
+1. **Pedidos de varios pasos sin IA** (`brain/TaskPlanner` + `brain/PlanRunner`): "Necesito que entres en Mercado Libre, busques zapatillas, filtres de menor a mayor precio, saques captura de los primeros 4 y lo guardes en un archivo de notas" → abre Mercado Libre · busca «zapatillas» · las ordena por menor precio · saca las capturas y anota los 4 productos con su precio · guarda la nota en `Documentos/ControlXIA` (las capturas en `Imágenes/ControlXIA`). "Abrí WhatsApp, entrá en el chat de Juan, escribile que llego tarde y mandalo" → abre el chat, escribe y pregunta "¿Mando «Llego tarde» a Juan?". "Entrá al chat de Rebeca y mandale un audio que diga feliz cumpleaños" → arma el audio y pregunta antes de mandar.
+   - Entiende el verbo en cualquier forma ("entres", "entrá", "entrar", "lo guardes", "guardalo") y que cada paso sigue al anterior: "buscá" busca en la app que quedó abierta y "escribí" escribe en el chat abierto.
+   - Una frase que no se entiende sola se pega a la anterior ("decile que llego tarde y que traiga pan" es un solo mensaje).
+   - Lo que manda algo pide el "sí" como siempre; el resto del pedido sigue después.
+   - Si un paso falla, frena y dice hasta dónde llegó.
+2. **Preguntas**: la IA responde, sin tocar nada.
+3. **Pedidos que la app no entiende**: la IA los reescribe con frases de una lista fija ("abrí…", "buscá…", "ordená…", "sacá captura…", "guardalo en una nota", "abrí el chat de…", "escribí…", "mandalo"…) (`brain/LlmPlanner`). La app las vuelve a leer y las hace; si alguna no está en la lista, no se hace nada y lo dice. Así un modelo chico no puede tocar un botón equivocado ni mandar algo por su cuenta.
+
+El agente de antes (la IA lee la pantalla y toca) sigue disponible en Cerebro → **"Dejar que la IA maneje las apps"**, apagado por defecto. Conviene solo con modelos grandes.
+
+
 Desde la versión 0.3.0 el asistente resuelve los pedidos en **varios pasos**: el modelo pide una herramienta, ve el resultado y decide el siguiente paso, hasta responder. Así puede hacer cosas como:
 
 - "Entrá a Instagram y mostrame los reels" → abre Instagram directo en Reels.

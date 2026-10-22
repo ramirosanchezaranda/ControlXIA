@@ -1,10 +1,11 @@
 package com.controlxia.app.brain
 
 import android.content.Context
-import com.controlxia.app.actions.PrivateGate
 import com.controlxia.app.actions.MessageStore
+import com.controlxia.app.actions.PrivateGate
 import com.controlxia.app.actions.ScreenNumbers
 import com.controlxia.app.diagnostics.AgentLog
+import com.controlxia.app.voice.ConfirmState
 import com.controlxia.app.voice.WakeWordSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonObject
@@ -48,11 +49,17 @@ class CommandProcessor(context: Context) {
     private val settings = LlmSettings(appContext)
     private val registry = ToolRegistry(appContext)
     private val direct = DirectCommandRunner(appContext)
+    private val plans = PlanRunner(appContext, registry, direct)
     // Historial corto: con Groq gratis cada token cuenta (8.000 por minuto).
     private val memory = ConversationMemory(maxExchanges = 4)
 
     @Volatile
     private var pending: PendingAction? = null
+        set(value) {
+            field = value
+            // Para poder contestar con un gesto (guiño, cabeza, pulgar).
+            ConfirmState.set(value?.question)
+        }
 
     /** El pedido que quedó esperando el "sí", para seguir con lo que falte. */
     @Volatile
@@ -95,8 +102,14 @@ class CommandProcessor(context: Context) {
             return Reply(goodbye, endsConversation = true)
         }
 
-        // "Atrás", "tocá 5", "subí el volumen", "sacá una foto": al instante, sin el modelo.
         val agentName = WakeWordSettings(appContext).agentName
+
+        // Pedidos de varios pasos ("entrá a Mercado Libre, buscá zapatillas, ordená por
+        // precio y guardalo en una nota"): los hace la app, en orden, sin el modelo.
+        val plan = TaskPlanner.plan(command, agentName)
+        if (plan.complete && needsPlanRunner(plan)) return runPlan(command, plan, onProgress)
+
+        // "Atrás", "tocá 5", "subí el volumen", "sacá una foto": al instante, sin el modelo.
         DirectCommands.parse(command, agentName, ScreenNumbers.visible)?.let { parsed ->
             direct.run(parsed)?.let { reply ->
                 memory.addExchange(command, reply.text.ifBlank { "[${reply.shown ?: "Hecho"}]" })
@@ -121,12 +134,22 @@ class CommandProcessor(context: Context) {
         if (configs.isEmpty()) {
             lastError = "Falta configurar el proveedor, la API key o el modelo"
             AgentLog.add("ERROR $lastError")
+            plan.unknown.firstOrNull()?.takeIf { plan.steps.isNotEmpty() }?.let { part ->
+                return Reply("Eso no lo sé hacer todavía: «$part». Lo demás sí: pedímelo sin esa parte.")
+            }
             return Reply("Eso necesita el cerebro y todavía no está configurado en la app. $OFFLINE_HINT")
         }
         val brain = Brain(configs)
         if (brain.provider == null) {
             AgentLog.add("SIN CUPO en ningún modelo")
             return Reply(NO_QUOTA)
+        }
+
+        // Por defecto el modelo no maneja las apps: responde preguntas o traduce el
+        // pedido a pasos que hace la app (ver LlmPlanner). El agente con
+        // herramientas queda para quien lo active (modelos grandes).
+        if (!settings.agentMode) {
+            return track(AgentTask(command)) { task -> assisted(task, brain, command, agentName, onProgress) }
         }
 
         // El pedido entra a la memoria recién cuando hay respuesta: si la
@@ -138,6 +161,95 @@ class CommandProcessor(context: Context) {
             add(ChatMessage(ChatRole.USER, command))
         }
         return track(AgentTask(command)) { task -> runAgent(task, brain, messages, command, onProgress) }
+    }
+
+    /** Si el plan necesita al que hace pasos (un solo comando conocido va por el camino de siempre). */
+    private fun needsPlanRunner(plan: TaskPlanner.Plan): Boolean =
+        plan.steps.size >= 2 || plan.steps.any { it !is TaskPlanner.Step.Direct && it !is TaskPlanner.Step.Skill }
+
+    /** Hace [plan] con la app; si un paso manda algo, deja la pregunta esperando el "sí". */
+    private suspend fun runPlan(command: String, plan: TaskPlanner.Plan, onProgress: (String) -> Unit): Reply {
+        val result = plans.run(plan, onProgress)
+        result.pending?.let { action ->
+            pending = action
+            pendingTask = null
+            memory.addExchange(command, result.spoken)
+            return Reply(result.spoken, expectsReply = true)
+        }
+        AgentLog.add("PLAN terminado: «${result.spoken}»")
+        memory.addExchange(command, result.spoken)
+        lastSpoken = result.spoken
+        return Reply(result.spoken)
+    }
+
+    /**
+     * El modelo como traductor: responde la pregunta, o reescribe el pedido en
+     * frases que la app entiende y las hace la app. No toca nada él mismo.
+     */
+    private suspend fun assisted(task: AgentTask, brain: Brain, command: String, agentName: String, onProgress: (String) -> Unit): Reply {
+        val now = SimpleDateFormat("EEEE d 'de' MMMM, HH:mm", Locale("es")).format(Date())
+        val messages = buildList {
+            add(ChatMessage(ChatRole.SYSTEM, LlmPlanner.systemPrompt(agentName, now)))
+            addAll(memory.history())
+            add(ChatMessage(ChatRole.USER, command))
+        }
+        lastError = null
+        val raw = askText(brain, messages, onProgress) ?: return Reply(lastSpokenError ?: NO_QUOTA)
+        return when (val result = LlmPlanner.parse(raw)) {
+            is LlmPlanner.Result.Answer -> {
+                AgentLog.add("RESPUESTA «${result.text}»")
+                memory.addExchange(command, result.text)
+                lastSpoken = result.text
+                Reply(result.text, expectsReply = result.text.endsWith("?"))
+            }
+            is LlmPlanner.Result.Cannot -> {
+                AgentLog.add("EL MODELO no encontró cómo: ${result.reason}")
+                Reply("Eso todavía no lo sé hacer: ${result.reason.trimEnd('.')}.")
+            }
+            is LlmPlanner.Result.Steps -> {
+                val joined = LlmPlanner.join(result.phrases)
+                AgentLog.add("EL MODELO lo pasó a pasos: «$joined»")
+                val plan = TaskPlanner.plan(joined, agentName)
+                if (!plan.complete) {
+                    val part = plan.unknown.firstOrNull() ?: command
+                    Reply("Eso todavía no lo sé hacer: «$part».")
+                } else {
+                    task.done += "plan: $joined"
+                    runPlan(command, plan, onProgress)
+                }
+            }
+        }
+    }
+
+    /** Lo último que salió mal hablando con el modelo, para decirlo. */
+    @Volatile
+    private var lastSpokenError: String? = null
+
+    /** Le pide texto al modelo (sin herramientas); si se queda sin cupo, sigue con el próximo. */
+    private suspend fun askText(brain: Brain, messages: List<ChatMessage>, onProgress: (String) -> Unit): String? {
+        lastSpokenError = null
+        while (true) {
+            val provider = brain.provider ?: return null
+            try {
+                val response = completeWithRetry(provider, messages, emptyList(), emptyList(), onProgress)
+                return (response as? LlmResponse.Text)?.text.orEmpty()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: LlmException) {
+                if (!QuotaTracker.isQuotaError(e, MAX_RATE_WAIT_S) || !brain.exhausted(e)) {
+                    lastError = e.message
+                    AgentLog.add("ERROR del modelo: $lastError")
+                    lastSpokenError = if (QuotaTracker.isQuotaError(e, MAX_RATE_WAIT_S)) NO_QUOTA else spokenError(e)
+                    return null
+                }
+                onProgress("Sin cupo en ese modelo: sigo con ${brain.config?.model}…")
+            } catch (e: Exception) {
+                lastError = e.message ?: e.javaClass.simpleName
+                AgentLog.add("ERROR del modelo: $lastError")
+                lastSpokenError = spokenError(e)
+                return null
+            }
+        }
     }
 
     /** Hay algún modelo configurado y con cupo. */

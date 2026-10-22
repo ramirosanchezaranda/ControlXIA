@@ -20,6 +20,20 @@ object VoiceBridge {
     @Volatile
     var micClaim: ((Boolean) -> Unit)? = null
 
+    /** true: esconder la burbuja del asistente (para una captura); false: volver a mostrarla. */
+    @Volatile
+    var overlayHidden: ((Boolean) -> Unit)? = null
+
+    /** Hace [block] con la burbuja escondida (que no salga en las capturas). */
+    suspend fun <T> withoutOverlay(block: suspend () -> T): T {
+        withContext(Dispatchers.Main) { overlayHidden?.invoke(true) }
+        try {
+            return block()
+        } finally {
+            withContext(Dispatchers.Main) { overlayHidden?.invoke(false) }
+        }
+    }
+
     suspend fun say(text: String) {
         val speak = speaker ?: return
         withTimeoutOrNull(15_000) { speak(text) }

@@ -51,6 +51,16 @@ class LlmSettings(context: Context) {
     fun setBaseUrl(type: LlmProviderType, url: String) =
         prefs.edit().putString("${type.name}_base_url", url).apply()
 
+    /**
+     * Dejar que el modelo maneje las apps por su cuenta (leer la pantalla y
+     * tocar, como antes). Apagado (por defecto) el modelo solo responde
+     * preguntas o traduce el pedido a pasos que hace la app: con modelos
+     * chicos es mucho más confiable.
+     */
+    var agentMode: Boolean
+        get() = prefs.getBoolean(KEY_AGENT_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_AGENT_MODE, value).apply()
+
     /** Config resuelta del proveedor activo, o null si falta completar datos. */
     fun activeConfig(): LlmConfig? = config(activeProvider)
 
@@ -85,6 +95,7 @@ class LlmSettings(context: Context) {
 
     private companion object {
         const val KEY_ACTIVE = "active_provider"
+        const val KEY_AGENT_MODE = "agent_mode"
 
         /** Proveedores con plan gratis y cupo separado por modelo. */
         val FREE_PER_MODEL = setOf(LlmProviderType.GROQ, LlmProviderType.GEMINI)

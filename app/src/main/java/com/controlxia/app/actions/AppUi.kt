@@ -139,6 +139,32 @@ class AppUi(private val context: Context) {
             ?.let { Nodes.click(service, it) }
     }
 
+    /**
+     * Ordena los resultados por precio con el botón de la app ("Ordenar" →
+     * "Menor precio"), para las apps sin orden por enlace. null si salió bien.
+     */
+    suspend fun sortByPrice(lowFirst: Boolean): String? = withContext(Dispatchers.Default) {
+        val service = XiaAccessibilityService.instance ?: return@withContext DeviceControl.NEEDS_A11Y
+        val opener = Nodes.waitFor(service, null, 3_000) { root ->
+            Nodes.find(root) { !it.isEditable && SORT_OPEN.containsMatchIn(label(it)) && label(it).length <= 30 }
+        } ?: return@withContext fail("No encontré cómo ordenar en esta app.")
+        Nodes.click(service, opener)
+        delay(1_000)
+        val wanted = if (lowFirst) SORT_LOW else SORT_HIGH
+        val option = Nodes.waitFor(service, null, 3_000) { root ->
+            Nodes.find(root) { !it.isEditable && wanted.containsMatchIn(label(it)) }
+        } ?: return@withContext fail("Abrí el orden pero no encontré la opción de precio.")
+        Nodes.click(service, option)
+        delay(800)
+        // Algunas apps piden confirmar ("Aplicar", "Ver resultados").
+        service.rootInActiveWindow
+            ?.let { root -> Nodes.find(root) { !it.isEditable && APPLY.containsMatchIn(label(it)) && label(it).length <= 30 } }
+            ?.let { Nodes.click(service, it) }
+        delay(1_200)
+        AgentLog.add("APP ordené por ${if (lowFirst) "menor" else "mayor"} precio")
+        null
+    }
+
     // ---- Qué es cada cosa en pantalla ----
 
     private fun searchField(root: AccessibilityNodeInfo): AccessibilityNodeInfo? =
@@ -203,6 +229,10 @@ class AppUi(private val context: Context) {
         val SEARCH_WORDS = listOf("buscar", "busca", "search", "lupa", "buscador")
         val MESSAGE_WORDS = listOf("mensaje", "message", "escrib", "aa", "compose", "input")
         val SEND_LABELS = setOf("enviar", "send", "enviar mensaje", "send message")
+        val SORT_OPEN = Regex("^(?:ordenar|ordenar por|orden|sort|sort by|filtrar|filtros|filtrar y ordenar)\\b")
+        val SORT_LOW = Regex("\\b(?:menor precio|precio mas bajo|mas barato|menor a mayor|lowest price|low to high|precio: menor)")
+        val SORT_HIGH = Regex("\\b(?:mayor precio|precio mas alto|mas caro|mayor a menor|highest price|high to low|precio: mayor)")
+        val APPLY = Regex("^(?:aplicar|ver resultados|ver \\d+ resultados|listo|mostrar resultados|apply|done)\\b")
         val INBOXES = mapOf("com.instagram.android" to "https://www.instagram.com/direct/inbox/")
         const val MIN_SIMILARITY = 0.6
     }

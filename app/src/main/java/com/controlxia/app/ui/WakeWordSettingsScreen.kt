@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,22 +46,26 @@ import com.controlxia.app.ui.components.AuraSwitch
 import com.controlxia.app.ui.components.SectionLabel
 import com.controlxia.app.ui.components.SegmentedControl
 import com.controlxia.app.ui.components.StatusDot
+import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.components.TechTopBar
 import com.controlxia.app.ui.components.glass
 import com.controlxia.app.ui.theme.Accent
 import com.controlxia.app.ui.theme.Muted
 import com.controlxia.app.voice.GestureModel
+import com.controlxia.app.voice.LockedAccess
+import com.controlxia.app.voice.VoiceId
+import com.controlxia.app.voice.VoicePrint
 import com.controlxia.app.voice.VoskModelDownloader
 import com.controlxia.app.voice.VoskModelStore
 import com.controlxia.app.voice.WakePhraseDetector
 import com.controlxia.app.voice.WakePhraseResolver
 import com.controlxia.app.voice.WakeWordSettings
-import com.controlxia.app.voice.LockedAccess
 import com.controlxia.app.voice.WaveDetector
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /**
  * Ajustes del asistente: nombre, palabra de activación (cómo suena),
@@ -342,13 +347,18 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(settings.handsPause) }
     var oneHand by remember { mutableStateOf(settings.handGestures) }
+    var always by remember { mutableStateOf(settings.handsAlways) }
+    var answers by remember { mutableStateOf(settings.confirmGestures) }
     val download by GestureModel.state.collectAsState()
 
     fun turnOn() {
         settings.handsPause = true
         enabled = true
         GestureModel.ensure(context) {
-            android.os.Handler(android.os.Looper.getMainLooper()).post { HandsWatchService.start(context) }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                HandsWatchService.start(context)
+                HandsWatchService.refresh()
+            }
         }
     }
 
@@ -356,51 +366,60 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
         ActivityResultContracts.RequestPermission()
     ) { granted -> if (granted) turnOn() }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text("Mirar mis manos mientras veo videos", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "La cámara frontal se prende solo mientras se reproduce algo o hay una app de " +
-                    "videos adelante (Instagram, TikTok, YouTube…). Todo se analiza en el " +
-                    "teléfono, sin guardar imágenes. Las señas que tocan la pantalla necesitan " +
-                    "el control de apps.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Muted,
-            )
-        }
-        AuraSwitch(
-            checked = enabled,
-            onCheckedChange = { on ->
-                if (on) {
-                    if (PermissionManager.hasCamera(context)) turnOn()
-                    else cameraPermission.launch(android.Manifest.permission.CAMERA)
-                } else {
-                    settings.handsPause = false
-                    enabled = false
-                    HandsWatchService.stop(context)
-                }
+    SwitchRow(
+        title = "Señas con la cámara",
+        detail = "La cámara frontal mira tus manos mientras se reproduce algo o hay una app de videos " +
+            "adelante (Instagram, TikTok, YouTube…), y tu cara cuando te pregunto algo. Todo se analiza " +
+            "en el teléfono, sin guardar imágenes. Las señas que tocan la pantalla necesitan el control de apps.",
+        checked = enabled,
+        onChange = { on ->
+            if (on) {
+                if (PermissionManager.hasCamera(context)) turnOn()
+                else cameraPermission.launch(android.Manifest.permission.CAMERA)
+            } else {
+                settings.handsPause = false
+                enabled = false
+                HandsWatchService.stop(context)
+            }
+        },
+    )
+    if (enabled) {
+        SwitchRow(
+            title = "Señas con una mano",
+            detail = "Pasar de reel, me gusta, pausa, hablarme (abajo, la lista).",
+            checked = oneHand,
+            onChange = {
+                oneHand = it
+                settings.handGestures = it
+                HandsWatchService.refresh()
             },
         )
-    }
-    if (enabled) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Señas con una mano", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            AuraSwitch(
-                checked = oneHand,
-                onCheckedChange = {
-                    oneHand = it
-                    settings.handGestures = it
-                },
-            )
-        }
-        Legend(if (oneHand) HAND_LEGEND else HAND_LEGEND.takeLast(1))
+        SwitchRow(
+            title = "Con cualquier app",
+            detail = "La cámara mira siempre que la pantalla esté prendida, no solo con videos o música. Gasta bastante más batería.",
+            checked = always,
+            onChange = {
+                always = it
+                settings.handsAlways = it
+                HandsWatchService.refresh()
+            },
+        )
+        SwitchRow(
+            title = "Contestar sí o no con un gesto",
+            detail = "Cuando pregunto algo (\"¿Le mando…?\"), la cámara mira tu cara y tus manos un momento.",
+            checked = answers,
+            onChange = {
+                answers = it
+                settings.confirmGestures = it
+                HandsWatchService.refresh()
+            },
+        )
+        Legend((if (oneHand) HAND_LEGEND else HAND_LEGEND.takeLast(1)) + (if (answers) ANSWER_LEGEND else emptyList()))
+        CameraTester()
     }
     when (val state = download) {
         is GestureModel.State.Downloading -> Text(
-            "Bajando el modelo de gestos… ${(state.progress * 100).roundToInt()}%",
+            "Bajando los modelos de gestos… ${(state.progress * 100).roundToInt()}%",
             style = MaterialTheme.typography.bodySmall,
             color = Accent,
         )
@@ -409,20 +428,45 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
     }
 }
 
-/** Mensajes, notificaciones y llamadas con el teléfono bloqueado: no, con huella, o siempre. */
+/** Qué está haciendo la cámara y la última seña que vio; "Probar" la prende 20 segundos. */
+@Composable
+private fun CameraTester() {
+    val live by HandsWatchService.live.collectAsState()
+    var now by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(live) {
+        while (true) {
+            now = android.os.SystemClock.elapsedRealtime()
+            delay(1_000)
+        }
+    }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Cámara: ${live.reason.ifBlank { if (HandsWatchService.running) "preparando…" else "apagada" }}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Accent,
+            )
+            live.seen?.let { sign ->
+                val ago = ((now - live.seenAt) / 1_000).coerceAtLeast(0)
+                Text("Última seña: $sign (hace $ago s)", style = MaterialTheme.typography.bodySmall, color = Muted)
+            }
+        }
+        TechButton("Probar", filled = false, onClick = { HandsWatchService.test() })
+    }
+}
+
+
+/** Mensajes, notificaciones y llamadas con el teléfono bloqueado: no, con huella, con tu voz, o siempre. */
 @Composable
 private fun LockedAccessContent(settings: WakeWordSettings) {
     var access by remember { mutableStateOf(settings.lockedAccess) }
+    val options = listOf(LockedAccess.BLOCKED, LockedAccess.ASK_UNLOCK, LockedAccess.VOICE, LockedAccess.ALLOWED)
     Text("Mensajes y llamadas con el teléfono bloqueado", style = MaterialTheme.typography.titleSmall)
     SegmentedControl(
-        options = listOf("No", "Con huella", "Siempre"),
-        selected = when (access) {
-            LockedAccess.BLOCKED -> 0
-            LockedAccess.ASK_UNLOCK -> 1
-            LockedAccess.ALLOWED -> 2
-        },
+        options = listOf("No", "Huella", "Mi voz", "Siempre"),
+        selected = options.indexOf(access),
         onSelect = {
-            access = listOf(LockedAccess.BLOCKED, LockedAccess.ASK_UNLOCK, LockedAccess.ALLOWED)[it]
+            access = options[it]
             settings.lockedAccess = access
         },
     )
@@ -434,6 +478,10 @@ private fun LockedAccessContent(settings: WakeWordSettings) {
             LockedAccess.ASK_UNLOCK ->
                 "Antes de leerte mensajes o notificaciones, mandar o llamar, te pide la huella " +
                     "(o la cara o el PIN) y sigue solo. Así nadie más puede pedirlo con tu teléfono bloqueado."
+            LockedAccess.VOICE ->
+                "Te pide decir tu contraseña: comprueba que sea la contraseña y que sea tu voz. Si no te " +
+                    "reconoce, pide la huella. Es más cómodo pero menos seguro que la huella: no digas la " +
+                    "contraseña delante de otros."
             LockedAccess.ALLOWED ->
                 "Lo hace sin desbloquear. Ojo: cualquiera que diga mi nombre cerca de tu teléfono " +
                     "puede escuchar tus mensajes o mandar uno."
@@ -441,7 +489,126 @@ private fun LockedAccessContent(settings: WakeWordSettings) {
         style = MaterialTheme.typography.bodySmall,
         color = Muted,
     )
+    if (access == LockedAccess.VOICE) VoiceIdContent()
 }
+
+/**
+ * Grabar tu voz con tu contraseña (3 veces) y probarla. Baja el modelo de
+ * hablantes la primera vez.
+ */
+@Composable
+private fun VoiceIdContent() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var enrolled by remember { mutableStateOf(VoiceId.isEnrolled(context)) }
+    var password by remember { mutableStateOf("") }
+    var resolved by remember { mutableStateOf<String?>(null) }
+    var prints by remember { mutableStateOf(listOf<FloatArray>()) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    Column(Modifier.fillMaxWidth().glass().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (enrolled) {
+            Text("Tu voz está guardada.", style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                TechButton("Probar", enabled = !busy, onClick = {
+                    busy = true
+                    message = "Decí tu contraseña ahora…"
+                    scope.launch {
+                        val check = VoiceId.verify(context)
+                        message = when {
+                            check == null -> "No pude usar el micrófono. Probá de nuevo."
+                            check.ok -> "✓ Te reconocí. Parecido ${percent(check.similarity)} (pide ${percent(check.threshold)})."
+                            !check.passwordOk -> "✗ No entendí la contraseña (oí «${check.heard}»)."
+                            else -> "✗ La contraseña está bien, pero la voz no se parece lo suficiente: ${percent(check.similarity)} (pide ${percent(check.threshold)})."
+                        }
+                        busy = false
+                    }
+                })
+                TechButton("Borrar mi voz", filled = false, enabled = !busy, onClick = {
+                    VoiceId.clear(context)
+                    enrolled = false
+                    resolved = null
+                    prints = emptyList()
+                    message = null
+                })
+            }
+        } else if (resolved == null) {
+            Text(
+                "Elegí una contraseña de 2 a 4 palabras comunes que no digas seguido " +
+                    "(por ejemplo «girasol azul de mayo»). Después la decís 3 veces para que aprenda tu voz.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Tu contraseña") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TechButton("Empezar", enabled = !busy && password.isNotBlank(), onClick = {
+                busy = true
+                scope.launch {
+                    message = when {
+                        !PermissionManager.hasRecordAudio(context) -> "Falta el permiso de micrófono."
+                        !VoskModelStore.isAvailable(context) -> "Primero bajá el modelo de voz (arriba, en Modelo de voz)."
+                        else -> {
+                            val error = VoiceId.downloadSpeakerModel(context) { p ->
+                                message = "Bajando el reconocimiento de voz… ${(p * 100).roundToInt()} %"
+                            }
+                            if (error != null) {
+                                error
+                            } else {
+                                resolved = VoiceId.resolvePassword(context, password)
+                                if (resolved == null) "Alguna palabra no la conozco o son muchas: probá con otras." else null
+                            }
+                        }
+                    }
+                    busy = false
+                }
+            })
+        } else {
+            val words = resolved.orEmpty()
+            val done = prints.size
+            Text("Decí «$words» (${done + 1} de $ENROLL_SAMPLES)", style = MaterialTheme.typography.titleSmall)
+            TechButton(if (busy) "Escuchando…" else "Grabar", enabled = !busy, onClick = {
+                busy = true
+                message = "Hablá ahora…"
+                scope.launch {
+                    val sample = VoiceId.listen(context, words)
+                    message = when {
+                        sample == null -> "No pude usar el micrófono. Probá de nuevo."
+                        sample.text != words -> "✗ Entendí «${sample.text}». Probá de nuevo, un poco más claro."
+                        sample.print == null -> "✗ Fue muy corto para reconocer la voz. Decila un poco más lento."
+                        else -> {
+                            prints = prints + sample.print
+                            if (prints.size >= ENROLL_SAMPLES) {
+                                VoiceId.save(context, words, prints)
+                                enrolled = true
+                                val even = VoicePrint.consistency(prints)
+                                if (even < 0.6f) {
+                                    "Listo, tu voz quedó guardada, pero las grabaciones salieron distintas entre sí. " +
+                                        "Si no te reconoce bien, borrala y grabala de nuevo en un lugar tranquilo."
+                                } else {
+                                    "Listo, tu voz quedó guardada. Tocá Probar para ver si te reconoce."
+                                }
+                            } else {
+                                "✓ Bien. Otra vez."
+                            }
+                        }
+                    }
+                    busy = false
+                }
+            })
+        }
+        message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Accent) }
+    }
+}
+
+private fun percent(value: Float?): String = value?.let { "${(it * 100).roundToInt()} %" } ?: "—"
+
+private const val ENROLL_SAMPLES = 3
 
 /**
  * Saludar al teléfono: sin cámara, con el sensor de proximidad. Muestra en
@@ -529,6 +696,13 @@ private val WAVE_LEGEND = listOf(
     "👋" to "Un saludo con la pantalla apagada: la prende",
     "👋👋" to "Dos saludos seguidos: te escucho, sin decir mi nombre",
     "✋" to "Tapar un segundo: posponer la alarma, frenarme mientras hablo, o pausar el video que mirás",
+)
+
+/** Contestar cuando pregunto algo. */
+private val ANSWER_LEGEND = listOf(
+    "😉" to "Guiñar un ojo o asentir con la cabeza: sí",
+    "🙅" to "Negar con la cabeza: no",
+    "👍👎" to "Pulgar arriba: sí · pulgar abajo: no",
 )
 
 /** Qué hace cada seña frente a la cámara (la última, las dos manos, siempre está). */

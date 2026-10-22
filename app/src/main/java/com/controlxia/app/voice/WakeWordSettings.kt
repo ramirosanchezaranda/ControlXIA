@@ -93,6 +93,16 @@ class WakeWordSettings(context: Context) {
         get() = prefs.getBoolean(KEY_WAVES, true)
         set(value) = prefs.edit().putBoolean(KEY_WAVES, value).apply()
 
+    /** Las señas con la cámara también fuera de los videos (con cualquier app; gasta más batería). */
+    var handsAlways: Boolean
+        get() = prefs.getBoolean(KEY_HANDS_ALWAYS, false)
+        set(value) = prefs.edit().putBoolean(KEY_HANDS_ALWAYS, value).apply()
+
+    /** Contestar "sí" o "no" con la cara (guiño, cabeza) o el pulgar cuando pregunta algo. */
+    var confirmGestures: Boolean
+        get() = prefs.getBoolean(KEY_CONFIRM_GESTURES, true)
+        set(value) = prefs.edit().putBoolean(KEY_CONFIRM_GESTURES, value).apply()
+
     /** Escuchar el nombre también con la pantalla apagada (gasta más batería). */
     var listenScreenOff: Boolean
         get() = prefs.getBoolean(KEY_SCREEN_OFF, true)
@@ -123,6 +133,8 @@ class WakeWordSettings(context: Context) {
         private const val KEY_LOW_BATTERY = "pause_low_battery"
         private const val KEY_HAND_GESTURES = "hand_gestures"
         private const val KEY_WAVES = "wave_gestures"
+        private const val KEY_HANDS_ALWAYS = "hands_always"
+        private const val KEY_CONFIRM_GESTURES = "confirm_gestures"
         private const val KEY_LOCKED_ACCESS = "locked_access"
         private const val KEY_CONVERSATION = "conversation_mode"
         private const val KEY_CONVERSATION_SECONDS = "conversation_seconds"
@@ -140,6 +152,9 @@ enum class LockedAccess {
 
     /** Pide la huella (o cara o PIN) y sigue solo. */
     ASK_UNLOCK,
+
+    /** Pide decir tu contraseña con tu voz (ver VoiceId); si no te reconoce, la huella. */
+    VOICE,
 
     /** Lo hace sin desbloquear (cualquiera que diga el nombre puede). */
     ALLOWED,

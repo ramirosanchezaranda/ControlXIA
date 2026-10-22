@@ -32,9 +32,10 @@ import com.controlxia.app.ui.AssistantActivity
 import com.controlxia.app.ui.MainActivity
 import com.controlxia.app.voice.AndroidSpeechToText
 import com.controlxia.app.voice.AssistantState
+import com.controlxia.app.voice.ConfirmState
+import com.controlxia.app.voice.Feedback
 import com.controlxia.app.voice.ListeningOverlay
 import com.controlxia.app.voice.RecentCommandsStore
-import com.controlxia.app.voice.Feedback
 import com.controlxia.app.voice.Speaker
 import com.controlxia.app.voice.SpeechToText
 import com.controlxia.app.voice.VoiceBridge
@@ -149,6 +150,9 @@ class WakeWordService : Service() {
             main.post { if (listeningCommand) reloadPending = true else startListeningFresh() }
         }
         VoiceBridge.speaker = { text -> speakAndWait(text) }
+        VoiceBridge.overlayHidden = { hidden ->
+            if (hidden) overlay?.hide() else pill(AssistantState.state.value.status.ifBlank { "Trabajando…" })
+        }
         VoiceBridge.micClaim = { busy ->
             micLent = busy
             if (busy) {
@@ -224,6 +228,11 @@ class WakeWordService : Service() {
             ACTION_LISTEN -> {
                 startListening()
                 main.post { if (!listeningCommand) startInteraction(null) }
+            }
+            // Contestaste "sí" o "no" con un gesto (guiño, cabeza, pulgar).
+            ACTION_ANSWER -> {
+                val text = intent.getStringExtra(EXTRA_TEXT).orEmpty()
+                if (text.isNotEmpty()) main.post { answerByGesture(text) }
             }
             // Escribiste un pedido en la app.
             ACTION_TEXT -> {
@@ -550,6 +559,27 @@ class WakeWordService : Service() {
         processAndRespond(text)
     }
 
+    /**
+     * La respuesta a una pregunta, hecha con un gesto: como si la hubieras
+     * dicho (sigue sobre el bloqueo si estaba bloqueado).
+     */
+    private fun answerByGesture(text: String) {
+        if (!listeningCommand || processingJob?.isActive == true) return
+        stt?.cancel()
+        main.removeCallbacks(sttTimeout)
+        main.removeCallbacks(resumeAfterReply)
+        main.removeCallbacks(afterAck)
+        inFollowUp = false
+        transcriptionStarted = true
+        speaker.stop()
+        feedback.vibrate(40)
+        AgentLog.add("GESTO: «$text»")
+        lastCommand = text
+        AssistantState.update(AssistantState.Phase.HEARD, "“$text”")
+        pill("“$text”")
+        processAndRespond(text)
+    }
+
     private fun onUtteranceFinished(id: String?) {
         when (id) {
             UTT_ACK -> if (listeningCommand && !transcriptionStarted) {
@@ -829,6 +859,7 @@ class WakeWordService : Service() {
         (3_000L + text.length * 110L).coerceAtMost(5 * 60_000L)
 
     private fun resumeListening() {
+        ConfirmState.clear()
         stopStopListener()
         main.removeCallbacks(afterAck)
         main.removeCallbacks(sttTimeout)
@@ -947,6 +978,7 @@ class WakeWordService : Service() {
         if (current?.get() === this) current = null
         VoiceBridge.speaker = null
         VoiceBridge.micClaim = null
+        VoiceBridge.overlayHidden = null
         UnlockGate.onUnlocked = null
         OwnAlarms.onRingingChanged = null
         policy?.stop()
@@ -977,6 +1009,7 @@ class WakeWordService : Service() {
         const val ACTION_HANDS_UP = "com.controlxia.app.action.HANDS_UP"
         const val ACTION_LISTEN = "com.controlxia.app.action.LISTEN"
         const val ACTION_TEXT = "com.controlxia.app.action.TEXT"
+        const val ACTION_ANSWER = "com.controlxia.app.action.ANSWER"
         const val EXTRA_TEXT = "text"
 
         private const val UTT_ACK = "ack"
@@ -1092,6 +1125,11 @@ class WakeWordService : Service() {
         /** Un pedido escrito. Prende la escucha si estaba apagada. */
         fun sendText(context: Context, text: String): Boolean =
             deliver(context, Intent(context, WakeWordService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_TEXT, text))
+
+        /** Contesta la pregunta pendiente con un gesto ("sí" o "no"). Solo si el servicio anda. */
+        fun answer(context: Context, text: String) {
+            if (running) deliver(context, Intent(context, WakeWordService::class.java).setAction(ACTION_ANSWER).putExtra(EXTRA_TEXT, text))
+        }
 
         /** Frena lo que el asistente esté haciendo o diciendo (sin apagar la escucha). */
         fun interrupt(context: Context) {

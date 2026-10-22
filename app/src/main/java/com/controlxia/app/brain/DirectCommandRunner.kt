@@ -232,6 +232,8 @@ class DirectCommandRunner(private val context: Context) {
             "agendá dentista el jueves a las 4, cuánto es 25 por 4, buscá pizza en cualquier app, en " +
             "Spotify tocá Biblioteca, abrí los reels, sacá una foto, activá no molestar o el wifi, " +
             "subí el volumen, pausa, y para cualquier pantalla: mostrá los números y tocá uno, bajá, " +
-            "atrás, inicio. Bloqueado también: si hace falta te pido la huella. Para frenarme, decí pará."
+            "atrás, inicio. Y varias cosas seguidas: entrá a Mercado Libre, buscá zapatillas, ordená de menor " +
+            "a mayor precio, sacá captura de los primeros 4 y guardalo en una nota; o abrí el chat de Juan, " +
+            "escribile hola y mandalo. Bloqueado también: si hace falta te pido la huella. Para frenarme, decí pará."
     }
 }
