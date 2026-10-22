@@ -49,6 +49,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.lang.ref.WeakReference
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -141,6 +142,7 @@ class WakeWordService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        current = WeakReference(this)
         overlay = ListeningOverlay(this).apply { onTap = { main.post { stopCurrent("tocaste el aviso") } } }
         // Mientras la cámara graba, el motor de voz escucha "terminá el video".
         CameraControl.onRecordingChanged = {
@@ -181,14 +183,9 @@ class WakeWordService : Service() {
             stopFromUser()
             return START_NOT_STICKY
         }
-        // Levantaste las dos manos mirando un video: ya está en pausa, preguntar.
-        if (intent?.action == ACTION_HANDS_UP) {
-            if (inForeground) main.post { if (!listeningCommand) startInteraction("¿Qué necesitás?") }
-            return START_STICKY
-        }
-        // Frenar lo que está haciendo (aviso, pantalla de bloqueo), sin apagar la escucha.
-        if (intent?.action == ACTION_INTERRUPT) {
-            if (inForeground) main.post { stopCurrent("tocaste Frenar") }
+        // Estos solo tienen sentido con el servicio andando: no lo arrancan.
+        if (intent?.action == ACTION_HANDS_UP || intent?.action == ACTION_INTERRUPT) {
+            if (inForeground) handleAction(intent)
             return START_STICKY
         }
 
@@ -211,8 +208,17 @@ class WakeWordService : Service() {
         ReactivationNotifier.dismiss(this)
         WatchdogReceiver.schedule(this)
         applyWaveSetting()
+        handleAction(intent)
+        return START_STICKY
+    }
 
+    /** Lo que pide [intent], con el servicio ya en primer plano (en el hilo principal). */
+    private fun handleAction(intent: Intent?) {
         when (intent?.action) {
+            // Levantaste las dos manos mirando un video: ya está en pausa, preguntar.
+            ACTION_HANDS_UP -> main.post { if (!listeningCommand) startInteraction("¿Qué necesitás?") }
+            // Frenar lo que está haciendo (aviso, pantalla de bloqueo), sin apagar la escucha.
+            ACTION_INTERRUPT -> main.post { stopCurrent("tocaste Frenar") }
             ACTION_RELOAD -> reloadWakeWord()
             // Tocaste la esfera en la app: escuchar ya, sin decir el nombre.
             ACTION_LISTEN -> {
@@ -231,7 +237,6 @@ class WakeWordService : Service() {
             }
             else -> startListening()
         }
-        return START_STICKY
     }
 
     /**
@@ -414,7 +419,7 @@ class WakeWordService : Service() {
         }
         val gestures = waves ?: WaveGestures(
             this,
-            onListen = { listenNow(this) },
+            onListen = { handleAction(Intent(ACTION_LISTEN)) },
             onStop = {
                 if (listeningCommand) {
                     stopCurrent("tapaste el teléfono")
@@ -819,8 +824,9 @@ class WakeWordService : Service() {
         main.postDelayed({ if (listeningCommand && inFollowUp) transcribeCommand() }, TONE_MS)
     }
 
+    /** Tope por si el TTS no avisa que terminó: ~11 letras por segundo, con margen. */
     private fun estimatedSpeechMs(text: String): Long =
-        (2_000L + text.length * 90L).coerceAtMost(45_000L)
+        (3_000L + text.length * 110L).coerceAtMost(5 * 60_000L)
 
     private fun resumeListening() {
         stopStopListener()
@@ -938,6 +944,7 @@ class WakeWordService : Service() {
     }
 
     override fun onDestroy() {
+        if (current?.get() === this) current = null
         VoiceBridge.speaker = null
         VoiceBridge.micClaim = null
         UnlockGate.onUnlocked = null
@@ -1034,13 +1041,30 @@ class WakeWordService : Service() {
          * ForegroundServiceStartNotAllowedException (Android 12+) o
          * IllegalStateException (arranque desde segundo plano en 8–11).
          */
-        fun tryStart(context: Context, action: String? = null): Boolean = try {
-            ContextCompat.startForegroundService(
-                context, Intent(context, WakeWordService::class.java).setAction(action)
-            )
-            true
-        } catch (e: Exception) {
-            false
+        fun tryStart(context: Context, action: String? = null): Boolean =
+            deliver(context, Intent(context, WakeWordService::class.java).setAction(action))
+
+        /** El servicio en marcha (en este proceso), para pedirle cosas sin pasar por Android. */
+        @Volatile
+        private var current: WeakReference<WakeWordService>? = null
+
+        /**
+         * Si el servicio ya está en primer plano, se le pide directo: arrancar
+         * un servicio desde otro en segundo plano (los gestos) Android lo puede
+         * bloquear. Si no está, se arranca.
+         */
+        private fun deliver(context: Context, intent: Intent): Boolean {
+            val service = current?.get()
+            if (service != null && service.inForeground) {
+                service.main.post { service.handleAction(intent) }
+                return true
+            }
+            return try {
+                ContextCompat.startForegroundService(context, intent)
+                true
+            } catch (e: Exception) {
+                false
+            }
         }
 
         fun start(context: Context): Boolean = tryStart(context)
@@ -1066,15 +1090,8 @@ class WakeWordService : Service() {
         fun listenNow(context: Context): Boolean = tryStart(context, ACTION_LISTEN)
 
         /** Un pedido escrito. Prende la escucha si estaba apagada. */
-        fun sendText(context: Context, text: String): Boolean = try {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, WakeWordService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_TEXT, text),
-            )
-            true
-        } catch (e: Exception) {
-            false
-        }
+        fun sendText(context: Context, text: String): Boolean =
+            deliver(context, Intent(context, WakeWordService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_TEXT, text))
 
         /** Frena lo que el asistente esté haciendo o diciendo (sin apagar la escucha). */
         fun interrupt(context: Context) {

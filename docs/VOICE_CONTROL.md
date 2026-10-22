@@ -76,7 +76,17 @@ Se toleran el nombre del asistente adelante ("Beto, atrás"), "che", "dale", "po
 
 Android no deja que ninguna app maneje la pantalla de otras sobre el bloqueo (tampoco el asistente de Google). Así que, cuando un pedido necesita la pantalla —mandar un WhatsApp, abrir una app, buscar en una app, cambiar un ajuste— el asistente **pide desbloquear** ("Desbloqueá el teléfono para mandarlo por WhatsApp"): aparece la huella o el PIN, un toque, y **sigue solo con el pedido**, pasando de la pantalla sobre el bloqueo a la burbuja flotante. Si no se desbloquea en 30 segundos, lo deja ahí.
 
-Anda **sin desbloquear**: SMS, llamadas (y atender o cortar), alarmas, temporizadores, calendario, la hora, cuentas, sacar una foto (cámara segura), volumen, música, linterna, **leer y responder mensajes y notificaciones** (la respuesta va por la propia notificación).
+Anda **sin desbloquear**: atender o cortar llamadas, alarmas, temporizadores, calendario, la hora, cuentas, sacar una foto (cámara segura), volumen, música y linterna.
+
+**Lo privado** —leer mensajes y notificaciones, responder, mandar SMS o audios, llamar— depende de Ajustar → Privacidad → "Mensajes y llamadas con el teléfono bloqueado", porque cualquiera que diga el nombre cerca de tu teléfono podría pedirlo:
+
+| Opción | Qué hace |
+|---|---|
+| No | Bloqueado no lo hace: hay que desbloquear y volver a pedirlo |
+| **Con huella** (por defecto) | Pide la huella (o cara o PIN) y sigue solo |
+| Siempre | Lo hace sin desbloquear, como antes |
+
+"Mostrar contenido bloqueado" solo oculta el texto en la pantalla; la voz igual lo dice.
 
 Para abrir la pantalla de desbloqueo desde segundo plano hace falta el permiso **Mostrar sobre otras apps** (el mismo que ya usa para abrir apps).
 
@@ -111,7 +121,7 @@ Antes no andaba porque faltaba el permiso que exige la app de Reloj para crear a
 | "¿a qué hora suena mi alarma?", "¿qué alarmas tengo?" | Dice la próxima (del Reloj o propia) |
 | "cancelá las alarmas" | Cancela las que puso ControlXIA (las del Reloj se borran en el Reloj) |
 
-Mientras suena una alarma propia, el motor de voz oye "apagá la alarma" o "posponela" **sin decir el nombre** y sin internet.
+Mientras suena una alarma propia, el motor de voz oye "apagá la alarma" o "posponela" **sin decir el nombre** y sin internet. Si nadie la apaga, **se apaga sola a los 10 minutos**. Si la notificación no puede sonar (sin permiso de notificaciones o con el canal "Alarmas" silenciado), el sonido lo pone la app.
 
 ## Gestos con las manos
 

@@ -32,6 +32,7 @@ class OpenAiCompatibleProvider(
         tools: List<ToolSpec>,
         steps: List<AgentStep>,
     ): LlmResponse {
+        if (!LocalNetwork.isAllowed(url)) throw LlmException(LocalNetwork.NOT_ALLOWED)
         val body = buildJsonObject {
             put("model", model)
             put("messages", buildJsonArray {

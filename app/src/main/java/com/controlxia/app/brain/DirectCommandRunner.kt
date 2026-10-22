@@ -8,6 +8,7 @@ import com.controlxia.app.actions.Contacts
 import com.controlxia.app.actions.DeviceControl
 import com.controlxia.app.actions.PhoneCalls
 import com.controlxia.app.actions.ScreenNumbers
+import com.controlxia.app.actions.PrivateGate
 import com.controlxia.app.actions.UnlockGate
 import com.controlxia.app.brain.DirectCommands.CameraAction
 import com.controlxia.app.brain.DirectCommands.Command
@@ -129,7 +130,7 @@ class DirectCommandRunner(private val context: Context) {
                 EDIT_LABELS.getValue(command.action),
             )
             DirectCommands.PreviousApp -> done(device.previousApp(), "App anterior")
-            is DirectCommands.Call -> call(command.who)
+            is DirectCommands.Call -> PrivateGate.check(context, "para llamar")?.let { Reply(it) } ?: call(command.who)
             DirectCommands.AnswerCall -> done(calls.answer(), "Llamada atendida")
             DirectCommands.HangUp -> done(calls.hangUp(), "Llamada cortada")
             is DirectCommands.AlarmControl -> when (command.action) {

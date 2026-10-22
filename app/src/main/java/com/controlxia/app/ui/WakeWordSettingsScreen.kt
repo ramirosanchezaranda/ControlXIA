@@ -43,6 +43,7 @@ import com.controlxia.app.service.WakeWordService
 import com.controlxia.app.service.WaveGestures
 import com.controlxia.app.ui.components.AuraSwitch
 import com.controlxia.app.ui.components.SectionLabel
+import com.controlxia.app.ui.components.SegmentedControl
 import com.controlxia.app.ui.components.StatusDot
 import com.controlxia.app.ui.components.TechTopBar
 import com.controlxia.app.ui.components.glass
@@ -54,6 +55,7 @@ import com.controlxia.app.voice.VoskModelStore
 import com.controlxia.app.voice.WakePhraseDetector
 import com.controlxia.app.voice.WakePhraseResolver
 import com.controlxia.app.voice.WakeWordSettings
+import com.controlxia.app.voice.LockedAccess
 import com.controlxia.app.voice.WaveDetector
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -202,6 +204,7 @@ fun WakeWordSettingsScreen(onBack: () -> Unit) {
 
             // Privacidad con el teléfono bloqueado
             SectionLabel("Privacidad")
+            LockedAccessContent(settings)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -406,6 +409,40 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
     }
 }
 
+/** Mensajes, notificaciones y llamadas con el teléfono bloqueado: no, con huella, o siempre. */
+@Composable
+private fun LockedAccessContent(settings: WakeWordSettings) {
+    var access by remember { mutableStateOf(settings.lockedAccess) }
+    Text("Mensajes y llamadas con el teléfono bloqueado", style = MaterialTheme.typography.titleSmall)
+    SegmentedControl(
+        options = listOf("No", "Con huella", "Siempre"),
+        selected = when (access) {
+            LockedAccess.BLOCKED -> 0
+            LockedAccess.ASK_UNLOCK -> 1
+            LockedAccess.ALLOWED -> 2
+        },
+        onSelect = {
+            access = listOf(LockedAccess.BLOCKED, LockedAccess.ASK_UNLOCK, LockedAccess.ALLOWED)[it]
+            settings.lockedAccess = access
+        },
+    )
+    Text(
+        when (access) {
+            LockedAccess.BLOCKED ->
+                "Bloqueado no lee mensajes ni notificaciones, no manda y no llama. La hora, las " +
+                    "alarmas, la linterna y la música andan igual."
+            LockedAccess.ASK_UNLOCK ->
+                "Antes de leerte mensajes o notificaciones, mandar o llamar, te pide la huella " +
+                    "(o la cara o el PIN) y sigue solo. Así nadie más puede pedirlo con tu teléfono bloqueado."
+            LockedAccess.ALLOWED ->
+                "Lo hace sin desbloquear. Ojo: cualquiera que diga mi nombre cerca de tu teléfono " +
+                    "puede escuchar tus mensajes o mandar uno."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = Muted,
+    )
+}
+
 /**
  * Saludar al teléfono: sin cámara, con el sensor de proximidad. Muestra en
  * vivo lo que ve el sensor para probarlo.
@@ -436,6 +473,14 @@ private fun WaveContent(settings: WakeWordSettings) {
     if (enabled && available) {
         Legend(WAVE_LEGEND)
         WaveTester()
+        if (remember { !WaveGestures.wakesUp(context) }) {
+            Text(
+                "Tu teléfono avisa que su sensor podría no funcionar con la pantalla apagada " +
+                    "(muchos son \"virtuales\"). Probalo: si no prende, usá dos saludos con la pantalla prendida.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+            )
+        }
     }
 }
 

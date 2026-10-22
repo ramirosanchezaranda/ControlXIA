@@ -338,6 +338,14 @@ fun PermissionsScreen(onBack: () -> Unit) {
                     }
                 }
             }
+            if (oemNeeded) {
+                Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
+                    Text("Para que tu ${PermissionManager.oemName()} no la cierre", style = MaterialTheme.typography.titleSmall, color = colors.label)
+                    PermissionManager.oemSteps().forEachIndexed { i, step ->
+                        Text("${i + 1}. $step", style = MaterialTheme.typography.bodySmall, color = colors.secondaryLabel, modifier = Modifier.padding(top = 6.dp))
+                    }
+                }
+            }
             if (!overlayOk || !a11yOk || !listenerOk) {
                 Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
                     Text("¿Dice «Ajuste restringido»?", style = MaterialTheme.typography.titleSmall, color = colors.label)

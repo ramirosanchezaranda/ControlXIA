@@ -126,6 +126,29 @@ object PermissionManager {
     fun oemName(): String = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
 
     /**
+     * Qué tocar a mano en los ajustes de la marca (no hay forma de verificarlo
+     * desde la app). En OPPO (ColorOS) además se cierran solos los servicios de
+     * accesibilidad si la app no queda "bloqueada" en Recientes.
+     */
+    fun oemSteps(): List<String> = when (Build.MANUFACTURER.lowercase()) {
+        "oppo", "realme", "oneplus" -> listOf(
+            "Ajustes → Apps → Gestión de apps → ControlXIA → Uso de batería: activá «Permitir actividad en segundo plano», «Permitir inicio automático» y «Permitir actividad en primer plano».",
+            "En Recientes, mantené apretada ControlXIA → «Bloquear» (aparece un candado): así ColorOS no la cierra.",
+            "Ajustes → Batería: dejá el ahorro de energía apagado mientras uses los gestos, o agregá ControlXIA a las excepciones.",
+            "Si los gestos o el control de apps dejan de andar, revisá que «ControlXIA» siga activado en Accesibilidad: ColorOS a veces lo apaga.",
+        )
+        "xiaomi", "redmi", "poco" -> listOf(
+            "Seguridad → Permisos → Inicio automático: activá ControlXIA.",
+            "Ajustes → Apps → ControlXIA → Ahorro de batería: «Sin restricciones».",
+            "En Recientes, bajá la tarjeta de ControlXIA para bloquearla.",
+        )
+        "samsung" -> listOf(
+            "Ajustes → Batería → Límites de uso en segundo plano: sacá ControlXIA de «Apps en suspensión» y agregala a «Apps que nunca se suspenden».",
+        )
+        else -> listOf("Buscá en los ajustes de batería de tu teléfono la opción de no cerrar ControlXIA en segundo plano.")
+    }
+
+    /**
      * Devuelve el primer intent de ajustes OEM que exista en este equipo,
      * o null si el fabricante no necesita configuración extra.
      */
@@ -165,22 +188,33 @@ object PermissionManager {
                     "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
                 )
             )
-            "oppo", "realme" -> listOf(
+            "oppo", "realme", "oneplus" -> listOf(
+                // ColorOS 13 a 15 (y OxygenOS, que comparte base) y versiones anteriores.
+                ComponentName(
+                    "com.oplus.battery",
+                    "com.oplus.startupapp.view.StartupAppListActivity"
+                ),
+                ComponentName(
+                    "com.coloros.safecenter",
+                    "com.coloros.safecenter.startupapp.StartupAppListActivity"
+                ),
                 ComponentName(
                     "com.coloros.safecenter",
                     "com.coloros.safecenter.permission.startup.StartupAppListActivity"
-                )
+                ),
+                ComponentName(
+                    "com.oppo.safe",
+                    "com.oppo.safe.permission.startup.StartupAppListActivity"
+                ),
+                ComponentName(
+                    "com.oneplus.security",
+                    "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity"
+                ),
             )
             "vivo", "iqoo" -> listOf(
                 ComponentName(
                     "com.vivo.permissionmanager",
                     "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"
-                )
-            )
-            "oneplus" -> listOf(
-                ComponentName(
-                    "com.oneplus.security",
-                    "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity"
                 )
             )
             else -> emptyList()

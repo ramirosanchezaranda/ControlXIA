@@ -32,10 +32,10 @@ jobs:
           "$SDK/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Build debug APK
+      - name: Test, lint and build debug APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace --no-daemon
+          ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace --no-daemon
 
       - name: Upload debug APK
         if: success()

@@ -77,6 +77,15 @@ class WakeWordSettings(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_HAND_GESTURES, value).apply()
 
     /**
+     * Qué se puede hacer con el teléfono bloqueado sin desbloquearlo: leer
+     * mensajes y notificaciones, mandar, responder y llamar son privados.
+     */
+    var lockedAccess: LockedAccess
+        get() = runCatching { LockedAccess.valueOf(prefs.getString(KEY_LOCKED_ACCESS, null) ?: "") }
+            .getOrDefault(LockedAccess.ASK_UNLOCK)
+        set(value) = prefs.edit().putString(KEY_LOCKED_ACCESS, value.name).apply()
+
+    /**
      * Saludar al teléfono (sensor de proximidad, sin cámara): un saludo prende
      * la pantalla, dos te escucha, tapar un segundo frena o pospone.
      */
@@ -114,6 +123,7 @@ class WakeWordSettings(context: Context) {
         private const val KEY_LOW_BATTERY = "pause_low_battery"
         private const val KEY_HAND_GESTURES = "hand_gestures"
         private const val KEY_WAVES = "wave_gestures"
+        private const val KEY_LOCKED_ACCESS = "locked_access"
         private const val KEY_CONVERSATION = "conversation_mode"
         private const val KEY_CONVERSATION_SECONDS = "conversation_seconds"
         private const val KEY_AGENT = "agent_name"
@@ -121,4 +131,16 @@ class WakeWordSettings(context: Context) {
         private const val KEY_SENS = "sensitivity"
         private const val KEY_LOCKED_CONTENT = "locked_content"
     }
+}
+
+/** Lo privado (mensajes, notificaciones, llamadas) con el teléfono bloqueado. */
+enum class LockedAccess {
+    /** No lo hace: hay que desbloquear y volver a pedirlo. */
+    BLOCKED,
+
+    /** Pide la huella (o cara o PIN) y sigue solo. */
+    ASK_UNLOCK,
+
+    /** Lo hace sin desbloquear (cualquiera que diga el nombre puede). */
+    ALLOWED,
 }

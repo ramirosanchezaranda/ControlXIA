@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El http sin cifrar solo lo usa el proveedor de IA local (Ollama, LM Studio en la PC de
+     casa). La app lo limita a direcciones de la red local: ver brain/LocalNetwork.kt. -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

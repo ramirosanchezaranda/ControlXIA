@@ -88,7 +88,15 @@ class ScreenControl(private val context: Context) {
      */
     fun riskyLabel(id: Int): String? {
         val label = element(id)?.label ?: return null
-        return label.takeIf { RISKY.containsMatchIn(normalize(it)) }
+        return label.takeIf { isRisky(it) }
+    }
+
+    /** Si [id] es un buscador (ahí apretar Enter solo busca; en un chat, manda). */
+    fun isSearchField(id: Int): Boolean {
+        val element = element(id) ?: return false
+        val node = element.node
+        val hint = node.hintText?.toString().orEmpty()
+        return looksLikeSearch("${element.label} $hint ${idName(node)}")
     }
 
     suspend fun tap(id: Int): String = withContext(Dispatchers.Default) {
@@ -239,7 +247,7 @@ class ScreenControl(private val context: Context) {
     }
 
     private fun idName(node: AccessibilityNodeInfo): String =
-        node.viewIdResourceName?.substringAfter(":id/")?.replace('_', ' ').orEmpty()
+        splitId(node.viewIdResourceName?.substringAfter(":id/").orEmpty())
 
     private fun clean(value: String): String =
         value.replace(Regex("\\s+"), " ").trim().take(MAX_LABEL)
@@ -249,11 +257,7 @@ class ScreenControl(private val context: Context) {
         pm.getApplicationLabel(pm.getApplicationInfo(pkg!!, 0)).toString()
     }.getOrDefault(pkg ?: "desconocida")
 
-    private fun normalize(text: String): String =
-        Normalizer.normalize(text.lowercase(Locale("es")), Normalizer.Form.NFD)
-            .replace(Regex("\\p{Mn}+"), "")
-
-    private companion object {
+    companion object {
         const val MAX_DEPTH = 40
         const val MAX_ELEMENTS = 90
         // Las pantallas viajan al modelo en cada paso: con Groq hay límite de
@@ -265,7 +269,24 @@ class ScreenControl(private val context: Context) {
         /** Botones que mandan, compran, pagan o borran algo: piden confirmación. */
         val RISKY = Regex(
             "\\b(enviar|envialo|send|comprar|compra|pagar|pago|confirmar|finalizar|publicar|" +
-                "eliminar|borrar|transferir|suscribirme|suscribir|buy|pay|delete|post|checkout)\\b"
+                "eliminar|borrar|transferir|transferencia|suscribirme|suscribir|pedir|hacer pedido|" +
+                "realizar pedido|reservar|donar|llamar|solicitar|contratar|retirar|depositar|apostar|" +
+                "buy|pay|delete|post|checkout|purchase|place order|book|call|subscribe|transfer)\\b"
         )
+        private val SEARCH = Regex("\\b(buscar|busca|buscador|search|lupa|query|explorar)")
+
+        /** Si tocar algo que dice [label] manda, compra, borra o llama (pide el "sí"). */
+        fun isRisky(label: String): Boolean = RISKY.containsMatchIn(normalizeText(label))
+
+        /** Si el texto de un campo (nombre, pista, id) es de un buscador. */
+        fun looksLikeSearch(text: String): Boolean = SEARCH.containsMatchIn(normalizeText(text))
+
+        /** "btnSend" o "send_button" → "btn send", "send button". */
+        fun splitId(id: String): String =
+            id.replace(Regex("([a-z0-9])([A-Z])"), "$1 $2").replace('_', ' ').trim()
+
+        private fun normalizeText(text: String): String =
+            Normalizer.normalize(text.lowercase(Locale("es")), Normalizer.Form.NFD)
+                .replace(Regex("\\p{Mn}+"), "")
     }
 }

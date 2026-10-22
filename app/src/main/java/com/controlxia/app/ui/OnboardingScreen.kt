@@ -188,9 +188,9 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             add(PermStep(
                 label = "FABRICANTE / ${PermissionManager.oemName().uppercase()}",
                 title = "Tu ${PermissionManager.oemName()} tiene su propio ahorro.",
-                description = "Algunos fabricantes matan las apps en segundo plano por su " +
-                    "cuenta. Activá el inicio automático para ControlXIA en la pantalla " +
-                    "que se abre. Este paso no se puede verificar automáticamente.",
+                description = "Algunos fabricantes cierran las apps en segundo plano por su " +
+                    "cuenta. Este paso no se puede verificar automáticamente:\n" +
+                    PermissionManager.oemSteps().mapIndexed { i, step -> "${i + 1}. $step" }.joinToString("\n"),
                 granted = null,
                 actionLabel = "Abrir ajustes de ${PermissionManager.oemName()}",
                 action = {

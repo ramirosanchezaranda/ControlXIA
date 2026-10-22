@@ -6,6 +6,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -120,9 +123,13 @@ object OwnAlarms {
             .build()
         // El sonido se repite hasta que se apaga (como un despertador).
         notification.flags = notification.flags or android.app.Notification.FLAG_INSISTENT
-        if (PermissionManager.hasPostNotifications(context)) {
-            runCatching { NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification) }
-        }
+        val notified = PermissionManager.hasPostNotifications(context) &&
+            runCatching { NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification) }.isSuccess
+        // Sin permiso de notificaciones o con el canal "Alarmas" silenciado, la
+        // notificación no suena: el sonido lo pone la app (como el Reloj).
+        if (!notified || !channelRings(context)) playSound(context)
+        // Que no quede sonando para siempre si nadie la apaga.
+        scheduleTimeout(context, alarm.id)
         // Si Android no deja la pantalla completa (Android 14 a veces), igual se intenta abrirla.
         runCatching { context.startActivity(Intent(context, AlarmRingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
@@ -131,6 +138,8 @@ object OwnAlarms {
     fun stop(context: Context): Boolean {
         val was = _ringing.value != null
         _ringing.value = null
+        stopSound()
+        alarmManager(context).cancel(timeoutPending(context, 0))
         context.getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
         if (was) {
             AgentLog.add("ALARMA detenida")
@@ -165,6 +174,60 @@ object OwnAlarms {
         }.onFailure {
             manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.triggerAt, fire)
         }
+    }
+
+    /** Pasaron [RING_MAX_MS] sonando sin que nadie la apague: se apaga sola (lo llama [AlarmReceiver]). */
+    fun timedOut(context: Context, id: Int) {
+        if (_ringing.value?.id != id) return
+        AgentLog.add("ALARMA #$id se apagó sola después de ${RING_MAX_MS / 60_000} minutos")
+        stop(context)
+    }
+
+    private fun scheduleTimeout(context: Context, id: Int) {
+        runCatching {
+            alarmManager(context).setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + RING_MAX_MS, timeoutPending(context, id),
+            )
+        }
+    }
+
+    // Un solo aviso de "se pasó el tiempo" a la vez: el id va en el extra.
+    private fun timeoutPending(context: Context, id: Int): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, TIMEOUT_REQUEST,
+            Intent(context, AlarmReceiver::class.java).setAction(AlarmReceiver.ACTION_TIMEOUT).putExtra(AlarmReceiver.EXTRA_ID, id),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+    /** Si el canal de alarmas va a sonar (no lo silenciaron en los ajustes del teléfono). */
+    private fun channelRings(context: Context): Boolean {
+        val channel = context.getSystemService(NotificationManager::class.java)
+            ?.getNotificationChannel(XiaApplication.CHANNEL_ALARMS) ?: return false
+        return channel.importance >= NotificationManager.IMPORTANCE_DEFAULT && channel.sound != null
+    }
+
+    private var ringtone: Ringtone? = null
+
+    private fun playSound(context: Context) {
+        stopSound()
+        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE) ?: return
+        ringtone = runCatching {
+            RingtoneManager.getRingtone(context.applicationContext, uri)?.apply {
+                audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = true
+                play()
+            }
+        }.getOrNull()
+        AgentLog.add("ALARMA suena desde la app (la notificación no podía sonar)")
+    }
+
+    private fun stopSound() {
+        runCatching { ringtone?.stop() }
+        ringtone = null
     }
 
     private fun firePending(context: Context, id: Int): PendingIntent =
@@ -203,6 +266,7 @@ object OwnAlarms {
     private const val NOTIFICATION_ID = 1010
     private const val SNOOZE_MIN = 10
     private const val RING_MAX_MS = 10 * 60_000L
+    private const val TIMEOUT_REQUEST = 7_001
     /** Las que vencieron hace menos de esto mientras el teléfono estaba apagado, igual suenan. */
     private const val LATE_MS = 5 * 60_000L
 }

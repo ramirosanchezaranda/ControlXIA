@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
+import android.view.inputmethod.InputMethodManager
 import com.controlxia.app.actions.ScreenNumbers
 
 /**
@@ -20,9 +21,16 @@ import com.controlxia.app.actions.ScreenNumbers
  */
 class XiaAccessibilityService : AccessibilityService() {
 
+    /** Ventanas que no son "la app de adelante": el teclado, la barra del sistema, la burbuja propia. */
+    private var notApps: Set<String> = emptySet()
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        val keyboards = runCatching {
+            getSystemService(InputMethodManager::class.java)?.enabledInputMethodList.orEmpty().map { it.packageName }
+        }.getOrDefault(emptyList())
+        notApps = setOf(packageName, "com.android.systemui") + keyboards
     }
 
     /** Con los números a la vista, se actualizan cuando cambia la pantalla. */
@@ -31,7 +39,7 @@ class XiaAccessibilityService : AccessibilityService() {
         // Qué app está adelante, sin tener que leer la pantalla (lo usa la cámara de los gestos).
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val pkg = event.packageName?.toString()
-            if (pkg != null && pkg != foregroundPackage) {
+            if (pkg != null && pkg != foregroundPackage && pkg !in notApps) {
                 foregroundPackage = pkg
                 foregroundListeners.forEach { it(pkg) }
             }

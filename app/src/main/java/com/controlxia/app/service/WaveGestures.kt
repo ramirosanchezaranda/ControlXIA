@@ -3,6 +3,7 @@ package com.controlxia.app.service
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -124,7 +125,8 @@ class WaveGestures(
                     XiaAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)
                 }
             }, POCKET_CONFIRM_MS)
-            power.isOn() && playingVideo() -> {
+            // En horizontal la mano que sostiene el teléfono tapa el sensor sin querer.
+            power.isOn() && playingVideo() && !landscape() -> {
                 AgentLog.add("SALUDOS tapaste el teléfono: pauso el video")
                 feedback.vibrate(40)
                 DeviceControl(context).media(DeviceControl.Media.PAUSE)
@@ -158,6 +160,9 @@ class WaveGestures(
 
     private fun PowerManager?.isOn(): Boolean = this?.isInteractive == true
 
+    private fun landscape(): Boolean =
+        context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     companion object {
         /** Más cerca que esto es "tapado" en los sensores que miden distancia. */
         private const val NEAR_CM = 5f
@@ -171,6 +176,14 @@ class WaveGestures(
             val distance = event.values.firstOrNull() ?: return false
             return distance < minOf(event.sensor.maximumRange, NEAR_CM)
         }
+
+        /**
+         * Si el sensor despierta al teléfono con la pantalla apagada. Los
+         * "virtuales" (algunos Xiaomi, OPPO, Samsung) no: ahí el saludo con la
+         * pantalla apagada puede no andar.
+         */
+        fun wakesUp(context: Context): Boolean =
+            context.getSystemService(SensorManager::class.java)?.getDefaultSensor(Sensor.TYPE_PROXIMITY)?.isWakeUpSensor == true
 
         /** Si el teléfono tiene sensor de proximidad. */
         fun available(context: Context): Boolean =

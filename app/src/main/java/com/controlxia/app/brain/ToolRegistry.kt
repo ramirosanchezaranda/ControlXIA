@@ -13,6 +13,7 @@ import com.controlxia.app.actions.MessageStore
 import com.controlxia.app.actions.NotificationReader
 import com.controlxia.app.actions.PhoneCalls
 import com.controlxia.app.actions.ScreenControl
+import com.controlxia.app.actions.PrivateGate
 import com.controlxia.app.actions.UnlockGate
 import com.controlxia.app.actions.WhatsAppUi
 import kotlinx.coroutines.Dispatchers
@@ -287,6 +288,10 @@ class ToolRegistry(private val context: Context) {
         if (name in NEEDS_SCREEN && !UnlockGate.unlock(context, unlockReason(name, args))) {
             return ToolOutcome(UnlockGate.NOT_UNLOCKED, terminal = true)
         }
+        // Lo privado (mensajes, notificaciones, llamadas) con el teléfono bloqueado: según el ajuste.
+        PRIVATE_TOOLS[name]?.let { why ->
+            PrivateGate.check(context, why)?.let { return ToolOutcome(it, terminal = true) }
+        }
         return run(name, args)
     }
 
@@ -319,14 +324,7 @@ class ToolRegistry(private val context: Context) {
         "app_tap" -> ToolOutcome(appUi.tap(args.strArg("app"), args.strArg("label")), terminal = true)
         "screen_read" -> ToolOutcome(screen.read())
         "screen_tap" -> tap(args)
-        "screen_type" -> {
-            val id = args.intArgOrNull("element")
-            if (id == null) {
-                ToolOutcome("Falta el número de campo.")
-            } else {
-                ToolOutcome(screen.type(id, args.strArg("text"), args.boolArg("submit")))
-            }
-        }
+        "screen_type" -> type(args)
         "screen_scroll" -> ToolOutcome(screen.scroll(args.strArgOrNull("direction") ?: "down"))
         "screen_back" -> ToolOutcome(screen.back())
         "read_messages" -> readMessages(args)
@@ -434,10 +432,36 @@ class ToolRegistry(private val context: Context) {
         )
     }
 
+    /**
+     * Escribir es libre; apretar Enter fuera de un buscador puede mandar un
+     * mensaje (en muchos chats Enter envía), así que pide el "sí".
+     */
+    private suspend fun type(args: JsonObject): ToolOutcome {
+        val id = args.intArgOrNull("element") ?: return ToolOutcome("Falta el número de campo.")
+        val text = args.strArg("text")
+        val submit = args.boolArg("submit")
+        if (!submit || screen.isSearchField(id)) return ToolOutcome(screen.type(id, text, submit))
+        return ToolOutcome(
+            text = "Necesito la confirmación del usuario antes de enviar.",
+            pending = PendingAction(
+                question = "¿Escribo «${text.take(80)}» y lo envío?",
+                progress = "Enviando…",
+                execute = { screen.type(id, text, true).lineSequence().first() },
+            ),
+        )
+    }
+
     private suspend fun notificationsTool(args: JsonObject): ToolOutcome {
         val filter = args.strArgOrNull("filter")?.takeIf { it.isNotBlank() }
         return when (args.strArg("action")) {
-            "clear" -> ToolOutcome(notifications.clear(), terminal = true)
+            "clear" -> ToolOutcome(
+                text = "Necesito la confirmación del usuario antes de borrar.",
+                pending = PendingAction(
+                    question = "¿Borro todas las notificaciones?",
+                    progress = "Borrando…",
+                    execute = { notifications.clear() },
+                ),
+            )
             "open" -> {
                 if (!UnlockGate.unlock(context, "para abrir la notificación")) {
                     ToolOutcome(UnlockGate.NOT_UNLOCKED, terminal = true)
@@ -696,6 +720,16 @@ private val CAMERA_ACTIONS = mapOf(
 )
 
 /** Herramientas que manejan la pantalla: con el teléfono bloqueado, primero se pide desbloquear. */
+/** Lo que con el teléfono bloqueado pasa por [PrivateGate], y para qué se desbloquea. */
+private val PRIVATE_TOOLS = mapOf(
+    "read_messages" to "para leerte los mensajes",
+    "notifications" to "para las notificaciones",
+    "reply_to_message" to "para responder",
+    "send_message" to "para mandar el mensaje",
+    "send_audio" to "para mandar el audio",
+    "call" to "para llamar",
+)
+
 private val NEEDS_SCREEN = setOf(
     "open_app", "search_in_app", "open_app_section", "whatsapp_open_chat", "app_search", "app_tap",
     "screen_read", "screen_tap", "screen_type", "screen_scroll", "screen_back",

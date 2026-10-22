@@ -1,6 +1,7 @@
 package com.controlxia.app.brain
 
 import android.content.Context
+import com.controlxia.app.actions.PrivateGate
 import com.controlxia.app.actions.MessageStore
 import com.controlxia.app.actions.ScreenNumbers
 import com.controlxia.app.diagnostics.AgentLog
@@ -156,7 +157,8 @@ class CommandProcessor(context: Context) {
             LocalSkills.JustTheName -> Reply("¿Sí? ¿Qué necesitás?", expectsReply = true)
             LocalSkills.Repeat -> Reply(lastSpoken ?: "Todavía no dije nada.")
             is LocalSkills.Answer -> Reply(skill.text)
-            is LocalSkills.ReadMessages -> Reply(spokenMessages(skill))
+            is LocalSkills.ReadMessages ->
+                Reply(PrivateGate.check(appContext, "para leerte los mensajes") ?: spokenMessages(skill))
             is LocalSkills.ReplyLast -> {
                 val message = MessageStore.recent(null, skill.from, 1).firstOrNull()
                     ?: return Reply("No tengo mensajes para responder.")

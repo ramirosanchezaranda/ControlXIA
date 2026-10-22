@@ -13,6 +13,7 @@ class AlarmReceiver : BroadcastReceiver() {
             ACTION_FIRE -> OwnAlarms.ring(context, intent.getIntExtra(EXTRA_ID, 0))
             ACTION_STOP -> OwnAlarms.stop(context)
             ACTION_SNOOZE -> OwnAlarms.snooze(context)
+            ACTION_TIMEOUT -> OwnAlarms.timedOut(context, intent.getIntExtra(EXTRA_ID, 0))
         }
     }
 
@@ -20,6 +21,7 @@ class AlarmReceiver : BroadcastReceiver() {
         const val ACTION_FIRE = "com.controlxia.app.action.ALARM_FIRE"
         const val ACTION_STOP = "com.controlxia.app.action.ALARM_STOP"
         const val ACTION_SNOOZE = "com.controlxia.app.action.ALARM_SNOOZE"
+        const val ACTION_TIMEOUT = "com.controlxia.app.action.ALARM_TIMEOUT"
         const val EXTRA_ID = "id"
     }
 }

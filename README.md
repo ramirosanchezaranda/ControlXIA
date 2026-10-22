@@ -31,7 +31,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Modelos recomendados** al elegir proveedor y modelo, con una nota de para qué sirve cada uno (gratis: Groq gpt-oss-120b o Gemini 3.8 Flash; pago y eficiente: Claude Haiku 5.5 o GPT-6 Luna).
 - ✅ **WhatsApp por nombre**: abre chats y grupos buscándolos en WhatsApp, aunque el reconocimiento de voz entienda mal el nombre ("fulgo 2" → «Fútbol 2 ⚽»), y confirma con el nombre real antes de enviar.
 - ✅ **Hablarle de corrido**: tono en vez de "Te escucho", 2 s de margen para las pausas, usa lo último que entendió si el reconocedor corta, y modo conversación de hasta 60 s entre pedidos.
-- ✅ **Bloqueado**: lee y responde mensajes y notificaciones, llama, manda SMS y pone alarmas sin desbloquear; para lo que necesita la pantalla pide la huella y sigue solo.
+- ✅ **Bloqueado**: alarmas, música, linterna y más sin desbloquear; para leer mensajes, mandar o llamar pide la huella (configurable) y para lo que necesita la pantalla también, y sigue solo.
 - ✅ **Notificaciones**: "leeme las notificaciones" (todas, agrupadas por app), "las de WhatsApp", "abrí la notificación de Gmail", "borrá las notificaciones".
 - ✅ **Cualquier app sin el modelo**: "buscá pizza en PedidosYa" (toca la lupa de la app y busca), "en Spotify tocá Biblioteca", mensajes por Telegram, Messenger, Instagram o Signal.
 - ✅ **Interfaz estilo Apple / Liquid Glass**: tema claro y oscuro con los colores de iOS, vidrio esmerilado, fondo de luces que se mueven, la esfera del asistente (crece con tu voz, gira al pensar), onda de voz como Siri, pestañas flotantes de vidrio (Inicio, Explorar, Actividad, Ajustes), pedir escribiendo o tocando la esfera, animaciones con resortes y diseño adaptable a teléfonos chicos, horizontal y tablets. Ver [docs/DESIGN.md](docs/DESIGN.md).
@@ -40,7 +40,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Gestos con una mano** mirando reels y videos: ☝️ siguiente, 👇 anterior, 👉 foto/historia, ✋ pausa, 👍 me gusta, ✌️ hablarle; 🙌 pausa y pregunta.
 - ✅ **Apariencia a elección**: automático, claro u oscuro, y tres paletas (Aura, Studio, Toscana) que cambian también la esfera.
 - ✅ **Gasta menos batería**: el reconocedor del nombre no trabaja en silencio, la escucha se pausa con la pantalla apagada si la batería está baja o en ahorro (configurable), la cámara de los gestos solo se prende con video o música en pantalla y a pocos cuadros por segundo, y las animaciones se redibujan menos y se quedan quietas con el ahorro de batería. Ver [docs/WAKE_WORD.md](docs/WAKE_WORD.md#batería).
-- ⏳ Próximo: llamadas, recordatorios, activación con botón home (rol de asistente).
+- ⏳ Próximo: tareas de varios pasos sin el modelo, reconocer tu voz con contraseña, guiño = «sí», recordatorios, activación con botón home (rol de asistente).
 
 ## Compilar
 
