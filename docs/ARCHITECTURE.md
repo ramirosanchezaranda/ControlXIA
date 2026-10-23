@@ -37,6 +37,7 @@ Los pasos 1 a 3 no usan internet; solo lo que no entienden va al modelo, y el mo
 | `actions/` | Hacer cosas en el teléfono: abrir apps, tocar y escribir por accesibilidad (`Nodes`, `Gestures`, `ScreenControl`, `ScreenNumbers`, `AppUi`, `ChatUi`, `WhatsAppUi`), capturas (`Screenshots`), productos en pantalla (`ScreenItems`), notas (`NotesStore`), lo privado bloqueado (`PrivateGate`), alarmas, llamadas, cámara, mensajes. | Sí |
 | `voice/` | Escuchar y hablar: `SpeechGate` y `WakePhraseDetector` (sin Android), el motor Vosk, el reconocimiento del pedido, `Speaker` (voz), `Feedback` (tono y vibración), `HandSigns`, `HandMotion`, `FaceSigns` y `WaveDetector` (señas, deslizar en el aire, guiño/cabeza y saludos, sin Android), `HandAnalyzer` (los modelos de MediaPipe, compartido por el servicio y la prueba), `VoiceId` y `VoicePrint` (tu voz con contraseña), ajustes. | En parte |
 | `service/` | Lo que corre en segundo plano: `WakeWordService`, `HandsWatchService` (cámara para las señas), `WaveGestures` (saludos con el sensor de proximidad), `XiaAccessibilityService`, el lector de notificaciones, `ListeningPolicy` (cuándo escuchar), `ServiceStatus` (estado para la interfaz) y los receptores (arranque, alarmas, vigilancia). | Sí |
+| `permissions/` | Qué permisos hay y cómo pedirlos (`PermissionManager`, con los pasos de cada marca) y si el control de apps anda de verdad (`A11yHealth`: apagado, trabado, aviso y arreglo solo). | Sí |
 | `ui/` | Compose: pantallas, tema (`theme/`) y componentes (`components/`). Solo lee estado y llama al servicio. | Sí |
 | `diagnostics/` | `AgentLog`: el registro paso a paso que se ve en Actividad. | No |
 
@@ -46,6 +47,7 @@ Los pasos 1 a 3 no usan internet; solo lo que no entienden va al modelo, y el mo
 - **Estado por flujos, no consultando.** El servicio publica su estado en `ServiceStatus.state` (un `StateFlow`) y el registro avisa con `AgentLog.changes`; la interfaz los observa con `collectAsState()` y se redibuja solo cuando algo cambia. Nada de bucles que pregunten cada segundo.
 - **Eventos, no sondeos.** La cámara de las señas se prende y apaga por avisos (suena audio, cambia la app de adelante, se apaga la pantalla) en vez de mirar cada tanto; la escucha se pausa o reanuda por avisos de pantalla, cargador y batería (`ListeningPolicy`).
 - **Una sola copia de cada cosa.** Tocar, escribir y esperar elementos en otras apps está en `actions/Nodes`; la voz en `voice/Speaker`; el tono y la vibración en `voice/Feedback`.
+- **Que se vea y se oiga.** El tema pone el color del texto por defecto (claro en oscuro), así ningún texto sale negro sobre el fondo; los estados no son solo un color (TalkBack dice «Listo» o «Falta») y las pestañas y opciones avisan cuál está elegida.
 - **Lo que tiene consecuencias lo confirma el código**, no el modelo (ver `Confirmation` y [AGENT.md](AGENT.md)).
 
 ## Batería

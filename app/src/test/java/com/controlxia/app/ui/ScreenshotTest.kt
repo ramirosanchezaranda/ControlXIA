@@ -106,6 +106,21 @@ class ScreenshotTest {
         // Con "Mi voz" elegido, para ver la inscripción.
         com.controlxia.app.voice.WakeWordSettings(app).lockedAccess = com.controlxia.app.voice.LockedAccess.VOICE
         shoot("listening-settings", dark = false) { WakeWordSettingsScreen(onBack = {}) }
+        // En oscuro, el texto que no dice su color tiene que verse claro.
+        shoot("listening-settings-dark", dark = true) { OnBackground { WakeWordSettingsScreen(onBack = {}) } }
+    }
+
+    @Test
+    @Config(qualifiers = TALL)
+    fun permissions() = shoot("permissions-dark", dark = true) { OnBackground { PermissionsScreen(onBack = {}) } }
+
+    /** Una pantalla interna sobre el fondo de luces, como se ve en la app. */
+    @androidx.compose.runtime.Composable
+    private fun OnBackground(content: @androidx.compose.runtime.Composable () -> Unit) {
+        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier) {
+            com.controlxia.app.ui.components.AuraBackground()
+            content()
+        }
     }
 
     private fun shootTabs(prefix: String, dark: Boolean) {

@@ -14,6 +14,8 @@ class XiaApplication : Application() {
         com.controlxia.app.ui.theme.ThemeSettings.init(this)
         com.controlxia.app.service.ServicePrefs.load(this)
         createNotificationChannels()
+        // Si el control de apps anduvo y quedó apagado o trabado (el sistema cerró la app), avisar o arreglarlo.
+        com.controlxia.app.permissions.A11yHealth.check(this)
     }
 
     private fun createNotificationChannels() {

@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import com.controlxia.app.BuildConfig
+import com.controlxia.app.permissions.A11yHealth
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.HandsWatchService
 import com.controlxia.app.service.WakeWordService
@@ -29,7 +30,7 @@ object GestureDiagnostics {
         val lines = buildList {
             add("ControlXIA ${BuildConfig.VERSION_NAME} · ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             add("Escucha: ${on(WakeWordService.running)} · Batería sin restricción: ${yes(PermissionManager.isIgnoringBatteryOptimizations(context))} · Ahorro de energía: ${yes(power?.isPowerSaveMode == true)}")
-            add("Control de apps: activado ${yes(XiaAccessibilityService.isEnabled(context))}, conectado ${yes(XiaAccessibilityService.instance != null)} · App adelante: ${XiaAccessibilityService.foregroundPackage ?: "—"}")
+            add("Control de apps: activado ${yes(XiaAccessibilityService.isEnabled(context))}, conectado ${yes(XiaAccessibilityService.instance != null)}, anduvo antes ${yes(A11yHealth.wasOn(context))}, se prende solo ${yes(A11yHealth.canRepair(context))} · App adelante: ${XiaAccessibilityService.foregroundPackage ?: "—"}")
             add("Señas con la cámara: ${on(settings.handsPause)} · servicio ${on(HandsWatchService.running)} · permiso de cámara ${yes(PermissionManager.hasCamera(context))}")
             add("Modelos: gestos ${yes(GestureModel.isInstalled(context))}, cara ${yes(GestureModel.isFaceInstalled(context))} · Señas con una mano ${on(settings.handGestures)} · Con cualquier app ${on(settings.handsAlways)} · Sí/no con gestos ${on(settings.confirmGestures)}")
             add("Cámara: ${live.reason.ifBlank { "—" }}")
@@ -39,7 +40,7 @@ object GestureDiagnostics {
             add("")
             add("Registro (gestos):")
             AgentLog.recent(150)
-                .filter { e -> listOf("MANOS", "SALUDOS", "GESTO").any { e.text.startsWith(it) } }
+                .filter { e -> listOf("MANOS", "SALUDOS", "GESTO", "ACCESIBILIDAD").any { e.text.startsWith(it) } }
                 .takeLast(40)
                 .forEach { add("- ${ago(it.time)} ${it.text}") }
         }

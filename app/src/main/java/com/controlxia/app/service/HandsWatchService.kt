@@ -38,6 +38,7 @@ import com.controlxia.app.actions.DeviceControl
 import com.controlxia.app.actions.Gestures
 import com.controlxia.app.actions.MediaApps
 import com.controlxia.app.diagnostics.AgentLog
+import com.controlxia.app.permissions.A11yHealth
 import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.ConfirmState
 import com.controlxia.app.voice.FaceSigns
@@ -408,8 +409,8 @@ class HandsWatchService : LifecycleService() {
         }
         val service = XiaAccessibilityService.instance
         if (service == null) {
-            AgentLog.add("MANOS deslizar ${swipe.name}, pero el control de apps está apagado")
-            show("Para deslizar necesito el control de apps (Accesibilidad)")
+            AgentLog.add("MANOS deslizar ${swipe.name}, pero ${A11yHealth.problem(A11yHealth.state(this))}")
+            a11yMissing()
             return
         }
         val ok = when (swipe) {
@@ -446,9 +447,26 @@ class HandsWatchService : LifecycleService() {
         }
     }
 
+    /** Sin el control de apps no hay gestos: lo prende solo si puede, o dice qué pasa y avisa. */
+    private fun a11yMissing() {
+        val state = A11yHealth.state(this)
+        if (A11yHealth.repair(this, state)) {
+            show("El control de apps se había apagado: lo vuelvo a prender")
+            return
+        }
+        show(
+            if (state == A11yHealth.State.NOT_RUNNING) {
+                "El control de apps no anda: abrí ControlXIA para arreglarlo"
+            } else {
+                "Para deslizar necesito el control de apps (Accesibilidad)"
+            },
+        )
+        A11yHealth.check(this, delayMs = 0)
+    }
+
     /** "Me gusta": dos toques en el medio de la pantalla (reels, TikTok, Shorts). */
     private fun like() {
-        val service = XiaAccessibilityService.instance ?: return
+        val service = XiaAccessibilityService.instance ?: return a11yMissing()
         val metrics = resources.displayMetrics
         Gestures.doubleTapAt(service, metrics.widthPixels / 2f, metrics.heightPixels * 0.45f)
     }

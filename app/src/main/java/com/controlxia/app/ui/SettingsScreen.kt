@@ -3,6 +3,9 @@ package com.controlxia.app.ui
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +21,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
@@ -41,38 +46,34 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.brain.LlmSettings
+import com.controlxia.app.permissions.A11yHealth
 import com.controlxia.app.permissions.PermissionManager
-import com.controlxia.app.service.XiaAccessibilityService
 import com.controlxia.app.service.XiaNotificationListener
 import com.controlxia.app.ui.components.AuraOrb
 import com.controlxia.app.ui.components.Hairline
 import com.controlxia.app.ui.components.IconTile
 import com.controlxia.app.ui.components.LargeTitle
 import com.controlxia.app.ui.components.SectionLabel
+import com.controlxia.app.ui.components.SegmentedControl
 import com.controlxia.app.ui.components.SettingsRow
 import com.controlxia.app.ui.components.SmallPillButton
 import com.controlxia.app.ui.components.TechTopBar
 import com.controlxia.app.ui.components.glass
 import com.controlxia.app.ui.components.rememberResumeTick
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.draw.clip
-import com.controlxia.app.ui.components.SegmentedControl
 import com.controlxia.app.ui.theme.Aura
 import com.controlxia.app.ui.theme.Palette
 import com.controlxia.app.ui.theme.ThemeMode
@@ -274,7 +275,11 @@ fun PermissionsScreen(onBack: () -> Unit) {
     val notifOk = remember(tick, bump) { PermissionManager.hasPostNotifications(context) }
     val batteryOk = remember(tick, bump) { PermissionManager.isIgnoringBatteryOptimizations(context) }
     val overlayOk = remember(tick, bump) { PermissionManager.canDrawOverlays(context) }
-    val a11yOk = remember(tick, bump) { XiaAccessibilityService.isEnabled(context) }
+    val a11yConnected by A11yHealth.connected.collectAsState()
+    val a11yState = remember(tick, bump, a11yConnected) { A11yHealth.state(context) }
+    val a11yOk = a11yState == A11yHealth.State.OK
+    val a11yWasOn = remember(tick, bump, a11yConnected) { A11yHealth.wasOn(context) }
+    val canRepair = remember(tick, bump) { A11yHealth.canRepair(context) }
     val listenerOk = remember(tick, bump) { XiaNotificationListener.isEnabled(context) }
     val phoneOk = remember(tick, bump) { PermissionManager.hasPhonePermissions(context) }
     val oemNeeded = remember { PermissionManager.needsOemSetup() }
@@ -320,8 +325,19 @@ fun PermissionsScreen(onBack: () -> Unit) {
                     open(PermissionManager.overlayPermissionIntent(context))
                 }
                 Divider()
-                PermissionRow(Icons.Rounded.Accessibility, colors.indigo, "Control de apps", "Tocar, escribir y leer la pantalla por vos", a11yOk, "Activar") {
-                    open(PermissionManager.accessibilitySettingsIntent())
+                PermissionRow(
+                    Icons.Rounded.Accessibility,
+                    colors.indigo,
+                    "Control de apps",
+                    when {
+                        a11yState == A11yHealth.State.NOT_RUNNING -> "Está activado pero no anda: apagalo y prendelo"
+                        a11yState == A11yHealth.State.OFF && a11yWasOn -> "Se apagó: el sistema cerró la app"
+                        else -> "Tocar, deslizar, escribir y leer la pantalla por vos (y los gestos)"
+                    },
+                    a11yOk,
+                    if (a11yState == A11yHealth.State.NOT_RUNNING) "Arreglar" else "Activar",
+                ) {
+                    if (A11yHealth.repair(context, a11yState)) bump++ else A11yHealth.openSettings(context)
                 }
                 Divider()
                 PermissionRow(Icons.Rounded.NotificationsActive, colors.pink, "Leer notificaciones", "Leerte y responder mensajes", listenerOk, "Activar") {
@@ -346,7 +362,8 @@ fun PermissionsScreen(onBack: () -> Unit) {
                     }
                 }
             }
-            if (!overlayOk || !a11yOk || !listenerOk) {
+            if (!a11yOk || oemNeeded) A11yHelp(a11yState, canRepair, onOpenAppInfo = { open(PermissionManager.appDetailsIntent(context)) })
+            if (!overlayOk || !listenerOk) {
                 Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
                     Text("¿Dice «Ajuste restringido»?", style = MaterialTheme.typography.titleSmall, color = colors.label)
                     Text(
@@ -359,6 +376,69 @@ fun PermissionsScreen(onBack: () -> Unit) {
                 }
             }
             Spacer(Modifier.size(24.dp))
+        }
+    }
+}
+
+/**
+ * Qué hacer cuando el control de apps no anda (se apagó o quedó trabado), y
+ * cómo dejarlo para que se prenda solo.
+ */
+@Composable
+private fun A11yHelp(state: A11yHealth.State, canRepair: Boolean, onOpenAppInfo: () -> Unit) {
+    val context = LocalContext.current
+    val colors = Aura.colors
+    Column(Modifier.fillMaxWidth().glass().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (state != A11yHealth.State.OK) {
+            Text(
+                if (state == A11yHealth.State.NOT_RUNNING) "El control de apps no anda" else "Para prender el control de apps",
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.label,
+            )
+            A11yHealth.steps(context, state).forEachIndexed { i, step ->
+                Text("${i + 1}. $step", style = MaterialTheme.typography.bodySmall, color = colors.secondaryLabel)
+            }
+            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SmallPillButton(
+                    if (state == A11yHealth.State.NOT_RUNNING) "Arreglar" else "Prender",
+                    onClick = { A11yHealth.openSettings(context) },
+                )
+                SmallPillButton("Info de la app", onClick = onOpenAppInfo)
+            }
+        }
+        Text(
+            "Que se prenda solo",
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.label,
+            modifier = Modifier.padding(top = if (state != A11yHealth.State.OK) 10.dp else 0.dp),
+        )
+        if (canRepair) {
+            Text(
+                "✓ Listo: si el sistema lo apaga o se traba, lo vuelvo a prender yo.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.green,
+            )
+        } else {
+            Text(
+                "Opcional. Con la PC y el cable (depuración USB prendida), una sola vez:",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondaryLabel,
+            )
+            Text(
+                A11yHealth.ADB_GRANT,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                color = colors.label,
+            )
+            Text(
+                "Desde ahí, si el sistema apaga el control de apps, lo vuelvo a prender solo.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondaryLabel,
+            )
+            SmallPillButton("Copiar comando", onClick = {
+                val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("adb", A11yHealth.ADB_GRANT))
+                android.widget.Toast.makeText(context, "Copiado", android.widget.Toast.LENGTH_SHORT).show()
+            })
         }
     }
 }

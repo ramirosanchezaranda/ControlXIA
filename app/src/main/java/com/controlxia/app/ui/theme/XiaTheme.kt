@@ -2,6 +2,7 @@ package com.controlxia.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -10,9 +11,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -337,7 +338,9 @@ fun XiaTheme(forceDark: Boolean? = null, content: @Composable () -> Unit) {
             colorScheme = scheme,
             typography = AuraTypography,
             shapes = AuraShapes,
-            content = content,
-        )
+        ) {
+            // Sin esto, el texto que no dice su color sale negro (también en oscuro).
+            CompositionLocalProvider(LocalContentColor provides aura.label, content = content)
+        }
     }
 }

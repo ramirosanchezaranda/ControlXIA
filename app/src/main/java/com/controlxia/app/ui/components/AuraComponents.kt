@@ -45,6 +45,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -297,7 +300,8 @@ fun GlassTabBar(
                     Modifier
                         .weight(1f)
                         .fillMaxSize()
-                        .pressable(pressedScale = 0.92f, onClick = { onSelect(index) }),
+                        .pressable(pressedScale = 0.92f, role = Role.Tab, onClick = { onSelect(index) })
+                        .semantics { this.selected = active },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
@@ -337,7 +341,8 @@ fun GlassTabRail(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(26.dp))
                     .background(bg)
-                    .pressable(pressedScale = 0.92f, onClick = { onSelect(index) })
+                    .pressable(pressedScale = 0.92f, role = Role.Tab, onClick = { onSelect(index) })
+                    .semantics { this.selected = active }
                     .padding(vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -443,7 +448,11 @@ fun SegmentedControl(
         Row(Modifier.fillMaxSize()) {
             options.forEachIndexed { index, option ->
                 Box(
-                    Modifier.weight(1f).fillMaxSize().pressable(pressedScale = 0.95f, onClick = { onSelect(index) }),
+                    Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .pressable(pressedScale = 0.95f, role = Role.Tab, onClick = { onSelect(index) })
+                        .semantics { this.selected = index == selected },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

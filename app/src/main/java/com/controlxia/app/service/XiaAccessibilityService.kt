@@ -8,6 +8,8 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import com.controlxia.app.actions.ScreenNumbers
+import com.controlxia.app.diagnostics.AgentLog
+import com.controlxia.app.permissions.A11yHealth
 
 /**
  * Servicio de accesibilidad: le da al asistente "ojos y manos" dentro de las
@@ -31,34 +33,49 @@ class XiaAccessibilityService : AccessibilityService() {
             getSystemService(InputMethodManager::class.java)?.enabledInputMethodList.orEmpty().map { it.packageName }
         }.getOrDefault(emptyList())
         notApps = setOf(packageName, "com.android.systemui") + keyboards
+        A11yHealth.onConnected(this)
+        AgentLog.add("ACCESIBILIDAD conectada")
     }
 
-    /** Con los números a la vista, se actualizan cuando cambia la pantalla. */
+    /**
+     * Con los números a la vista, se actualizan cuando cambia la pantalla.
+     * Nada de acá puede tirar el servicio: si se cae, Android lo deja
+     * "activado" pero sin andar hasta que se apague y se prenda a mano.
+     */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        // Qué app está adelante, sin tener que leer la pantalla (lo usa la cámara de los gestos).
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val pkg = event.packageName?.toString()
-            if (pkg != null && pkg != foregroundPackage && pkg !in notApps) {
-                foregroundPackage = pkg
-                foregroundListeners.forEach { it(pkg) }
+        runCatching {
+            // Qué app está adelante, sin tener que leer la pantalla (lo usa la cámara de los gestos).
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                val pkg = event.packageName?.toString()
+                if (pkg != null && pkg != foregroundPackage && pkg !in notApps) {
+                    foregroundPackage = pkg
+                    foregroundListeners.forEach { listener -> runCatching { listener(pkg) } }
+                }
             }
-        }
-        if (event.packageName == packageName) return
-        ScreenNumbers.onScreenChanged()
+            if (event.packageName == packageName) return
+            ScreenNumbers.onScreenChanged()
+        }.onFailure { AgentLog.add("ACCESIBILIDAD error con un evento: ${it.message}") }
     }
 
     override fun onInterrupt() {}
 
     override fun onUnbind(intent: Intent?): Boolean {
-        ScreenNumbers.hide()
-        instance = null
+        runCatching { ScreenNumbers.hide() }
+        disconnected()
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
-        instance = null
+        disconnected()
         super.onDestroy()
+    }
+
+    private fun disconnected() {
+        if (instance !== this) return
+        instance = null
+        A11yHealth.onDisconnected()
+        AgentLog.add("ACCESIBILIDAD desconectada")
     }
 
     companion object {

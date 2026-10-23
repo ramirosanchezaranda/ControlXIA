@@ -27,6 +27,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Accessibility
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Notifications
@@ -34,7 +36,6 @@ import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shield
-import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.brain.LlmSettings
+import com.controlxia.app.permissions.A11yHealth
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.ServiceStatus
 import com.controlxia.app.service.WakeWordService
@@ -112,7 +114,14 @@ fun HomeScreen(
     val lastReply = service.lastReply
     val brainError = service.lastError
     var permissionsBump by remember { mutableIntStateOf(0) }
-    val missing = remember(tick, permissionsBump) { missingPermissions(context) }
+    // El control de apps anduvo y dejó de andar (el sistema cerró la app): se avisa aparte, en rojo.
+    val a11yConnected by A11yHealth.connected.collectAsState()
+    val a11yState = remember(tick, a11yConnected) { A11yHealth.state(context) }
+    val a11yWasOn = remember(tick, a11yConnected) { A11yHealth.wasOn(context) }
+    val a11yBroken = a11yState == A11yHealth.State.NOT_RUNNING || (a11yState == A11yHealth.State.OFF && a11yWasOn)
+    val missing = remember(tick, permissionsBump, a11yBroken) {
+        missingPermissions(context) - if (a11yBroken && a11yState == A11yHealth.State.OFF) 1 else 0
+    }
     val brainSummary = remember(tick) {
         val settings = LlmSettings(context)
         if (settings.activeConfig() == null) "Sin configurar" else settings.model(settings.activeProvider).ifBlank { settings.activeProvider.displayName }
@@ -258,6 +267,17 @@ fun HomeScreen(
             }
         }
         Column(Modifier.fillMaxWidth().glass().padding(horizontal = 18.dp, vertical = 4.dp).staggerReveal(6)) {
+            if (a11yBroken) {
+                SettingsRow(
+                    icon = Icons.Rounded.Accessibility,
+                    color = Aura.colors.red,
+                    title = A11yHealth.problem(a11yState).replaceFirstChar { it.uppercase() },
+                    subtitle = "Sin eso no andan los gestos ni los toques en otras apps. Tocá para arreglarlo.",
+                    badge = 1,
+                    onClick = { onOpen(Route.PERMISSIONS) },
+                )
+                Hairline(Modifier.padding(start = 44.dp))
+            }
             if (missing > 0) {
                 SettingsRow(
                     icon = Icons.Rounded.Shield,

@@ -191,7 +191,17 @@ fun StatusRow(
             Modifier.size(24.dp).clip(CircleShape).background(tint.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(15.dp))
+            // Para TalkBack: el estado no puede ser solo un color.
+            Icon(
+                icon,
+                contentDescription = when (ok) {
+                    true -> "Listo"
+                    false -> "Falta"
+                    null -> "Revisar"
+                },
+                tint = tint,
+                modifier = Modifier.size(15.dp),
+            )
         }
         Spacer(Modifier.width(12.dp))
         Text(

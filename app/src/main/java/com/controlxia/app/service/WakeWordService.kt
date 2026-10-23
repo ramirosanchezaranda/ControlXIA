@@ -27,6 +27,7 @@ import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.brain.Reply
 import com.controlxia.app.brain.StopWords
 import com.controlxia.app.diagnostics.AgentLog
+import com.controlxia.app.permissions.A11yHealth
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.ui.AssistantActivity
 import com.controlxia.app.ui.MainActivity
@@ -890,6 +891,8 @@ class WakeWordService : Service() {
      */
     private fun applyPolicy() {
         applyWaveSetting()
+        // Al prender la pantalla, de paso: ¿sigue andando el control de apps?
+        A11yHealth.check(this)
         if (!inForeground || listeningCommand) return
         val reason = policy?.pauseReason()
         if (reason != null) {

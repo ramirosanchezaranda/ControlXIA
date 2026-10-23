@@ -87,6 +87,8 @@ Decí **"pará"**, "basta" o "cancelá" mientras trabaja o habla, o tocá la pí
 ## Permisos (panel → Sistema)
 
 - **Control de apps**: Ajustes → Accesibilidad → ControlXIA. En Android 13+, si dice "Ajuste restringido": info de la app → ⋮ → "Permitir ajustes restringidos".
+  - Si el sistema cierra la app a la fuerza (OPPO, Xiaomi…), Android apaga el control de apps; si la app se cerró de golpe, puede quedar "activado" pero sin andar ("No funciona"). `A11yHealth` lo detecta: Inicio muestra un aviso en rojo, llega una notificación (una vez) y Permisos explica qué tocar y abre directo ControlXIA en Accesibilidad.
+  - Para que se prenda solo, una vez desde la PC: `adb shell pm grant com.controlxia.app android.permission.WRITE_SECURE_SETTINGS`. Con eso, cuando se apaga o se traba, la app lo vuelve a prender (también al intentar un gesto).
 - **Leer mensajes**: acceso a notificaciones (misma nota sobre ajustes restringidos).
 - **Contactos y SMS**: para buscar contactos y mandar SMS.
 - **Mostrar sobre otras apps**: para abrir apps desde segundo plano.
