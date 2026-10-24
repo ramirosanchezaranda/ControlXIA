@@ -105,8 +105,8 @@ android {
         applicationId = "com.controlxia.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "0.16.1"
+        versionCode = 22
+        versionName = "0.17.0"
 
         buildConfigField("String", "VOSK_MODEL_NAME", "\"$voskModelName\"")
         buildConfigField("String", "VOSK_MODEL_URL", "\"$voskModelUrl\"")

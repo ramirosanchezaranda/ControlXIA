@@ -112,6 +112,24 @@ class ScreenshotTest {
 
     @Test
     @Config(qualifiers = TALL)
+    fun devices() {
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        com.controlxia.app.iot.HomeDevices.save(
+            app,
+            com.controlxia.app.iot.HomeDevice(kind = com.controlxia.app.iot.HomeDevice.Kind.TV, name = "Living", host = "192.168.1.40", port = 6466),
+        )
+        com.controlxia.app.iot.HomeDevices.save(
+            app,
+            com.controlxia.app.iot.HomeDevice(
+                kind = com.controlxia.app.iot.HomeDevice.Kind.PC, name = "Escritorio", host = "192.168.1.20", port = 48300,
+                macs = listOf("AA:BB:CC:DD:EE:FF"),
+            ),
+        )
+        shoot("devices-dark", dark = true) { OnBackground { DevicesScreen(onBack = {}) } }
+    }
+
+    @Test
+    @Config(qualifiers = TALL)
     fun permissions() = shoot("permissions-dark", dark = true) { OnBackground { PermissionsScreen(onBack = {}) } }
 
     /** Una pantalla interna sobre el fondo de luces, como se ve en la app. */

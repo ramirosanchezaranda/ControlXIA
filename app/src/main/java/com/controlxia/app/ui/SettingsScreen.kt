@@ -42,6 +42,7 @@ import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -60,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.controlxia.app.brain.LlmSettings
+import com.controlxia.app.iot.HomeDevices
 import com.controlxia.app.permissions.A11yHealth
 import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.service.XiaNotificationListener
@@ -99,6 +101,7 @@ fun SettingsScreen(contentPadding: PaddingValues, onOpen: (Route) -> Unit, onExp
     val voice = remember(tick) {
         VoiceSettings(context).voiceName?.substringBefore("#")?.substringAfterLast('-')?.take(14) ?: "Del sistema"
     }
+    val homeCount = HomeDevices.flow(context).collectAsState().value.orEmpty().size
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
     }
@@ -149,9 +152,18 @@ fun SettingsScreen(contentPadding: PaddingValues, onOpen: (Route) -> Unit, onExp
                     Icons.Rounded.BackHand,
                     colors.teal,
                     "Gestos con las manos",
-                    subtitle = "Pasar reels con el dedo, me gusta, pausa",
+                    subtitle = "Deslizar con la palma, me gusta, pausa, videos",
                     value = if (wake.handsPause) "Sí" else "No",
                     onClick = { onOpen(Route.WAKEWORD) },
+                )
+                Divider()
+                SettingsRow(
+                    Icons.Rounded.Tv,
+                    colors.orange,
+                    "Casa: teles y compus",
+                    subtitle = "Prenderlas, apagarlas, volumen y apps",
+                    value = homeCount.takeIf { it > 0 }?.toString(),
+                    onClick = { onOpen(Route.DEVICES) },
                 )
             }
 

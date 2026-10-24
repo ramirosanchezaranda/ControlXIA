@@ -5,6 +5,7 @@ import com.controlxia.app.actions.MessageStore
 import com.controlxia.app.actions.PrivateGate
 import com.controlxia.app.actions.ScreenNumbers
 import com.controlxia.app.diagnostics.AgentLog
+import com.controlxia.app.iot.HomeController
 import com.controlxia.app.voice.ConfirmState
 import com.controlxia.app.voice.SpeechHints
 import com.controlxia.app.voice.WakeWordSettings
@@ -51,6 +52,7 @@ class CommandProcessor(context: Context) {
     private val registry = ToolRegistry(appContext)
     private val direct = DirectCommandRunner(appContext)
     private val plans = PlanRunner(appContext, registry, direct)
+    private val home = HomeController(appContext)
     // Historial corto: con Groq gratis cada token cuenta (8.000 por minuto).
     private val memory = ConversationMemory(maxExchanges = 4)
 
@@ -106,6 +108,17 @@ class CommandProcessor(context: Context) {
         }
 
         val agentName = WakeWordSettings(appContext).agentName
+
+        // "Prendé la tele", "apagá la compu": las teles y compus de la casa, sin el modelo.
+        home.handle(command, onProgress)?.let { outcome ->
+            outcome.pending?.let { action ->
+                pending = action
+                pendingTask = null
+            }
+            memory.addExchange(command, outcome.reply.text)
+            lastSpoken = outcome.reply.text
+            return outcome.reply
+        }
 
         // Pedidos de varios pasos ("entrá a Mercado Libre, buscá zapatillas, ordená por
         // precio y guardalo en una nota"): los hace la app, en orden, sin el modelo.

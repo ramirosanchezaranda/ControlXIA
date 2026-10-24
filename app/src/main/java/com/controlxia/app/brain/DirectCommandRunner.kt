@@ -234,6 +234,7 @@ class DirectCommandRunner(private val context: Context) {
             "subí el volumen, pausa, y para cualquier pantalla: mostrá los números y tocá uno, bajá, " +
             "atrás, inicio. Y varias cosas seguidas: entrá a Mercado Libre, buscá zapatillas, ordená de menor " +
             "a mayor precio, sacá captura de los primeros 4 y guardalo en una nota; o abrí el chat de Juan, " +
-            "escribile hola y mandalo. Bloqueado también: si hace falta te pido la huella. Para frenarme, decí pará."
+            "escribile hola y mandalo. En casa: prendé la tele, poné Netflix en la tele, apagá la compu. " +
+            "Bloqueado también: si hace falta te pido la huella. Para frenarme, decí pará."
     }
 }

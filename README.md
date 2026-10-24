@@ -25,6 +25,7 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Manejar el teléfono solo con la voz** (como el Acceso por voz de Google, sin pasar por el modelo): "atrás", "inicio", "bajá", "mostrá los números" + "tocá 5", "tocá Guardar", "escribí…", volumen, música y videos, linterna, Wi-Fi, Bluetooth, brillo, "abrí Instagram". Ver [docs/VOICE_CONTROL.md](docs/VOICE_CONTROL.md).
 - ✅ **Cámara por voz**: abrir, foto, selfie, empezar y terminar un video ("terminá el video" se escucha sin internet mientras graba), cambiar de cámara.
 - ✅ **Audios de WhatsApp**: graba tu voz hasta que te callás, o lo dice la voz del asistente; confirma y lo manda (también a grupos), en M4A comprobado.
+- ✅ **Casa: teles Android y compus con Windows** en tu wifi: "prendé la tele", "poné Netflix en la tele del living", "apagá la compu"; se vinculan una vez con un código ([pc/README.md](pc/README.md)).
 - ✅ **Videos en WhatsApp con un gesto**: en un chat, ✊ empieza a grabar con la cámara de adelante, ✊ otra vez lo termina, y con tu "sí" (o 👍) lo manda.
 - ✅ **Corregir el mensaje de palabra** antes de mandarlo ("cambiá guía por IA", "no, ponele…"), y un "sí" se toma al instante.
 - ✅ **Llamadas**: "llamá a mamá", "atendé", "colgá".

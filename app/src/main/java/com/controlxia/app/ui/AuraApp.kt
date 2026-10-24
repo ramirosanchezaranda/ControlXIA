@@ -64,7 +64,7 @@ enum class Tab(val item: TabItem) {
 }
 
 /** Pantallas internas, que entran desde la derecha encima de las pestañas. */
-enum class Route { LLM, VOICE, WAKEWORD, FEEDBACK, PERMISSIONS }
+enum class Route { LLM, VOICE, WAKEWORD, FEEDBACK, PERMISSIONS, DEVICES }
 
 /** Ancho a partir del cual las pestañas van al costado (tablet o teléfono horizontal). */
 private val WIDE = 720.dp
@@ -157,6 +157,7 @@ fun AuraApp(onboarded: Boolean, onOnboarded: () -> Unit, initialTab: Tab = Tab.H
                             Route.WAKEWORD -> ScreenFrame { WakeWordSettingsScreen(onBack = { route = null }) }
                             Route.VOICE -> ScreenFrame { VoiceSettingsScreen(onBack = { route = null }) }
                             Route.PERMISSIONS -> ScreenFrame { PermissionsScreen(onBack = { route = null }) }
+                            Route.DEVICES -> ScreenFrame { DevicesScreen(onBack = { route = null }) }
                         }
                     }
                 }

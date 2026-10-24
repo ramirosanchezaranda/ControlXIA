@@ -207,6 +207,23 @@ Con el teléfono **bloqueado y música sonando**, deslizar a los costados cambia
 - Las señas que tocan la pantalla necesitan el **control de apps** (accesibilidad).
 - El modelo (8 MB) se baja la primera vez que se activa. Android solo deja usar la cámara en segundo plano si el servicio arrancó con la app a la vista: se activa desde la app y al abrirla se reactiva si quedó apagado.
 
+## Casa: teles y compus
+
+Ajustar → **Casa**: «Buscar teles» encuentra las teles Android y Google TV del wifi; «Vincular» hace que la tele muestre un código de 6 caracteres y lo escribís una vez (es el mismo protocolo que la app de control remoto de Google, con certificado propio y la huella de la tele guardada: si otro aparato se hace pasar por la tele, no se le habla). Las compus con Windows necesitan un programita ([pc/README.md](../pc/README.md)), que se instala con un comando y muestra un código para vincularlas.
+
+| Decí | Hace |
+|---|---|
+| "prendé la tele", "apagá la tele del living" | Prende o apaga (si ya estaba, lo dice) |
+| "subile 5 a la tele", "bajá el volumen de la tele", "silenciá la tele" | Volumen |
+| "poné pausa en la tele", "seguí", "siguiente" | Lo que se está viendo |
+| "poné Netflix en la tele", "prendé la tele y poné YouTube" | Abre la app (Netflix, YouTube, Disney+, Prime Video, Max, Spotify, Paramount+, Apple TV, Crunchyroll, Plex, Twitch) |
+| "prendé la compu de escritorio" | Wake-on-LAN (mejor por cable) |
+| "apagá la compu", "reiniciá la compu" | Pregunta antes |
+| "suspendé la compu", "bloqueá la compu", "subí el volumen de la compu" | Directo |
+| "abrí YouTube en la compu", "abrí lanacion punto com en la compu" | Abre la página (o la busca en Google) |
+
+Solo cuenta si nombrás una tele o una compu (o una vinculada por su nombre, "la del living"): "subí el volumen" a secas sigue siendo del teléfono. Con varias teles o compus y sin decir cuál, pregunta "¿Cuál tele: «Living» o «Pieza»?". Si el router le da otra dirección, la vuelve a buscar sola. Todo pasa dentro de tu red.
+
 ## Llamadas
 
 "Llamá a mamá" llama directo si hay un solo contacto con ese nombre o apodo (si hay dudas, el modelo pregunta cuál). Cuando lo pide el modelo, se confirma antes ("¿Llamo a Lucía?"). "Atendé" y "colgá" usan el permiso de administrar llamadas; se piden junto con contactos y SMS en el panel.
