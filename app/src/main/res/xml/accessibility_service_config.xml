@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Control de apps: leer la pantalla y tocar/escribir/desplazar cuando el
      usuario lo pide por voz. Los eventos solo sirven para mover los números
-     de "mostrá los números" cuando la pantalla cambia. Las capturas son las
+     de "mostrá los números" cuando la pantalla cambia, y los toques y lo que
+     escribís para que las señas con la cámara no se activen mientras usás el
+     teléfono. Las capturas son las
      que se piden por voz ("sacá captura de los primeros 4"). -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/a11y_description"
-    android:accessibilityEventTypes="typeWindowStateChanged|typeViewScrolled"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewScrolled|typeViewClicked|typeViewLongClicked|typeViewTextChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"

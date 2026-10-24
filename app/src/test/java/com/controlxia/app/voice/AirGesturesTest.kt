@@ -55,4 +55,27 @@ class AirGesturesTest {
             run(frames),
         )
     }
+
+    @Test
+    fun aHandThatIsNotPresentedDoesNothing() {
+        // Cortada en el borde o pegada a la pantalla (la mano que usa el teléfono): ni pausa ni señas.
+        val air = AirGestures()
+        val events = (0 until 40).mapNotNull { i -> air.feed(Sign.OPEN_PALM, 0.5f, 0.5f, i * 100L, presented = false) }
+        assertEquals(emptyList<Event>(), events)
+    }
+
+    @Test
+    fun anUnsurePalmDoesNotPause() {
+        val air = AirGestures()
+        val events = (0 until 40).mapNotNull { i -> air.feed(Sign.OPEN_PALM, 0.5f, 0.5f, i * 100L, sure = false) }
+        assertEquals(emptyList<Event>(), events)
+    }
+
+    @Test
+    fun thePalmMustBeSureTheWholeTime() {
+        // Segura casi todo el tiempo, pero dudó a la mitad: vuelve a contar desde ahí.
+        val air = AirGestures()
+        val events = (0 until 40).mapNotNull { i -> air.feed(Sign.OPEN_PALM, 0.5f, 0.5f, i * 100L, sure = i != 10)?.let { i to it } }
+        assertEquals(listOf(31 to Event.Sign(Sign.OPEN_PALM)), events)
+    }
 }

@@ -30,27 +30,49 @@ class AirGestures(
     /** Ya pausó con esta palma quieta: no otra vez hasta que se mueva o se baje. */
     private var palmDone = false
 
+    /** Desde cuándo se ve la palma abierta, segura y presentada. */
+    private var palmSince = NO_PALM
+
     /** La palma está lista para deslizar. */
     val armed: Boolean get() = motion.armed
 
     /**
      * Un cuadro con la mano que más se ve: su [sign] y el centro [x], [y] (null
-     * sin mano). [mirrored] como en [HandMotion.feed].
+     * sin mano). [mirrored] como en [HandMotion.feed]. [presented]: la mano está
+     * entera y a buena distancia (si no, no se pone lista ni hace señas, salvo
+     * seguir un deslizamiento que ya empezó). [sure]: MediaPipe está seguro de
+     * la seña (la pausa con la palma y 👍/✌️ lo piden; el puño no).
      */
-    fun feed(sign: HandSigns.Sign?, x: Float?, y: Float?, now: Long, mirrored: Boolean = false): Event? {
-        val open = sign == HandSigns.Sign.OPEN_PALM
-        motion.feed(x, y, now, mirrored, open)?.let { swipe ->
+    fun feed(
+        sign: HandSigns.Sign?,
+        x: Float?,
+        y: Float?,
+        now: Long,
+        mirrored: Boolean = false,
+        presented: Boolean = true,
+        sure: Boolean = true,
+    ): Event? {
+        val open = presented && sign == HandSigns.Sign.OPEN_PALM
+        val seen = presented || motion.armed
+        motion.feed(x.takeIf { seen }, y.takeIf { seen }, now, mirrored, open)?.let { swipe ->
             signs.reset()
+            palmSince = NO_PALM
             return Event.Swipe(swipe)
+        }
+        // La pausa: la palma segura y quieta todo el tiempo, no solo al final.
+        if (open && sure) {
+            if (palmSince == NO_PALM) palmSince = now
+        } else {
+            palmSince = NO_PALM
         }
         val still = motion.stillMs(now)
         if (still == 0L) palmDone = false
-        if (open && still >= palmHoldMs && !palmDone) {
+        if (palmSince != NO_PALM && now - palmSince >= palmHoldMs && still >= palmHoldMs && !palmDone) {
             palmDone = true
             signs.reset()
             return Event.Sign(HandSigns.Sign.OPEN_PALM)
         }
-        val quick = sign?.takeIf { it in QUICK } ?: HandSigns.Sign.NONE
+        val quick = sign?.takeIf { presented && it in QUICK && (sure || it == HandSigns.Sign.FIST) } ?: HandSigns.Sign.NONE
         return signs.feed(quick, now)?.let { Event.Sign(it) }
     }
 
@@ -58,6 +80,7 @@ class AirGestures(
         motion.reset()
         signs.reset()
         palmDone = false
+        palmSince = NO_PALM
     }
 
     companion object {
@@ -65,6 +88,7 @@ class AirGestures(
         const val PALM_HOLD_MS = 2_000L
         /** El puño se sostiene un poco más que las otras señas: es fácil cerrar la mano sin querer. */
         const val FIST_FRAMES = 6
+        private const val NO_PALM = Long.MIN_VALUE
         private val QUICK = setOf(HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY, HandSigns.Sign.FIST)
     }
 }

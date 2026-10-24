@@ -49,6 +49,31 @@ object HandSigns {
         }
     }
 
+    /**
+     * Si la mano se presenta a la cámara: entera en la imagen y a una distancia
+     * razonable. Una mano cortada en el borde, pegada a la pantalla (la que usa
+     * el teléfono) o lejos (alguien atrás) no hace señas.
+     */
+    fun isPresented(points: List<Point>, aspect: Float = 1f): Boolean {
+        if (points.size < 21) return false
+        if (points.any { it.x < EDGE || it.x > 1 - EDGE || it.y < EDGE || it.y > 1 - EDGE }) return false
+        return palmSize(points, aspect) in MIN_HAND..MAX_HAND
+    }
+
+    /** Del puño al nudillo del medio, en altos de imagen (0.17 ≈ a medio metro). */
+    fun palmSize(points: List<Point>, aspect: Float = 1f): Float =
+        hypot((points[WRIST].x - points[MIDDLE_MCP].x) * aspect, points[WRIST].y - points[MIDDLE_MCP].y)
+
+    /** Si MediaPipe reconoció esa misma seña y con confianza (no solo por la forma de la mano). */
+    fun isSure(category: String?, score: Float, sign: Sign): Boolean = score >= SURE_SCORE && when (category) {
+        "Thumb_Up" -> sign == Sign.THUMB_UP
+        "Thumb_Down" -> sign == Sign.THUMB_DOWN
+        "Victory" -> sign == Sign.VICTORY
+        "Open_Palm" -> sign == Sign.OPEN_PALM
+        "Closed_Fist" -> sign == Sign.FIST
+        else -> false
+    }
+
     /** La mano abierta: los cuatro dedos estirados, juntos o separados. */
     fun isOpenHand(points: List<Point>, aspect: Float = 1f): Boolean {
         if (points.size < 21) return false
@@ -174,6 +199,11 @@ object HandSigns {
     /** Para la mano abierta (los dedos juntos de costado se ven un poco más cortos). */
     private const val OPEN = 0.6f
     private const val OPEN_PINKY = 0.45f
+    /** Margen del borde de la imagen y tamaños de mano que cuentan (en altos de imagen). */
+    private const val EDGE = 0.02f
+    private const val MIN_HAND = 0.07f
+    private const val MAX_HAND = 0.45f
+    private const val SURE_SCORE = 0.7f
     /** Para el puño: las puntas cerca de los nudillos, y el pulgar sin estirar. */
     private const val FIST_FOLDED = 0.55f
     private const val THUMB_OUT = 0.9f

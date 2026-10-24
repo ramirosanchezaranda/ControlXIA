@@ -76,6 +76,22 @@ class HandSignsTest {
         assertEquals(Sign.NONE, HandSigns.classify(null, 0f, hand(listOf(false, true, false, false))))
     }
 
+    @Test
+    fun presentedHands() {
+        // La mano sintética: entera, palma de 0.2 de alto (a buena distancia).
+        assertEquals(true, HandSigns.isPresented(hand(listOf(true, true, true, true))))
+        // Cortada en el borde de arriba.
+        val cut = hand(listOf(true, true, true, true)).map { Point(it.x, it.y - 0.45f) }
+        assertEquals(false, HandSigns.isPresented(cut))
+        // Pegada a la cámara (muy grande) o lejos (muy chica).
+        val center = Point(0.5f, 0.65f)
+        fun scaled(k: Float) = hand(listOf(true, true, true, true)).map { Point(center.x + (it.x - center.x) * k, center.y + (it.y - center.y) * k) }
+        assertEquals(false, HandSigns.isPresented(scaled(0.25f)))
+        assertEquals(true, HandSigns.isSure("Open_Palm", 0.85f, Sign.OPEN_PALM))
+        assertEquals(false, HandSigns.isSure("Open_Palm", 0.5f, Sign.OPEN_PALM))
+        assertEquals(false, HandSigns.isSure(null, 0f, Sign.OPEN_PALM))
+    }
+
     /** Cuadros cada 200 ms; devuelve en qué cuadro disparó cada seña. */
     private fun run(signs: List<Sign>): List<Pair<Int, Sign>> {
         val trigger = HandSigns.Trigger()

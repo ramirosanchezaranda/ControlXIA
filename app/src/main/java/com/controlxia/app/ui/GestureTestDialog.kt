@@ -139,8 +139,8 @@ private fun GestureTestContent(onClose: () -> Unit) {
                     } else {
                         -1
                     }
-                    val hand = result.hands.firstOrNull()
-                    val gesture = air.feed(hand?.sign, hand?.x, hand?.y, now)
+                    val hand = result.hands.firstOrNull { it.presented } ?: result.hands.firstOrNull()
+                    val gesture = air.feed(hand?.sign, hand?.x, hand?.y, now, presented = hand?.presented ?: false, sure = hand?.sure ?: false)
                     val swipe = (gesture as? AirGestures.Event.Swipe)?.swipe
                     val fired = (gesture as? AirGestures.Event.Sign)?.sign
                     val sign = hand?.sign ?: HandSigns.Sign.NONE
@@ -164,6 +164,10 @@ private fun GestureTestContent(onClose: () -> Unit) {
                             sign = when {
                                 result.hands.isEmpty() -> "No veo ninguna mano. Ponela frente a la cámara, a unos 30–50 cm, con luz."
                                 air.armed -> "✋ Lista: deslizala rápido para un lado"
+                                hand?.presented == false ->
+                                    "Veo una mano, pero no cuenta: tiene que estar entera en la imagen, ni pegada a la pantalla ni lejos (a unos 30–50 cm)."
+                                sign != HandSigns.Sign.NONE && hand?.sure == false && sign != HandSigns.Sign.FIST ->
+                                    "Veo: ${NAMES[sign] ?: sign.name}, pero no estoy seguro: más luz o más de frente."
                                 sign != HandSigns.Sign.NONE -> "Veo: ${NAMES[sign] ?: sign.name}"
                                 else -> "Veo tu mano. Abrila (palma hacia la cámara) y dejala quieta un instante para deslizar."
                             },

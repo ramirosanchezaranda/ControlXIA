@@ -45,6 +45,7 @@ class XiaAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         runCatching {
+            noteUserActivity(event)
             // Qué app está adelante, sin tener que leer la pantalla (lo usa la cámara de los gestos).
             if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 val pkg = event.packageName?.toString()
@@ -54,7 +55,9 @@ class XiaAccessibilityService : AccessibilityService() {
                 }
             }
             if (event.packageName == packageName) return
-            ScreenNumbers.onScreenChanged()
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+                ScreenNumbers.onScreenChanged()
+            }
         }.onFailure { AgentLog.add("ACCESIBILIDAD error con un evento: ${it.message}") }
     }
 
@@ -69,6 +72,23 @@ class XiaAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         disconnected()
         super.onDestroy()
+    }
+
+    /**
+     * Tocaste, escribiste o deslizaste en otra app: estás usando el teléfono
+     * (y tu mano puede estar frente a la cámara). Los deslizamientos que manda
+     * el asistente no cuentan.
+     */
+    private fun noteUserActivity(event: AccessibilityEvent) {
+        if (event.packageName == packageName) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        when (event.eventType) {
+            AccessibilityEvent.TYPE_VIEW_CLICKED,
+            AccessibilityEvent.TYPE_VIEW_LONG_CLICKED,
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> lastUserActivityAt = now
+            AccessibilityEvent.TYPE_VIEW_SCROLLED ->
+                if (now - com.controlxia.app.actions.Gestures.lastDispatchAt > OWN_GESTURE_MS) lastUserActivityAt = now
+        }
     }
 
     private fun disconnected() {
@@ -88,6 +108,16 @@ class XiaAccessibilityService : AccessibilityService() {
         @Volatile
         var foregroundPackage: String? = null
             private set
+
+        /** Cuándo tocaste, escribiste o deslizaste por última vez en otra app. */
+        @Volatile
+        var lastUserActivityAt = 0L
+            private set
+
+        /** Si estuviste usando el teléfono en los últimos [ms]. */
+        fun userActiveWithin(ms: Long): Boolean = android.os.SystemClock.elapsedRealtime() - lastUserActivityAt < ms
+
+        private const val OWN_GESTURE_MS = 1_500L
 
         /** Quiénes quieren saber cuando cambia la app de adelante. */
         val foregroundListeners = java.util.concurrent.CopyOnWriteArraySet<(String) -> Unit>()

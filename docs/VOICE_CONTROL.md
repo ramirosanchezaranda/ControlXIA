@@ -202,7 +202,13 @@ Con el teléfono **bloqueado y música sonando**, deslizar a los costados cambia
 | 🙌 Las dos manos arriba | Pausa y pregunta "¿Qué necesitás?" |
 
 - Usa el **reconocedor de gestos de MediaPipe** (Google, Apache 2.0) y los 21 puntos de la mano: la palma cuenta como abierta con los cuatro dedos estirados aunque estén juntos (MediaPipe no siempre la llama "Open_Palm" así). La lógica está en `AirGestures` y `HandMotion`, sin Android y con pruebas.
-- Para que no se dispare sin querer: solo la palma abierta se pone lista para deslizar (bajar la mano después de un 👍 no desliza), 👍 y ✌️ tienen que verse 4 cuadros seguidos, hay ~1 s entre acciones y, para repetir una seña, hay que bajar la mano. Vibra apenas al actuar.
+- Para que no se dispare sin querer (0.17.1):
+  - Solo cuenta una mano **entera en la imagen y a buena distancia** (ni cortada en el borde, ni pegada a la pantalla como la que usa el teléfono, ni lejos como alguien atrás).
+  - **Mientras usás el teléfono** (tocás, escribís o deslizás) y 2,5 s después, no se miran señas.
+  - La pausa con la palma pide que MediaPipe esté **seguro** de que es una palma durante los 2 s; 👍 y ✌️ también.
+  - La palma **pausa solo si algo suena**, y "sigue" solo si la pausó un gesto en los últimos 10 minutos: nunca arranca música sola. 👍 es "me gusta" solo en apps de videos.
+  - Solo la palma abierta se pone lista para deslizar, hay ~1 s entre acciones y, para repetir una seña, hay que bajar la mano. Vibra apenas al actuar.
+  - Si algo igual se activa solo, el registro de "Copiar diagnóstico" dice qué vio y qué hizo (o por qué no hizo nada).
 - La cámara se prende **solo mientras algo se reproduce o hay una app de videos adelante** (Instagram, TikTok, YouTube, Facebook, Netflix, Snapchat) y se apaga a los 8 s. Analiza ~5 cuadros por segundo en el teléfono: no se guardan ni se mandan imágenes.
 - Las señas que tocan la pantalla necesitan el **control de apps** (accesibilidad).
 - El modelo (8 MB) se baja la primera vez que se activa. Android solo deja usar la cámara en segundo plano si el servicio arrancó con la app a la vista: se activa desde la app y al abrirla se reactiva si quedó apagado.

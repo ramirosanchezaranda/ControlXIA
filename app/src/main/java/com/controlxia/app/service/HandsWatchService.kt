@@ -123,6 +123,9 @@ class HandsWatchService : LifecycleService() {
     private var recordingStartedAt = 0L
     private var recordingLimitMs = MAX_VIDEO_MS
 
+    /** Cuándo pausó un gesto lo que sonaba (la palma solo hace "sigue" después de eso). */
+    private var pausedByGestureAt = 0L
+
     /** El video grabado esperando 👍 o 👎, cuando la escucha no anda para preguntarlo en voz alta. */
     @Volatile
     private var localPending: PendingAction? = null
@@ -380,9 +383,15 @@ class HandsWatchService : LifecycleService() {
                 return
             }
             // Con la mano que se ve más: deslizar con la palma, palma quieta, 👍, ✌️.
-            val hand = result.hands.firstOrNull()
+            // Usando el teléfono (tocando, escribiendo, deslizando): la mano frente a la cámara es la que lo usa.
+            if (XiaAccessibilityService.userActiveWithin(BUSY_QUIET_MS) && !air.armed) {
+                air.reset()
+                return
+            }
+            // La mano que se presenta a la cámara (entera y a buena distancia), si hay.
+            val hand = result.hands.firstOrNull { it.presented } ?: result.hands.firstOrNull()
             val wasArmed = air.armed
-            when (val event = air.feed(hand?.sign, hand?.x, hand?.y, now)) {
+            when (val event = air.feed(hand?.sign, hand?.x, hand?.y, now, presented = hand?.presented ?: false, sure = hand?.sure ?: false)) {
                 is AirGestures.Event.Swipe -> return act(event.swipe)
                 is AirGestures.Event.Sign -> return perform(event.sign)
                 null -> Unit
@@ -392,7 +401,7 @@ class HandsWatchService : LifecycleService() {
                 seen("✋ lista para deslizar")
                 feedback.vibrate(12)
             }
-            val sign = hand?.sign?.takeIf { it in SHOWN } ?: HandSigns.Sign.NONE
+            val sign = hand?.takeIf { it.presented }?.sign?.takeIf { it in SHOWN } ?: HandSigns.Sign.NONE
             if (sign != HandSigns.Sign.NONE && !air.armed) seen(SIGN_NAMES[sign] ?: sign.name)
         } catch (e: Exception) {
             AgentLog.add("MANOS error al analizar: ${e.message}")
@@ -475,22 +484,46 @@ class HandsWatchService : LifecycleService() {
         show(shown)
     }
 
-    /** Hace lo que pide la seña, en la app que esté adelante. */
+    /**
+     * Hace lo que pide la seña, solo donde tiene sentido: la palma pausa lo que
+     * suena (y sigue solo si la pausó un gesto), 👍 es "me gusta" en apps de
+     * videos, ✌️ te escucha. Si no corresponde, no hace nada (y queda anotado).
+     */
     private fun perform(sign: HandSigns.Sign) {
         // El puño solo hace algo en un chat de WhatsApp: grabar un video.
         if (sign == HandSigns.Sign.FIST) return onFist()
-        AgentLog.add("MANOS seña ${sign.name}")
-        feedback.vibrate(25)
-        show(SIGN_NAMES[sign] ?: sign.name)
-        when (sign) {
-            HandSigns.Sign.THUMB_UP -> if (!locked()) like()
-            HandSigns.Sign.OPEN_PALM -> DeviceControl(this).media(DeviceControl.Media.TOGGLE)
+        val now = SystemClock.elapsedRealtime()
+        val done: String? = when (sign) {
+            HandSigns.Sign.OPEN_PALM -> when {
+                musicPlaying() -> {
+                    DeviceControl(this).media(DeviceControl.Media.PAUSE)
+                    pausedByGestureAt = now
+                    "pausé lo que sonaba"
+                }
+                now - pausedByGestureAt < RESUME_WINDOW_MS -> {
+                    DeviceControl(this).media(DeviceControl.Media.PLAY)
+                    pausedByGestureAt = 0L
+                    "sigue lo que había pausado"
+                }
+                else -> null.also { AgentLog.add("MANOS ✋ quieta, pero no suena nada: no hago nada") }
+            }
+            HandSigns.Sign.THUMB_UP -> if (!locked() && XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO) {
+                like()
+                "me gusta"
+            } else {
+                null.also { AgentLog.add("MANOS 👍 fuera de una app de videos: no hago nada") }
+            }
             HandSigns.Sign.VICTORY -> {
                 DeviceControl(this).media(DeviceControl.Media.PAUSE)
                 WakeWordService.listenNow(this)
+                "te escucho"
             }
-            else -> Unit
+            else -> null
         }
+        done ?: return
+        AgentLog.add("MANOS seña ${sign.name}: $done")
+        feedback.vibrate(25)
+        show(SIGN_NAMES[sign] ?: sign.name)
     }
 
     // ---- Videos con gestos en WhatsApp ----
@@ -586,8 +619,9 @@ class HandsWatchService : LifecycleService() {
 
     /** Mientras graba: ✊ otra vez o ✋ quieta terminan (el primer puño no cuenta hasta bajar la mano). */
     private fun watchWhileRecording(result: HandAnalyzer.Result, now: Long) {
-        val hand = result.hands.firstOrNull()
-        val event = air.feed(hand?.sign, hand?.x, hand?.y, now) as? AirGestures.Event.Sign ?: return
+        val hand = result.hands.firstOrNull { it.presented } ?: result.hands.firstOrNull()
+        val event = air.feed(hand?.sign, hand?.x, hand?.y, now, presented = hand?.presented ?: false, sure = hand?.sure ?: false)
+            as? AirGestures.Event.Sign ?: return
         if (event.sign == HandSigns.Sign.FIST || event.sign == HandSigns.Sign.OPEN_PALM) {
             handler.post { stopVideo(SIGN_NAMES[event.sign] ?: event.sign.name) }
         }
@@ -751,6 +785,12 @@ class HandsWatchService : LifecycleService() {
 
         /** Control lento por si se escapa algún aviso del sistema. */
         private const val HEARTBEAT_MS = 10_000L
+
+        /** Después de tocar o escribir en el teléfono, un rato sin mirar señas. */
+        private const val BUSY_QUIET_MS = 2_500L
+
+        /** La palma hace "sigue" solo si un gesto pausó en estos minutos. */
+        private const val RESUME_WINDOW_MS = 10 * 60_000L
 
         /** Videos con gestos: como mucho un minuto, y el primer segundo y medio no se puede cortar. */
         private const val MAX_VIDEO_MS = 60_000L

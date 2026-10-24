@@ -9,12 +9,18 @@ import android.view.accessibility.AccessibilityNodeInfo
 /** Toques y deslizamientos "con el dedo", para lo que no se puede tocar con una acción. */
 object Gestures {
 
+    /** Cuándo mandamos el último gesto (para no confundir nuestro deslizamiento con que usaste el teléfono). */
+    @Volatile
+    var lastDispatchAt = 0L
+        private set
+
     fun tapAt(service: AccessibilityService, x: Float, y: Float, durationMs: Long = 60): Boolean =
         stroke(service, Path().apply { moveTo(x, y) }, durationMs)
 
     /** Dos toques rápidos en el mismo lugar ("me gusta" en reels y videos cortos). */
     fun doubleTapAt(service: AccessibilityService, x: Float, y: Float): Boolean {
         val path = Path().apply { moveTo(x, y) }
+        lastDispatchAt = android.os.SystemClock.elapsedRealtime()
         return service.dispatchGesture(
             GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
@@ -68,7 +74,7 @@ object Gestures {
     ): Boolean = stroke(service, Path().apply { moveTo(x1, y1); lineTo(x2, y2) }, durationMs)
 
     private fun stroke(service: AccessibilityService, path: Path, durationMs: Long): Boolean =
-        service.dispatchGesture(
+        service.also { lastDispatchAt = android.os.SystemClock.elapsedRealtime() }.dispatchGesture(
             GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
                 .build(),

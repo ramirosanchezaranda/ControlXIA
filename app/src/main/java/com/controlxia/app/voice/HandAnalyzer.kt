@@ -25,8 +25,19 @@ class HandAnalyzer private constructor(
     private val faces: FaceLandmarker?,
 ) : Closeable {
 
-    /** Una mano: su seña, el centro de la palma (0 a 1 en la imagen derecha) y si es una palma levantada. */
-    data class Hand(val sign: HandSigns.Sign, val x: Float, val y: Float, val raisedPalm: Boolean)
+    /**
+     * Una mano: su seña, el centro de la palma (0 a 1 en la imagen derecha), si
+     * es una palma levantada, si se presenta a la cámara ([HandSigns.isPresented])
+     * y si MediaPipe está seguro de la seña ([HandSigns.isSure]).
+     */
+    data class Hand(
+        val sign: HandSigns.Sign,
+        val x: Float,
+        val y: Float,
+        val raisedPalm: Boolean,
+        val presented: Boolean = true,
+        val sure: Boolean = true,
+    )
 
     class Result(val hands: List<Hand>, val face: FaceSigns.Face?) {
         /** Palmas abiertas levantadas (dos = "pausa y preguntá"). */
@@ -48,7 +59,8 @@ class HandAnalyzer private constructor(
             val y = palm.map { it.y }.average().toFloat()
             val raised = top?.categoryName() == "Open_Palm" && (top.score() >= RAISED_SCORE) &&
                 (points.firstOrNull()?.y ?: 1f) < MAX_WRIST_Y
-            Hand(sign, x, y, raised)
+            val presented = HandSigns.isPresented(points, aspect)
+            Hand(sign, x, y, raised && presented, presented, HandSigns.isSure(top?.categoryName(), top?.score() ?: 0f, sign))
         }
         val face = if (withFace) face(image) else null
         return Result(hands, face)
