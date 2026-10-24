@@ -12,8 +12,8 @@ import com.controlxia.app.actions.MessageSender
 import com.controlxia.app.actions.MessageStore
 import com.controlxia.app.actions.NotificationReader
 import com.controlxia.app.actions.PhoneCalls
-import com.controlxia.app.actions.ScreenControl
 import com.controlxia.app.actions.PrivateGate
+import com.controlxia.app.actions.ScreenControl
 import com.controlxia.app.actions.UnlockGate
 import com.controlxia.app.actions.WhatsAppUi
 import kotlinx.coroutines.Dispatchers
@@ -498,11 +498,9 @@ class ToolRegistry(private val context: Context) {
         }
         return ToolOutcome(
             text = "Necesito la confirmación del usuario antes de responder.",
-            pending = PendingAction(
-                question = "¿Le respondo a ${message.sender}: «$text»?",
-                progress = "Respondiendo…",
-                execute = { MessageStore.reply(context, message, text) },
-            ),
+            pending = editable(text, message.sender, "Respondiendo…", { "¿Le respondo a ${message.sender}: «$it»?" }) {
+                MessageStore.reply(context, message, it)
+            },
         )
     }
 
@@ -552,22 +550,18 @@ class ToolRegistry(private val context: Context) {
         if (viaSms) {
             return ToolOutcome(
                 text = "Necesito la confirmación del usuario antes de enviar.",
-                pending = PendingAction(
-                    question = "¿Le mando un SMS a ${contact.name}: «$text»?",
-                    progress = "Enviando…",
-                    execute = { sender.sendSms(contact, text) },
-                ),
+                pending = editable(text, contact.name, "Enviando…", { "¿Le mando un SMS a ${contact.name}: «$it»?" }) {
+                    sender.sendSms(contact, it)
+                },
             )
         }
         val number = contacts.international(contact.phone)
             ?: return sendWhatsAppByName(contact.name, text)
         return ToolOutcome(
             text = "Necesito la confirmación del usuario antes de enviar.",
-            pending = PendingAction(
-                question = "¿Le mando a ${contact.name} por WhatsApp: «$text»?",
-                progress = "Enviando…",
-                execute = { sender.sendWhatsApp(contact, number, text) },
-            ),
+            pending = editable(text, contact.name, "Enviando…", { "¿Le mando a ${contact.name} por WhatsApp: «$it»?" }) {
+                sender.sendWhatsApp(contact, number, it)
+            },
         )
     }
 
@@ -577,11 +571,9 @@ class ToolRegistry(private val context: Context) {
         val chat = WhatsAppUi.chatName(target)
         return ToolOutcome(
             text = "Necesito la confirmación del usuario antes de enviar.",
-            pending = PendingAction(
-                question = "¿Le mando a $chat por $label: «$text»?",
-                progress = "Enviando por $label…",
-                execute = { appUi.sendMessage(app, chat, text) ?: "Listo, le mandé el mensaje a $chat por $label." },
-            ),
+            pending = editable(text, chat, "Enviando por $label…", { "¿Le mando a $chat por $label: «$it»?" }) {
+                appUi.sendMessage(app, chat, it) ?: "Listo, le mandé el mensaje a $chat por $label."
+            },
         )
     }
 
@@ -637,13 +629,28 @@ class ToolRegistry(private val context: Context) {
         }
         return ToolOutcome(
             text = "Necesito la confirmación del usuario antes de enviar.",
-            pending = PendingAction(
-                question = "¿Le mando a «$chat» por WhatsApp: «$text»?",
-                progress = "Enviando…",
-                execute = { whatsApp.sendToChat(chat, text) ?: "Listo, le mandé el WhatsApp a «$chat»." },
-            ),
+            pending = editable(text, chat, "Enviando…", { "¿Le mando a «$chat» por WhatsApp: «$it»?" }) {
+                whatsApp.sendToChat(chat, it) ?: "Listo, le mandé el WhatsApp a «$chat»."
+            },
         )
     }
+
+    /**
+     * Un mensaje que espera el "sí" y se puede corregir de palabra antes
+     * ("cambiá guía por IA"): con otro texto se arma la misma pregunta.
+     */
+    private fun editable(
+        text: String,
+        to: String?,
+        progress: String,
+        question: (String) -> String,
+        send: suspend (String) -> String,
+    ): PendingAction = PendingAction(
+        question = question(text),
+        progress = progress,
+        execute = { send(text) },
+        message = PendingAction.Message(text, to) { edited -> editable(edited, to, progress, question, send) },
+    )
 
     private fun schema(
         required: List<String> = emptyList(),

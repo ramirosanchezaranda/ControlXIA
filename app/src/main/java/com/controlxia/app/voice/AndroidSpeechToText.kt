@@ -2,6 +2,7 @@ package com.controlxia.app.voice
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -23,12 +24,20 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
         onPartial: (String) -> Unit,
         onResult: (String) -> Unit,
         onError: (message: String, noSpeech: Boolean) -> Unit,
-    ) = listen(onPartial, onResult, onError, retried = false)
+        options: ListenOptions,
+    ) {
+        // El aviso de "ya podés hablar" una sola vez, aunque haya que reintentar.
+        var announced = false
+        val ready = options.onReady?.let { announce -> { if (!announced) { announced = true; announce() } } }
+        listen(onPartial, onResult, onError, options, ready, retried = false)
+    }
 
     private fun listen(
         onPartial: (String) -> Unit,
         onResult: (String) -> Unit,
         onError: (message: String, noSpeech: Boolean) -> Unit,
+        options: ListenOptions,
+        onReady: (() -> Unit)?,
         retried: Boolean,
     ) {
         main.post {
@@ -50,9 +59,12 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
             // Lo último que entendió mientras hablabas: si al final dice "no
             // entendí" (pasa con frases largas o ruido al terminar), vale eso.
             var lastPartial = ""
+            // Una respuesta corta ya completa ("sí"): se da por terminada sin esperar el silencio.
+            var quick: Runnable? = null
             fun finish(block: () -> Unit) {
                 if (finished || recognizer !== sr) return
                 finished = true
+                quick?.let { main.removeCallbacks(it) }
                 AssistantState.setLevel(0f)
                 block()
                 cancelInternal()
@@ -75,9 +87,13 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                     partial?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
                         ?.takeIf { it.isNotBlank() }
-                        ?.let {
-                            lastPartial = it
-                            onPartial(it)
+                        ?.let { text ->
+                            lastPartial = text
+                            onPartial(text)
+                            quick?.let { main.removeCallbacks(it) }
+                            quick = options.quickAnswer?.invoke(text)?.let { wait ->
+                                Runnable { finish { onResult(text) } }.also { main.postDelayed(it, wait) }
+                            }
                         }
                 }
 
@@ -92,7 +108,7 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                     ) {
                         finished = true
                         cancelInternal()
-                        main.postDelayed({ listen(onPartial, onResult, onError, retried = true) }, RETRY_MS)
+                        main.postDelayed({ listen(onPartial, onResult, onError, options, onReady, retried = true) }, RETRY_MS)
                         return
                     }
                     finish {
@@ -104,7 +120,9 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                     }
                 }
 
-                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onReadyForSpeech(params: Bundle?) {
+                    if (!finished && recognizer === sr) onReady?.invoke()
+                }
                 override fun onBeginningOfSpeech() {}
                 // De -2 dB (silencio) a 10 dB (hablando fuerte) → 0 a 1, para la esfera.
                 override fun onRmsChanged(rmsdB: Float) {
@@ -115,7 +133,7 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
             try {
-                sr.startListening(buildIntent())
+                sr.startListening(buildIntent(options.hints))
             } catch (e: Exception) {
                 finish { onError("No se pudo iniciar el reconocimiento de voz", false) }
             }
@@ -134,7 +152,7 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
         recognizer = null
     }
 
-    private fun buildIntent(): Intent =
+    private fun buildIntent(hints: List<String>): Intent =
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -148,6 +166,10 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
             // queda el último texto parcial si terminan sin resultado.
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_MS)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_MS)
+            // Nombres y palabras que probablemente digas ("IA", tus contactos): el reconocedor las prefiere.
+            if (hints.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, ArrayList(hints))
+            }
         }
 
     private fun errorMessage(error: Int): String = when (error) {

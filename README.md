@@ -24,7 +24,8 @@ Asistente de voz para Android que controla el teléfono con lenguaje natural ("X
 - ✅ **Anda sin créditos**: lo cotidiano (mensajes, audios, llamadas, alarmas, calendario, cuentas, búsquedas, leer y responder mensajes) se entiende con reglas, sin el modelo; y si un modelo gratis se queda sin cupo, sigue solo con otro (en Groq cada modelo tiene su propio cupo diario).
 - ✅ **Manejar el teléfono solo con la voz** (como el Acceso por voz de Google, sin pasar por el modelo): "atrás", "inicio", "bajá", "mostrá los números" + "tocá 5", "tocá Guardar", "escribí…", volumen, música y videos, linterna, Wi-Fi, Bluetooth, brillo, "abrí Instagram". Ver [docs/VOICE_CONTROL.md](docs/VOICE_CONTROL.md).
 - ✅ **Cámara por voz**: abrir, foto, selfie, empezar y terminar un video ("terminá el video" se escucha sin internet mientras graba), cambiar de cámara.
-- ✅ **Audios de WhatsApp**: graba tu voz hasta que te callás, o lo dice la voz del asistente; confirma y lo manda (también a grupos).
+- ✅ **Audios de WhatsApp**: graba tu voz hasta que te callás, o lo dice la voz del asistente; confirma y lo manda (también a grupos), en M4A comprobado.
+- ✅ **Corregir el mensaje de palabra** antes de mandarlo ("cambiá guía por IA", "no, ponele…"), y un "sí" se toma al instante.
 - ✅ **Llamadas**: "llamá a mamá", "atendé", "colgá".
 - ✅ **Pausa con las manos** (opcional): mirando un video, levantá las dos manos y pone pausa y te pregunta qué necesitás (cámara frontal + MediaPipe, todo en el teléfono). Ahora también señas con una mano (ver abajo).
 - ✅ **Frenarlo por voz**: "pará", "basta" o "cancelá" mientras trabaja o habla (o su nombre para interrumpirlo); también tocando la píldora o "Frenar" en la notificación. Se entera de que lo frenaron y de qué alcanzó a hacer.

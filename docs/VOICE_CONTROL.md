@@ -123,7 +123,22 @@ Usa la app de cámara del teléfono, así las fotos y videos quedan en la galer�
 - "Mandale un audio a Juan que diga feliz cumpleaños": el audio lo dice la voz del asistente.
 - Con el "sí", se pasa a WhatsApp: directo al chat si el contacto tiene número, o eligiendo el chat por nombre en la pantalla "Enviar a…" (grupos), y se toca enviar.
 
-Se graba con el micrófono propio (no apretando el botón de WhatsApp) porque mientras WhatsApp graba, el asistente no puede oír cuándo terminaste. El audio se guarda como **OGG/Opus**, el formato de las notas de voz de WhatsApp (Android 10+; si no hay codificador Opus, M4A/AAC).
+Se graba con el micrófono propio (no apretando el botón de WhatsApp) porque mientras WhatsApp graba, el asistente no puede oír cuándo terminaste. Desde la 0.15.0 el audio se guarda como **M4A (AAC)**, lo que reproduce cualquier teléfono: antes era OGG/Opus y en algunos llegaba mudo. Antes de mandarlo se sube el volumen si quedó bajo, se comprueba que el archivo se pueda reproducir (si no, va como WAV) y, si quedó en silencio, no se manda y lo dice.
+
+## Corregir el mensaje antes del "sí"
+
+Cuando pregunta "¿Le mando a Rodri: «…los escribió la guía»?" y entendió mal una palabra, no hace falta dictarlo todo de nuevo:
+
+| Decí | Queda |
+|---|---|
+| "cambiá guía por IA", "reemplazá guía por IA", "en vez de guía poné IA", "no es guía, es IA" | Cambia esa palabra y vuelve a preguntar |
+| "no, ponele …", "no, que diga …", "mejor decile …" | El mensaje entero nuevo, al mismo contacto |
+| "agregale un abrazo" | Lo suma al final |
+| "sacale muy" | Lo saca |
+
+Si la palabra no está, lo dice y repite la pregunta. "No, decile a Juan…" es otro pedido (otro contacto).
+
+**Respuestas más rápidas.** Cuando espera un sí o un no, un "sí" claro ("sí", "dale", "mandalo") se toma apenas lo decís, sin esperar el silencio; un "no" espera un segundo por si sigue ("no, ponele…"). El tono suave suena cuando el micrófono ya está escuchando (antes sonaba antes y se podía perder la primera palabra). En Android 13+ el reconocedor prefiere las palabras del mensaje, el nombre del contacto, "IA" y apps comunes.
 
 ## Alarmas y temporizadores
 

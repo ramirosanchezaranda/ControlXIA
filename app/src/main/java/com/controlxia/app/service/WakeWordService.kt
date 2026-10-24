@@ -24,6 +24,7 @@ import com.controlxia.app.actions.CameraControl
 import com.controlxia.app.actions.OwnAlarms
 import com.controlxia.app.actions.UnlockGate
 import com.controlxia.app.brain.CommandProcessor
+import com.controlxia.app.brain.Confirmation
 import com.controlxia.app.brain.Reply
 import com.controlxia.app.brain.StopWords
 import com.controlxia.app.diagnostics.AgentLog
@@ -35,9 +36,11 @@ import com.controlxia.app.voice.AndroidSpeechToText
 import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.ConfirmState
 import com.controlxia.app.voice.Feedback
+import com.controlxia.app.voice.ListenOptions
 import com.controlxia.app.voice.ListeningOverlay
 import com.controlxia.app.voice.RecentCommandsStore
 import com.controlxia.app.voice.Speaker
+import com.controlxia.app.voice.SpeechHints
 import com.controlxia.app.voice.SpeechToText
 import com.controlxia.app.voice.VoiceBridge
 import com.controlxia.app.voice.VoskModelStore
@@ -600,8 +603,18 @@ class WakeWordService : Service() {
         transcribeCommand()
     }
 
-    private fun transcribeCommand() {
+    /**
+     * Transcribe lo que digas. [announce]: avisar con el tono suave cuando el
+     * micrófono ya escucha (si sonaba antes, la primera palabra se podía perder).
+     */
+    private fun transcribeCommand(announce: Boolean = false) {
         val recognizer = stt ?: AndroidSpeechToText(applicationContext).also { stt = it }
+        // Esperando un sí o un no: un "sí" se toma apenas lo decís, sin esperar el silencio.
+        val options = ListenOptions(
+            hints = SpeechHints.build(agentName),
+            quickAnswer = if (ConfirmState.waiting) ::quickAnswerWait else null,
+            onReady = if (announce) ::readyToHear else null,
+        )
         updateNotification("Escuchando tu comando…")
         main.removeCallbacks(sttTimeout)
         main.postDelayed(sttTimeout, STT_MAX_MS)
@@ -646,7 +659,24 @@ class WakeWordService : Service() {
                 main.removeCallbacks(resumeAfterReply)
                 main.postDelayed(resumeAfterReply, 1_200L)
             },
+            options = options,
         )
+    }
+
+    /** Un "sí" claro se da por dicho enseguida; un "no" espera un poco por si sigue ("no, ponele…"). */
+    private fun quickAnswerWait(text: String): Long? = when (Confirmation.plainAnswer(text)) {
+        Confirmation.Answer.YES -> QUICK_YES_MS
+        Confirmation.Answer.NO -> QUICK_NO_MS
+        else -> null
+    }
+
+    /** El micrófono ya escucha la respuesta: recién ahí el tono y la vibración. */
+    private fun readyToHear() {
+        if (!listeningCommand || !inFollowUp) return
+        feedback.vibrate(40)
+        feedback.beep(soft = true)
+        AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
+        pill("Te escucho…")
     }
 
     /** El reconocedor no respondió a tiempo (pasa en algunos equipos). */
@@ -847,12 +877,9 @@ class WakeWordService : Service() {
         AgentLog.add("ESPERANDO otro pedido ${followUpWindowMs / 1_000} s (sin decir el nombre)")
         main.removeCallbacks(resumeAfterReply)
         voiceWakeLock.acquire(INTERACTION_MAX_MS)
-        feedback.vibrate(40)
-        feedback.beep(soft = true)
-        AssistantState.update(AssistantState.Phase.LISTENING, "Te escucho…")
-        pill("Te escucho…")
         transcriptionStarted = true
-        main.postDelayed({ if (listeningCommand && inFollowUp) transcribeCommand() }, TONE_MS)
+        // Enseguida: el tono suena cuando el micrófono ya escucha (readyToHear).
+        transcribeCommand(announce = true)
     }
 
     /** Tope por si el TTS no avisa que terminó: ~11 letras por segundo, con margen. */
@@ -1023,7 +1050,9 @@ class WakeWordService : Service() {
         /** Cuánto después del tono empieza a transcribir (que no se oiga el tono). */
         private const val TONE_MS = 160L
         /** Pausa entre que termina de hablar y vuelve a escuchar (sin oírse a sí mismo). */
-        private const val AFTER_SPEECH_MS = 250L
+        private const val AFTER_SPEECH_MS = 120L
+        private const val QUICK_YES_MS = 300L
+        private const val QUICK_NO_MS = 1_000L
         private const val STT_MAX_MS = 30_000L
         private const val INTERACTION_MAX_MS = 180_000L
         /** Tope de turnos seguidos sin wake word (por si la tele "conversa" sola). */

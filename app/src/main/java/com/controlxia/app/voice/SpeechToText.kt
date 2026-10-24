@@ -18,8 +18,23 @@ interface SpeechToText {
         onPartial: (String) -> Unit = {},
         onResult: (String) -> Unit,
         onError: (message: String, noSpeech: Boolean) -> Unit,
+        options: ListenOptions = ListenOptions(),
     )
 
     /** Corta la escucha en curso y libera recursos. */
     fun cancel()
 }
+
+/** Ajustes de una escucha. */
+class ListenOptions(
+    /** Palabras que probablemente diga (nombres, "IA"): el reconocedor las prefiere (Android 13+). */
+    val hints: List<String> = emptyList(),
+    /**
+     * Para respuestas cortas: si lo entendido hasta ahora ya es una respuesta
+     * completa ("sí", "no"), cuántos ms sin cambios esperar antes de darla por
+     * terminada, sin esperar el silencio largo. null = esperar como siempre.
+     */
+    val quickAnswer: ((String) -> Long?)? = null,
+    /** El micrófono ya está escuchando: para que el tono avise justo cuando se puede hablar. */
+    val onReady: (() -> Unit)? = null,
+)

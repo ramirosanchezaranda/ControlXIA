@@ -14,7 +14,12 @@ class PendingAction(
     /** Qué mostrar mientras se ejecuta: "Enviando…". */
     val progress: String,
     val execute: suspend () -> String,
+    /** Si lo que espera es un mensaje: para corregirlo de palabra antes del "sí" ([MessageEdit]). */
+    val message: Message? = null,
 ) {
+    /** El texto del mensaje por mandar, a quién, y la misma pregunta armada con otro texto. */
+    class Message(val text: String, val to: String?, val rebuild: (String) -> PendingAction)
+
     private val createdAt = System.currentTimeMillis()
 
     fun isExpired(): Boolean = System.currentTimeMillis() - createdAt > TTL_MS
@@ -134,6 +139,28 @@ object Confirmation {
     }
 
     private val SOFTENERS = setOf("mejor", "che", "espera", "para", "perdon", "pera")
+
+    /** Los "sí" y "no" que no dejan dudas aunque la frase siga ("bueno…" o "esperá…" pueden ser el arranque de otra cosa). */
+    private val SURE_YES = setOf(
+        "si", "dale", "ok", "okey", "okay", "claro", "perfecto", "obvio", "confirmo", "mandalo", "mandala",
+        "manda", "envialo", "enviala", "envia", "hacelo", "correcto", "exacto", "afirmativo", "yes",
+    )
+    private val SURE_NO = setOf("no", "nop", "cancela", "cancelar", "cancelalo", "negativo")
+    private val POLITE = setOf("por", "favor", "gracias", "porfa")
+
+    /**
+     * Si toda la frase es un sí o un no ("sí", "dale, mandalo", "no, no"), sin
+     * nada más: se puede contestar sin esperar a que termine el silencio.
+     */
+    fun plainAnswer(text: String): Answer? {
+        val words = plain(text).split(' ').filter { it.isNotEmpty() }
+        if (words.isEmpty() || words.size > 4) return null
+        return when {
+            words.all { it in SURE_YES || it in POLITE } && words.any { it in SURE_YES } -> Answer.YES
+            words.all { it in SURE_NO || it in POLITE } && words.any { it in SURE_NO } -> Answer.NO
+            else -> null
+        }
+    }
 
     fun classify(text: String): Answer {
         val words = Normalizer.normalize(text.lowercase(Locale("es")), Normalizer.Form.NFD)

@@ -7,12 +7,11 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
-import android.media.MediaCodecList
+import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.MediaRecorder
 import android.media.ToneGenerator
-import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import com.controlxia.app.diagnostics.AgentLog
@@ -32,9 +31,8 @@ import kotlin.coroutines.resume
 
 /**
  * Audios para mandar por WhatsApp: graba la voz del usuario (hasta que deja de
- * hablar) o dice un texto con la voz del asistente, y lo guarda como OGG/Opus,
- * el formato de las notas de voz de WhatsApp (Android 10+; si el teléfono no
- * tiene codificador Opus, M4A/AAC).
+ * hablar) o dice un texto con la voz del asistente, y lo guarda como M4A (AAC)
+ * comprobado, o WAV si el M4A no sale bien.
  */
 class AudioMessage(private val context: Context) {
 
@@ -56,7 +54,7 @@ class AudioMessage(private val context: Context) {
                 val pcm = captureUntilSilence() ?: return@withContext null to "No escuché nada, así que no grabé el audio."
                 AgentLog.add("AUDIO grabado: ${pcm.size / SAMPLE_RATE} s")
                 beep()
-                encode(pcm, SAMPLE_RATE) to null
+                export(pcm, SAMPLE_RATE)
             }
         }
     }
@@ -68,14 +66,15 @@ class AudioMessage(private val context: Context) {
         if (!ok || !wav.exists()) return@withContext null to "No pude generar el audio."
         val (pcm, rate) = readWav(wav) ?: return@withContext null to "No pude leer el audio generado."
         wav.delete()
-        encode(resample(pcm, rate, SAMPLE_RATE), SAMPLE_RATE) to null
+        export(pcm, rate)
     }
 
     private suspend fun captureUntilSilence(): ShortArray? {
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         @SuppressLint("MissingPermission")
         val recorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION, // con supresión de ruido, como una llamada
+            // El micrófono común, como una grabadora (el de llamadas en algunos teléfonos graba muy bajo).
+            MediaRecorder.AudioSource.MIC,
             SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
             maxOf(minBuffer, SAMPLE_RATE),
         )
@@ -209,23 +208,53 @@ class AudioMessage(private val context: Context) {
         return out
     }
 
-    /** Codifica a OGG/Opus (o M4A/AAC) con MediaCodec + MediaMuxer. */
-    private fun encode(pcm: ShortArray, rate: Int): Audio? = runCatching {
-        val opus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && hasEncoder(MediaFormat.MIMETYPE_AUDIO_OPUS)
-        val mime = if (opus) MediaFormat.MIMETYPE_AUDIO_OPUS else MediaFormat.MIMETYPE_AUDIO_AAC
-        val file = File(audioDir(), "audio_${System.currentTimeMillis()}.${if (opus) "ogg" else "m4a"}")
+    /**
+     * Lo deja listo para mandar: más fuerte si quedó bajo, en M4A (AAC, lo que
+     * reproduce cualquier teléfono y WhatsApp) y comprobado; si el M4A no sale
+     * bien, en WAV. Antes era OGG/Opus, y en algunos teléfonos llegaba mudo.
+     */
+    private fun export(pcm: ShortArray, rate: Int): Pair<Audio?, String?> {
+        val peak = pcm.maxOfOrNull { kotlin.math.abs(it.toInt()) } ?: 0
+        if (peak < SILENT_PEAK) {
+            AgentLog.add("AUDIO en silencio (pico $peak): no lo mando")
+            return null to "El audio quedó en silencio, así que no lo mandé. Probá de nuevo."
+        }
+        val loud = normalize(pcm, peak)
+        val seconds = (loud.size / rate).coerceAtLeast(1)
+        encodeAac(resample(loud, rate, AAC_RATE))?.let { file ->
+            if (playable(file)) {
+                AgentLog.add("AUDIO listo: ${file.name} (${file.length() / 1024} KB, $seconds s, pico $peak)")
+                return Audio(file, "audio/mp4", seconds) to null
+            }
+            AgentLog.add("AUDIO el M4A no se puede reproducir: lo mando como WAV")
+            file.delete()
+        }
+        val wav = writeWav(loud, rate) ?: return null to "No pude guardar el audio."
+        AgentLog.add("AUDIO listo: ${wav.name} (${wav.length() / 1024} KB, $seconds s)")
+        return Audio(wav, "audio/wav", seconds) to null
+    }
+
+    /** Si quedó bajo, lo sube hasta casi el máximo (sin pasarse, para no distorsionar). */
+    private fun normalize(pcm: ShortArray, peak: Int): ShortArray {
+        val gain = minOf(TARGET_PEAK / peak, MAX_GAIN)
+        if (gain <= 1.05) return pcm
+        return ShortArray(pcm.size) { (pcm[it] * gain).toInt().coerceIn(-32_767, 32_767).toShort() }
+    }
+
+    /** AAC en un M4A con MediaCodec + MediaMuxer. */
+    private fun encodeAac(pcm: ShortArray): File? = runCatching {
+        val rate = AAC_RATE
+        val mime = MediaFormat.MIMETYPE_AUDIO_AAC
+        val file = File(audioDir(), "audio_${System.currentTimeMillis()}.m4a")
         val format = MediaFormat.createAudioFormat(mime, rate, 1).apply {
-            setInteger(MediaFormat.KEY_BIT_RATE, if (opus) 24_000 else 48_000)
+            setInteger(MediaFormat.KEY_BIT_RATE, 64_000)
             setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16_384)
-            if (!opus) setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+            setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
         }
         val codec = MediaCodec.createEncoderByType(mime)
         codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         codec.start()
-        val muxer = MediaMuxer(
-            file.path,
-            if (opus) MediaMuxer.OutputFormat.MUXER_OUTPUT_OGG else MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4,
-        )
+        val muxer = MediaMuxer(file.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         val bytes = ByteBuffer.allocate(pcm.size * 2).order(ByteOrder.LITTLE_ENDIAN)
         bytes.asShortBuffer().put(pcm)
         val input = bytes.array()
@@ -273,14 +302,48 @@ class AudioMessage(private val context: Context) {
             runCatching { if (track >= 0) muxer.stop() }
             muxer.release()
         }
-        AgentLog.add("AUDIO codificado ${file.name} (${file.length() / 1024} KB)")
-        Audio(file, if (opus) "audio/ogg" else "audio/mp4", (pcm.size / rate).coerceAtLeast(1))
+        file
     }.onFailure { AgentLog.add("AUDIO no pude codificar: ${it.message}") }.getOrNull()
 
-    private fun hasEncoder(mime: String): Boolean =
-        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
-            info.isEncoder && info.supportedTypes.any { it.equals(mime, ignoreCase = true) }
+    /** Que el archivo tenga una pista de audio con datos de verdad. */
+    private fun playable(file: File): Boolean = runCatching {
+        if (file.length() < 1_024) return@runCatching false
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(file.path)
+            if (extractor.trackCount < 1) return@runCatching false
+            val audio = extractor.getTrackFormat(0).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            extractor.selectTrack(0)
+            val buffer = ByteBuffer.allocate(64 * 1_024)
+            var frames = 0
+            while (frames < MIN_FRAMES && extractor.readSampleData(buffer, 0) > 0) {
+                frames++
+                extractor.advance()
+            }
+            audio && frames >= MIN_FRAMES
+        } finally {
+            extractor.release()
         }
+    }.getOrDefault(false)
+
+    /** WAV de 16 bits: lo abre cualquier reproductor. */
+    private fun writeWav(pcm: ShortArray, rate: Int): File? = runCatching {
+        val file = File(audioDir(), "audio_${System.currentTimeMillis()}.wav")
+        val data = pcm.size * 2
+        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray()); putInt(36 + data); put("WAVE".toByteArray())
+            put("fmt ".toByteArray()); putInt(16); putShort(1); putShort(1); putInt(rate); putInt(rate * 2)
+            putShort(2); putShort(16)
+            put("data".toByteArray()); putInt(data)
+        }
+        val body = ByteBuffer.allocate(data).order(ByteOrder.LITTLE_ENDIAN)
+        body.asShortBuffer().put(pcm)
+        file.outputStream().use { out ->
+            out.write(header.array())
+            out.write(body.array())
+        }
+        file
+    }.onFailure { AgentLog.add("AUDIO no pude guardar el WAV: ${it.message}") }.getOrNull()
 
     private fun audioDir(): File = File(context.cacheDir, "audio").apply {
         mkdirs()
@@ -294,5 +357,12 @@ class AudioMessage(private val context: Context) {
         const val NO_SPEECH_SECONDS = 7
         const val SILENCE_MS = 1_800
         const val MIN_VOICE_RMS = 600.0
+        /** Lo que reproduce cualquier codificador AAC. */
+        const val AAC_RATE = 44_100
+        /** Más bajo que esto en todo el audio es silencio. */
+        const val SILENT_PEAK = 300
+        const val TARGET_PEAK = 29_000.0
+        const val MAX_GAIN = 8.0
+        const val MIN_FRAMES = 5
     }
 }

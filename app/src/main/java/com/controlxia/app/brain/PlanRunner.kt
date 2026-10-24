@@ -4,8 +4,8 @@ import android.content.Context
 import com.controlxia.app.actions.AppLauncher
 import com.controlxia.app.actions.AppUi
 import com.controlxia.app.actions.ChatUi
-import com.controlxia.app.actions.NotesStore
 import com.controlxia.app.actions.Nodes
+import com.controlxia.app.actions.NotesStore
 import com.controlxia.app.actions.PrivateGate
 import com.controlxia.app.actions.ScreenItems
 import com.controlxia.app.actions.Screenshots
@@ -76,24 +76,31 @@ class PlanRunner(
                 is Outcome.Done -> if (outcome.said.isNotBlank()) done += outcome.said
                 is Outcome.Failed -> return Result(summary(done, state, failure = outcome.reason))
                 is Outcome.Ask -> {
-                    val action = outcome.action
-                    // Después del "sí": lo confirmado y el resto del pedido.
-                    val continued = PendingAction(
-                        question = action.question,
-                        progress = action.progress,
-                        execute = {
-                            val first = action.execute()
-                            val rest = if (i + 1 < steps.size) runFrom(steps, i + 1, state, onProgress).spoken else ""
-                            listOf(first, rest).filter { it.isNotBlank() }.joinToString(" ")
-                        },
-                    )
+                    val continued = thenRest(outcome.action, steps, i, state, onProgress)
                     val before = if (done.isEmpty()) "" else summary(done, state) + " "
-                    return Result(before + action.question, pending = continued)
+                    return Result(before + continued.question, pending = continued)
                 }
             }
         }
         return Result(summary(done, state))
     }
+
+    /** Después del "sí": lo confirmado y el resto del pedido (también si el mensaje se corrigió antes). */
+    private fun thenRest(action: PendingAction, steps: List<Step>, i: Int, state: State, onProgress: (String) -> Unit): PendingAction =
+        PendingAction(
+            question = action.question,
+            progress = action.progress,
+            execute = {
+                val first = action.execute()
+                val rest = if (i + 1 < steps.size) runFrom(steps, i + 1, state, onProgress).spoken else ""
+                listOf(first, rest).filter { it.isNotBlank() }.joinToString(" ")
+            },
+            message = action.message?.let { message ->
+                PendingAction.Message(message.text, message.to) { edited ->
+                    thenRest(message.rebuild(edited), steps, i, state, onProgress)
+                }
+            },
+        )
 
     private suspend fun step(step: Step, state: State, onProgress: (String) -> Unit): Outcome = when (step) {
         is Step.Direct -> direct(step.command, state, onProgress)
@@ -294,17 +301,15 @@ class PlanRunner(
 
     private suspend fun sendHere(text: String, state: State): Outcome {
         PrivateGate.check(context, "para mandar el mensaje")?.let { return Outcome.Failed(lower(it)) }
-        val chat = state.chat
-        return Outcome.Ask(
-            PendingAction(
-                question = "¿Le mando${chat?.let { " a $it" }.orEmpty()}: «${text.take(120)}»?",
-                progress = "Enviando…",
-                execute = {
-                    ChatUi.write(text) ?: ChatUi.send() ?: "Listo, se lo mandé."
-                },
-            ),
-        )
+        return Outcome.Ask(sendHereAction(text, state.chat))
     }
+
+    private fun sendHereAction(text: String, chat: String?): PendingAction = PendingAction(
+        question = "¿Le mando${chat?.let { " a $it" }.orEmpty()}: «${text.take(120)}»?",
+        progress = "Enviando…",
+        execute = { ChatUi.write(text) ?: ChatUi.send() ?: "Listo, se lo mandé." },
+        message = PendingAction.Message(text, chat) { edited -> sendHereAction(edited, chat) },
+    )
 
     private suspend fun audio(text: String?, state: State, onProgress: (String) -> Unit): Outcome {
         val chat = state.chat ?: return Outcome.Failed("no sé a quién mandarle el audio")

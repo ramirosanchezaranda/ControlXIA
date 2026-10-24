@@ -6,6 +6,7 @@ import com.controlxia.app.actions.PrivateGate
 import com.controlxia.app.actions.ScreenNumbers
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.voice.ConfirmState
+import com.controlxia.app.voice.SpeechHints
 import com.controlxia.app.voice.WakeWordSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonObject
@@ -59,6 +60,8 @@ class CommandProcessor(context: Context) {
             field = value
             // Para poder contestar con un gesto (guiño, cabeza, pulgar).
             ConfirmState.set(value?.question)
+            // Para que el reconocedor prefiera las palabras del mensaje y el nombre del contacto.
+            SpeechHints.forMessage(value?.message?.text, value?.message?.to)
         }
 
     /** El pedido que quedó esperando el "sí", para seguir con lo que falte. */
@@ -563,6 +566,26 @@ class CommandProcessor(context: Context) {
         if (action.isExpired()) {
             AgentLog.add("CONFIRMACIÓN vencida: «${action.question}»")
             return null
+        }
+        // "Cambiá guía por IA", "no, ponele…": se corrige el mensaje y se vuelve a preguntar.
+        action.message?.let { message ->
+            when (val edit = MessageEdit.apply(command, message.text)) {
+                is MessageEdit.Result.Edited -> {
+                    val updated = message.rebuild(edit.text)
+                    pending = updated
+                    pendingTask = task
+                    AgentLog.add("CORREGÍ el mensaje: «${message.text}» → «${edit.text}»")
+                    memory.addExchange(command, updated.question)
+                    return Reply(updated.question, expectsReply = true)
+                }
+                is MessageEdit.Result.NotFound -> {
+                    pending = action
+                    pendingTask = task
+                    AgentLog.add("CORRECCIÓN sin efecto: no está «${edit.words}»")
+                    return Reply("En el mensaje no está «${edit.words}». ${action.question}", expectsReply = true)
+                }
+                null -> Unit
+            }
         }
         // "Respondele que sí" o "poné una alarma" no son respuestas a la pregunta: son pedidos nuevos.
         val name = WakeWordSettings(appContext).agentName
