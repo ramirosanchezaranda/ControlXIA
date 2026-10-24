@@ -63,8 +63,8 @@ class AirGestures(
     companion object {
         /** La palma quieta este tiempo pausa (menos es para deslizar). */
         const val PALM_HOLD_MS = 2_000L
-        /** El puño se sostiene casi un segundo: es fácil cerrar la mano sin querer. */
-        const val FIST_FRAMES = 8
+        /** El puño se sostiene un poco más que las otras señas: es fácil cerrar la mano sin querer. */
+        const val FIST_FRAMES = 6
         private val QUICK = setOf(HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY, HandSigns.Sign.FIST)
     }
 }

@@ -244,11 +244,32 @@ class WhatsAppUi(private val context: Context) {
             .map { it to matchScore(name, it.text.toString()) }
             .maxByOrNull { it.second }
 
-    /** El chat de WhatsApp que está abierto adelante, o null si no hay uno. */
+    /**
+     * El chat de WhatsApp que está abierto adelante, o null si no hay uno. Busca
+     * en todas las ventanas (un aviso encima puede tener el foco) y, si cambió
+     * el nombre interno del encabezado, cualquier "…contact_name" de WhatsApp.
+     */
     fun openChatTitle(): String? {
-        val root = XiaAccessibilityService.instance?.rootInActiveWindow ?: return null
-        val pkg = root.packageName?.toString()?.takeIf { it in PACKAGES } ?: return null
-        return chatHeader(root, pkg)
+        val service = XiaAccessibilityService.instance ?: return null
+        val roots = listOfNotNull(service.rootInActiveWindow) +
+            runCatching { service.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
+        for (root in roots) {
+            val pkg = root.packageName?.toString()?.takeIf { it in PACKAGES } ?: continue
+            chatHeader(root, pkg)?.let { return it }
+            anyContactName(root)?.let { return it }
+        }
+        return null
+    }
+
+    private fun anyContactName(root: AccessibilityNodeInfo): String? {
+        fun visit(node: AccessibilityNodeInfo?, depth: Int): String? {
+            if (node == null || depth > 12) return null
+            val id = node.viewIdResourceName.orEmpty()
+            if (id.endsWith("contact_name") && !node.text.isNullOrBlank()) return node.text.toString()
+            for (i in 0 until node.childCount) visit(node.getChild(i), depth + 1)?.let { return it }
+            return null
+        }
+        return visit(root, 0)
     }
 
     private fun chatHeader(root: AccessibilityNodeInfo, pkg: String): String? =

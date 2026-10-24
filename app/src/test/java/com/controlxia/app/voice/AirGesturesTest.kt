@@ -51,7 +51,7 @@ class AirGesturesTest {
         val fist = List(12) { Frame(Sign.FIST) }
         val frames = fist + listOf(Frame(null), Frame(null)) + fist
         assertEquals(
-            listOf(7 to Event.Sign(Sign.FIST), 21 to Event.Sign(Sign.FIST)),
+            listOf(5 to Event.Sign(Sign.FIST), 19 to Event.Sign(Sign.FIST)),
             run(frames),
         )
     }

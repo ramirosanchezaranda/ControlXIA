@@ -33,6 +33,7 @@ object GestureDiagnostics {
             add("Control de apps: activado ${yes(XiaAccessibilityService.isEnabled(context))}, conectado ${yes(XiaAccessibilityService.instance != null)}, anduvo antes ${yes(A11yHealth.wasOn(context))}, se prende solo ${yes(A11yHealth.canRepair(context))} · App adelante: ${XiaAccessibilityService.foregroundPackage ?: "—"}")
             add("Señas con la cámara: ${on(settings.handsPause)} · servicio ${on(HandsWatchService.running)} · permiso de cámara ${yes(PermissionManager.hasCamera(context))}")
             add("Modelos: gestos ${yes(GestureModel.isInstalled(context))}, cara ${yes(GestureModel.isFaceInstalled(context))} · Señas con una mano ${on(settings.handGestures)} · Con cualquier app ${on(settings.handsAlways)} · Sí/no con gestos ${on(settings.confirmGestures)}")
+            add("Videos en WhatsApp con ✊: ${on(settings.videoGestures)}")
             add("Cámara: ${live.reason.ifBlank { "—" }}")
             add("Última seña: ${live.seen?.let { "$it hace ${(now - live.seenAt) / 1000} s" } ?: "ninguna"}")
             add("Saludar al teléfono: ${on(settings.waveGestures)} · sensor ${WaveGestures.describe(context)}")

@@ -121,6 +121,7 @@ class HandsWatchService : LifecycleService() {
     private var recordingChat: String? = null
     private var recordingFile: File? = null
     private var recordingStartedAt = 0L
+    private var recordingLimitMs = MAX_VIDEO_MS
 
     /** El video grabado esperando 👍 o 👎, cuando la escucha no anda para preguntarlo en voz alta. */
     @Volatile
@@ -496,12 +497,17 @@ class HandsWatchService : LifecycleService() {
 
     /** ✊ sostenido con un chat de WhatsApp abierto: empieza a grabar un video para ese chat. */
     private fun onFist() {
-        if (!videoOn || locked() || !whatsAppInFront()) return
-        val chat = WhatsAppUi(this).openChatTitle()
-        if (chat == null) {
-            show("Abrí el chat al que le querés mandar el video y hacé ✊ de nuevo")
-            return
+        val front = XiaAccessibilityService.foregroundPackage
+        when {
+            !videoOn -> return AgentLog.add("MANOS ✊, pero los videos con gestos están apagados")
+            locked() -> return AgentLog.add("MANOS ✊ con el teléfono bloqueado: no grabo")
+            !whatsAppInFront() -> return AgentLog.add("MANOS ✊ fuera de WhatsApp (adelante: ${front ?: "no sé"})")
         }
+        // Sin el nombre del chat se graba igual, y al mandarlo se elige en WhatsApp.
+        val chat = WhatsAppUi(this).openChatTitle().orEmpty()
+        AgentLog.add("MANOS ✊ en WhatsApp: grabo un video para «${chat.ifEmpty { "el chat que elijas" }}»")
+        feedback.vibrate(40)
+        show("✊ Empiezo a grabar…")
         handler.post { startVideo(chat) }
     }
 
@@ -518,15 +524,23 @@ class HandsWatchService : LifecycleService() {
             useCase?.let { cameras.unbind(it) }
             cameras.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis, capture)
         }
+        // Algunas cámaras no pueden grabar y mirar las señas a la vez: graba solo, con un tope corto.
+        var gestureStop = true
         if (bound.isFailure) {
-            AgentLog.add("MANOS no pude grabar video: ${bound.exceptionOrNull()?.message}")
-            show("No pude grabar el video con esta cámara")
-            useCase = null
-            cameraOn = false
-            evaluate()
-            return
+            AgentLog.add("MANOS la cámara no graba y mira a la vez (${bound.exceptionOrNull()?.message}): grabo sin mirar")
+            gestureStop = false
+            val alone = runCatching { cameras.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, capture) }
+            if (alone.isFailure) {
+                AgentLog.add("MANOS no pude grabar video: ${alone.exceptionOrNull()?.message}")
+                show("No pude grabar el video con esta cámara")
+                useCase = null
+                cameraOn = false
+                evaluate()
+                return
+            }
         }
-        useCase = analysis
+        recordingLimitMs = if (gestureStop) MAX_VIDEO_MS else BLIND_VIDEO_MS
+        useCase = analysis.takeIf { gestureStop }
         videoCapture = capture
         recordingChat = chat
         val file = File(VideoMessage.dir(this), "video_${System.currentTimeMillis()}.mp4")
@@ -555,10 +569,17 @@ class HandsWatchService : LifecycleService() {
         }
         recording = active
         recordingStartedAt = SystemClock.elapsedRealtime()
-        handler.postDelayed(stopVideoAtLimit, MAX_VIDEO_MS)
+        handler.postDelayed(stopVideoAtLimit, recordingLimitMs)
         feedback.vibrate(60)
         seen("🎥 grabando")
-        show("🎥 Grabando para «$chat»… ✊ o ✋ quieta para terminar")
+        val forWhom = if (chat.isEmpty()) "" else " para «$chat»"
+        show(
+            if (recordingLimitMs == MAX_VIDEO_MS) {
+                "🎥 Grabando$forWhom… ✊ o ✋ quieta para terminar"
+            } else {
+                "🎥 Grabando$forWhom ${recordingLimitMs / 1000} segundos"
+            },
+        )
         AgentLog.add("MANOS grabando un video para «$chat»")
         publish(reason())
     }
@@ -586,24 +607,29 @@ class HandsWatchService : LifecycleService() {
         val file = recordingFile
         val seconds = (event.recordingStats.recordedDurationNanos / 1_000_000_000L).toInt()
         endVideo()
-        if (chat == null || file == null || !file.exists() || file.length() == 0L || seconds < 1) {
+        if (file == null || !file.exists() || file.length() == 0L || seconds < 1) {
             AgentLog.add("MANOS el video no se grabó (error ${event.error}: ${event.cause?.message})")
             show("No se grabó el video")
             return
         }
         AgentLog.add("MANOS video listo: $seconds s, ${file.length() / 1024} KB")
         feedback.vibrate(40)
+        val target = chat.orEmpty()
         val action = PendingAction(
-            question = "¿Le mando a «$chat» el video de $seconds segundos?",
+            question = if (target.isEmpty()) {
+                "¿Mando el video de $seconds segundos? Elegís el chat en WhatsApp."
+            } else {
+                "¿Le mando a «$target» el video de $seconds segundos?"
+            },
             progress = "Mandando el video…",
-            execute = { VideoMessage(applicationContext).send(file, chat) },
+            execute = { VideoMessage(applicationContext).send(file, target) },
         )
         // Con la escucha andando, lo pregunta en voz alta (contestás con la voz, 👍 o un guiño).
         if (!WakeWordService.confirm(action)) {
             answerSigns.reset()
             localPendingUntil = SystemClock.elapsedRealtime() + LOCAL_CONFIRM_MS
             localPending = action
-            show("Video listo: 👍 para mandarlo a «$chat», 👎 para no")
+            show("Video listo: 👍 para mandarlo, 👎 para no")
             evaluate()
         }
     }
@@ -730,6 +756,8 @@ class HandsWatchService : LifecycleService() {
         private const val MAX_VIDEO_MS = 60_000L
         private const val MIN_VIDEO_MS = 1_500L
         private const val MIC_HANDOFF_MS = 300L
+        /** Si la cámara no puede mirar mientras graba, no hay gesto para cortar: un tope corto. */
+        private const val BLIND_VIDEO_MS = 20_000L
         private const val LOCAL_CONFIRM_MS = 20_000L
         private const val LIMIT = "llegó al minuto"
         private const val IDLE_FRAME_MS = 300L
@@ -742,7 +770,7 @@ class HandsWatchService : LifecycleService() {
 
         /** Las señas quietas que hacen algo (las demás se ignoran). */
         /** Las señas que hacen algo (para mostrar la última que vio). */
-        private val SHOWN = setOf(HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY, HandSigns.Sign.OPEN_PALM)
+        private val SHOWN = setOf(HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY, HandSigns.Sign.OPEN_PALM, HandSigns.Sign.FIST)
 
         private val SIGN_NAMES = mapOf(
             HandSigns.Sign.POINT_UP to "☝️ dedo arriba", HandSigns.Sign.POINT_DOWN to "👇 dedo abajo",

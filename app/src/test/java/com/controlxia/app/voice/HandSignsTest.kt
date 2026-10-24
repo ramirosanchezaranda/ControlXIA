@@ -64,8 +64,16 @@ class HandSignsTest {
     fun openHandWithoutMediaPipeNameIsPalm() {
         // Los dedos juntos, como para deslizar: MediaPipe no siempre la llama "Open_Palm".
         assertEquals(Sign.OPEN_PALM, HandSigns.classify(null, 0f, hand(listOf(true, true, true, true), angleDeg = 25.0)))
-        assertEquals(Sign.NONE, HandSigns.classify(null, 0f, hand(listOf(false, false, false, false))))
+        assertEquals(Sign.FIST, HandSigns.classify(null, 0f, hand(listOf(false, false, false, false))))
         assertEquals(Sign.THUMB_UP, HandSigns.classify("Thumb_Up", 0.9f, hand(listOf(false, false, false, false))))
+    }
+
+    @Test
+    fun fistWithoutMediaPipeName() {
+        // Los cuatro dedos doblados y el pulgar al costado (pegado): puño.
+        assertEquals(Sign.FIST, HandSigns.classify(null, 0f, hand(listOf(false, false, false, false))))
+        // Con un dedo estirado ya no es puño.
+        assertEquals(Sign.NONE, HandSigns.classify(null, 0f, hand(listOf(false, true, false, false))))
     }
 
     /** Cuadros cada 200 ms; devuelve en qué cuadro disparó cada seña. */
