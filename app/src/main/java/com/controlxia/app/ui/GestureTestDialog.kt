@@ -49,6 +49,7 @@ import androidx.core.content.ContextCompat
 import com.controlxia.app.service.HandsWatchService
 import com.controlxia.app.ui.components.TechButton
 import com.controlxia.app.ui.theme.Aura
+import com.controlxia.app.voice.AirGestures
 import com.controlxia.app.voice.FaceSigns
 import com.controlxia.app.voice.HandAnalyzer
 import com.controlxia.app.voice.HandMotion
@@ -94,8 +95,7 @@ private fun GestureTestContent(onClose: () -> Unit) {
         val executor = Executors.newSingleThreadExecutor()
         val main = ContextCompat.getMainExecutor(context)
         var analyzer: HandAnalyzer? = null
-        val motion = HandMotion()
-        val signs = HandSigns.Trigger(framesNeeded = 4, framesFor = mapOf(HandSigns.Sign.OPEN_PALM to 10))
+        val air = AirGestures()
         val faces = FaceSigns()
         var provider: ProcessCameraProvider? = null
         var analysis: ImageAnalysis? = null
@@ -140,9 +140,10 @@ private fun GestureTestContent(onClose: () -> Unit) {
                         -1
                     }
                     val hand = result.hands.firstOrNull()
-                    val swipe = motion.feed(hand?.x, hand?.y, now)
+                    val gesture = air.feed(hand?.sign, hand?.x, hand?.y, now)
+                    val swipe = (gesture as? AirGestures.Event.Swipe)?.swipe
+                    val fired = (gesture as? AirGestures.Event.Sign)?.sign
                     val sign = hand?.sign ?: HandSigns.Sign.NONE
-                    val fired = if (swipe == null) signs.feed(sign, now) else null.also { signs.reset() }
                     val answer = faces.feed(result.face, now)
                     val event = when {
                         swipe != null -> "${SWIPES[swipe]} ¡Deslizaste!"
@@ -159,12 +160,12 @@ private fun GestureTestContent(onClose: () -> Unit) {
                             frame = shown,
                             // Se muestra como espejo: la x se invierte.
                             hands = result.hands.map { h -> (1f - h.x) to h.y },
-                            armed = motion.armed,
+                            armed = air.armed,
                             sign = when {
                                 result.hands.isEmpty() -> "No veo ninguna mano. Ponela frente a la cámara, a unos 30–50 cm, con luz."
-                                motion.armed -> "✋ Lista: deslizala rápido para un lado"
+                                air.armed -> "✋ Lista: deslizala rápido para un lado"
                                 sign != HandSigns.Sign.NONE -> "Veo: ${NAMES[sign] ?: sign.name}"
-                                else -> "Veo tu mano. Dejala quieta un instante para deslizar, o hacé una seña."
+                                else -> "Veo tu mano. Abrila (palma hacia la cámara) y dejala quieta un instante para deslizar."
                             },
                             event = event ?: it.event,
                             eventAt = if (event != null) now else it.eventAt,
@@ -224,9 +225,10 @@ private fun GestureTestContent(onClose: () -> Unit) {
         }
         if (state.eyes.isNotEmpty()) Text(state.eyes, style = MaterialTheme.typography.bodySmall, color = Aura.colors.secondaryLabel)
         Text(
-            "Cómo deslizar: mano abierta frente a la cámara, quieta hasta que el círculo se ponga verde, y movela " +
-                "rápido para arriba (siguiente), abajo (anterior) o a un costado. También: ☝️ apuntar, 👍 me gusta, " +
-                "✋ palma quieta 1 segundo (pausa), ✌️ hablarme, 🙌 las dos manos. Analiza ${state.fps} cuadros por segundo.",
+            "Cómo deslizar: palma abierta hacia la cámara (los dedos pueden ir juntos), quieta hasta que el círculo " +
+                "se ponga verde, y movela rápido para arriba (siguiente), abajo (anterior) o a un costado. Volver la " +
+                "mano no cuenta. También: ✋ palma quieta 2 segundos (pausa), 👍 me gusta, ✌️ hablarme, 🙌 las dos " +
+                "manos. Analiza ${state.fps} cuadros por segundo.",
             style = MaterialTheme.typography.bodySmall,
             color = Aura.colors.secondaryLabel,
         )

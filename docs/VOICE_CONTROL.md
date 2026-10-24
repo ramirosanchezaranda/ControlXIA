@@ -164,7 +164,7 @@ Pasando la mano por encima de la pantalla, a unos centímetros y sin tocarla. Us
 
 Ajustar → Gestos con las manos → **Señas con la cámara**. Mientras mirás videos o reels (o con cualquier app, si activás **Con cualquier app**, que gasta bastante más batería), la cámara frontal mira tus manos. Ajustes muestra en vivo si está mirando, por qué, y la última seña que vio.
 
-**Deslizar en el aire (desde la 0.14.0)**, como los gestos aéreos de los teléfonos: poné la mano abierta frente a la cámara (a 30–50 cm), quieta hasta que el teléfono haga un "tic" apenas perceptible, y movela rápido para arriba (reel siguiente), abajo (anterior) o a un costado (foto o historia). La app hace **el mismo deslizamiento que harías con el dedo**, así que anda en Instagram, TikTok, YouTube Shorts y cualquier app (antes usaba el "desplazar" de la accesibilidad, que en Instagram podía decir que había andado sin cambiar el reel). Cada gesto reconocido muestra un cartelito ("⬆️ siguiente") para saber que lo vio.
+**Deslizar en el aire con la palma (desde la 0.14.2)**, como los gestos aéreos de los teléfonos: poné la **palma abierta** hacia la cámara (a 30–50 cm; los dedos pueden ir juntos), quieta hasta que el teléfono haga un "tic" apenas perceptible, y movela rápido para arriba (reel siguiente), abajo (anterior) o a un costado (foto o historia). Cada movimiento cuenta **una sola vez**: volver la mano a su lugar no cuenta como el gesto contrario (por 2 s), un movimiento lento no cuenta, y para otro deslizamiento hay que dejar la palma quieta de nuevo. El dedo apuntando ya no desliza: al soltar el dedo después de apuntar para arriba se veía "para abajo" y pasaba dos veces. La app hace **el mismo deslizamiento que harías con el dedo**, así que anda en Instagram, TikTok, YouTube Shorts y cualquier app (antes usaba el "desplazar" de la accesibilidad, que en Instagram podía decir que había andado sin cambiar el reel). Cada gesto reconocido muestra un cartelito ("⬆️ siguiente") para saber que lo vio.
 
 Con el teléfono **bloqueado y música sonando**, deslizar a los costados cambia de tema y arriba/abajo sube o baja el volumen. Bloqueado y sin música la cámara no mira: el desbloqueo con la cara también usa la cámara frontal.
 
@@ -175,16 +175,16 @@ Con el teléfono **bloqueado y música sonando**, deslizar a los costados cambia
 
 | Seña | Hace |
 |---|---|
-| ☝️ Dedo índice para arriba | Reel o video siguiente (mantenelo para seguir pasando, uno cada ~2 s) |
-| 👇 Dedo para abajo | El anterior |
-| 👉 Dedo al costado | Foto o historia siguiente o anterior |
-| ✋ Palma abierta, quieta 1 segundo | Pausa o sigue el video |
+| ✋⬆️ Palma quieta y movida rápido para arriba | Reel o video siguiente |
+| ✋⬇️ Para abajo | El anterior |
+| ✋↔️ A un costado | Foto o historia siguiente o anterior |
+| ✋ Palma abierta, quieta 2 segundos sin moverla | Pausa o sigue el video |
 | 👍 Pulgar arriba | Me gusta (dos toques en el medio) |
 | ✌️ V | Pausa y te escucha, sin decir el nombre |
 | 🙌 Las dos manos arriba | Pausa y pregunta "¿Qué necesitás?" |
 
-- Usa el **reconocedor de gestos de MediaPipe** (Google, Apache 2.0). MediaPipe reconoce "dedo para arriba" pero no para abajo ni a los costados: la dirección se calcula con los 21 puntos de la mano (índice estirado, los otros tres doblados, y hacia dónde va del nudillo a la punta). En diagonal no hace nada.
-- Para que no se dispare sin querer: la seña tiene que verse 3 cuadros seguidos (~0,6 s), hay ~1 s entre acciones y, para repetir, hay que bajar la mano (salvo pasar de reel, que se repite si la mantenés). Vibra apenas al actuar.
+- Usa el **reconocedor de gestos de MediaPipe** (Google, Apache 2.0) y los 21 puntos de la mano: la palma cuenta como abierta con los cuatro dedos estirados aunque estén juntos (MediaPipe no siempre la llama "Open_Palm" así). La lógica está en `AirGestures` y `HandMotion`, sin Android y con pruebas.
+- Para que no se dispare sin querer: solo la palma abierta se pone lista para deslizar (bajar la mano después de un 👍 no desliza), 👍 y ✌️ tienen que verse 4 cuadros seguidos, hay ~1 s entre acciones y, para repetir una seña, hay que bajar la mano. Vibra apenas al actuar.
 - La cámara se prende **solo mientras algo se reproduce o hay una app de videos adelante** (Instagram, TikTok, YouTube, Facebook, Netflix, Snapchat) y se apaga a los 8 s. Analiza ~5 cuadros por segundo en el teléfono: no se guardan ni se mandan imágenes.
 - Las señas que tocan la pantalla necesitan el **control de apps** (accesibilidad).
 - El modelo (8 MB) se baja la primera vez que se activa. Android solo deja usar la cámara en segundo plano si el servicio arrancó con la app a la vista: se activa desde la app y al abrirla se reactiva si quedó apagado.

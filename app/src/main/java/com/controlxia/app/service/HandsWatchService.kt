@@ -39,6 +39,7 @@ import com.controlxia.app.actions.Gestures
 import com.controlxia.app.actions.MediaApps
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.permissions.A11yHealth
+import com.controlxia.app.voice.AirGestures
 import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.ConfirmState
 import com.controlxia.app.voice.FaceSigns
@@ -57,12 +58,12 @@ import java.util.concurrent.Executors
 /**
  * Gestos con la cámara frontal, como los gestos aéreos de los teléfonos:
  *
- * - **Deslizar en el aire** ([HandMotion]): dejás la mano quieta un instante y
- *   la movés rápido arriba, abajo o a un costado; la app hace el mismo
- *   deslizamiento con el dedo en la pantalla (reel siguiente o anterior, foto o
- *   historia). También con el índice apuntando ([HandSigns]).
- * - 👍 me gusta (dos toques en el video), ✋ sostenida pausa o sigue, ✌️ pausa
- *   y te escucha, 🙌 las dos manos pausan y preguntan "¿Qué necesitás?".
+ * - **Deslizar en el aire** con la palma abierta ([AirGestures], [HandMotion]):
+ *   la dejás quieta un instante y la movés rápido arriba, abajo o a un
+ *   costado; la app hace el mismo deslizamiento con el dedo en la pantalla
+ *   (reel siguiente o anterior, foto o historia). La vuelta de la mano no cuenta.
+ * - 👍 me gusta (dos toques en el video), ✋ quieta 2 segundos pausa o sigue,
+ *   ✌️ pausa y te escucha, 🙌 las dos manos pausan y preguntan "¿Qué necesitás?".
  * - Cuando el asistente pregunta algo: guiño o asentir = sí, negar = no, 👍/👎.
  * - Con el teléfono bloqueado y música sonando: deslizar a los costados cambia
  *   de tema, arriba y abajo el volumen.
@@ -83,8 +84,7 @@ class HandsWatchService : LifecycleService() {
     private var streak = 0
     private var lastTrigger = 0L
     private var lastHandAt = 0L
-    private val signs = HandSigns.Trigger(framesNeeded = 4, framesFor = mapOf(HandSigns.Sign.OPEN_PALM to 10))
-    private val motion = HandMotion()
+    private val air = AirGestures()
     private val feedback by lazy { Feedback(this) }
 
     @Volatile
@@ -282,8 +282,7 @@ class HandsWatchService : LifecycleService() {
         useCase = null
         cameraOn = false
         streak = 0
-        signs.reset()
-        motion.reset()
+        air.reset()
         AgentLog.add("MANOS cámara apagada (${reason()})")
         publish(reason())
     }
@@ -305,7 +304,7 @@ class HandsWatchService : LifecycleService() {
             // Mientras el asistente atiende, no hace falta mirar.
             if (AssistantState.state.value.phase != AssistantState.Phase.IDLE) {
                 streak = 0
-                motion.reset()
+                air.reset()
                 return
             }
             val result = engine.analyze(HandAnalyzer.upright(image))
@@ -315,33 +314,29 @@ class HandsWatchService : LifecycleService() {
             if (streak >= FRAMES_NEEDED && now - lastTrigger > COOLDOWN_MS) {
                 streak = 0
                 lastTrigger = now
-                signs.reset()
-                motion.reset()
+                air.reset()
                 onHandsUp()
                 return
             }
             if (!gesturesOn || result.raised >= 2) {
-                motion.reset()
-                signs.feed(HandSigns.Sign.NONE, now)
+                air.reset()
                 return
             }
-            // Deslizar en el aire (con la mano que se ve más).
+            // Con la mano que se ve más: deslizar con la palma, palma quieta, 👍, ✌️.
             val hand = result.hands.firstOrNull()
-            val wasArmed = motion.armed
-            motion.feed(hand?.x, hand?.y, now)?.let { swipe ->
-                signs.reset()
-                act(swipe)
-                return
+            val wasArmed = air.armed
+            when (val event = air.feed(hand?.sign, hand?.x, hand?.y, now)) {
+                is AirGestures.Event.Swipe -> return act(event.swipe)
+                is AirGestures.Event.Sign -> return perform(event.sign)
+                null -> Unit
             }
-            if (motion.armed && !wasArmed) {
+            if (air.armed && !wasArmed) {
                 // Un "tic" apenas: ya se puede deslizar.
                 seen("✋ lista para deslizar")
                 feedback.vibrate(12)
             }
-            // Señas quietas: índice apuntando, pulgar, palma sostenida, V.
-            val sign = hand?.sign?.takeIf { it in ACTIONS } ?: HandSigns.Sign.NONE
-            if (sign != HandSigns.Sign.NONE && !motion.armed) seen(SIGN_NAMES[sign] ?: sign.name)
-            signs.feed(sign, now)?.let { perform(it) }
+            val sign = hand?.sign?.takeIf { it in SHOWN } ?: HandSigns.Sign.NONE
+            if (sign != HandSigns.Sign.NONE && !air.armed) seen(SIGN_NAMES[sign] ?: sign.name)
         } catch (e: Exception) {
             AgentLog.add("MANOS error al analizar: ${e.message}")
         } finally {
@@ -426,14 +421,6 @@ class HandsWatchService : LifecycleService() {
     /** Hace lo que pide la seña, en la app que esté adelante. */
     private fun perform(sign: HandSigns.Sign) {
         AgentLog.add("MANOS seña ${sign.name}")
-        // El índice apuntando: como deslizar el dedo para ese lado.
-        when (sign) {
-            HandSigns.Sign.POINT_UP -> return act(HandMotion.Swipe.UP)
-            HandSigns.Sign.POINT_DOWN -> return act(HandMotion.Swipe.DOWN)
-            HandSigns.Sign.POINT_LEFT -> return act(HandMotion.Swipe.LEFT)
-            HandSigns.Sign.POINT_RIGHT -> return act(HandMotion.Swipe.RIGHT)
-            else -> Unit
-        }
         feedback.vibrate(25)
         show(SIGN_NAMES[sign] ?: sign.name)
         when (sign) {
@@ -529,11 +516,8 @@ class HandsWatchService : LifecycleService() {
         private const val COOLDOWN_MS = 8_000L
 
         /** Las señas quietas que hacen algo (las demás se ignoran). */
-        private val ACTIONS = setOf(
-            HandSigns.Sign.POINT_UP, HandSigns.Sign.POINT_DOWN, HandSigns.Sign.POINT_LEFT,
-            HandSigns.Sign.POINT_RIGHT, HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY,
-            HandSigns.Sign.OPEN_PALM,
-        )
+        /** Las señas que hacen algo (para mostrar la última que vio). */
+        private val SHOWN = setOf(HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY, HandSigns.Sign.OPEN_PALM)
 
         private val SIGN_NAMES = mapOf(
             HandSigns.Sign.POINT_UP to "☝️ dedo arriba", HandSigns.Sign.POINT_DOWN to "👇 dedo abajo",

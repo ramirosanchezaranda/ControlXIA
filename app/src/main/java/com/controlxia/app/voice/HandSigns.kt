@@ -31,6 +31,8 @@ object HandSigns {
         mirrored: Boolean = false,
     ): Sign {
         pointing(points, aspect, mirrored)?.let { return it }
+        // Con los dedos juntos (la mano como para deslizar) MediaPipe a veces no la llama "Open_Palm".
+        if ((score < MIN_SCORE || category == null || category == "None") && isOpenHand(points, aspect)) return Sign.OPEN_PALM
         if (score < MIN_SCORE) return Sign.NONE
         return when (category) {
             "Pointing_Up" -> Sign.POINT_UP
@@ -41,6 +43,19 @@ object HandSigns {
             "Closed_Fist" -> Sign.FIST
             else -> Sign.NONE
         }
+    }
+
+    /** La mano abierta: los cuatro dedos estirados, juntos o separados. */
+    fun isOpenHand(points: List<Point>, aspect: Float = 1f): Boolean {
+        if (points.size < 21) return false
+        fun p(i: Int) = Point(points[i].x * aspect, points[i].y)
+        fun dist(a: Point, b: Point) = hypot(a.x - b.x, a.y - b.y)
+        val palm = dist(p(WRIST), p(MIDDLE_MCP))
+        if (palm < 1e-3f) return false
+        fun reach(tip: Int, mcp: Int) = dist(p(tip), p(mcp)) / palm
+        // El meñique es más corto: se le pide menos.
+        return reach(INDEX_TIP, INDEX_MCP) >= OPEN && reach(MIDDLE_TIP, MIDDLE_MCP) >= OPEN &&
+            reach(RING_TIP, RING_MCP) >= OPEN && reach(PINKY_TIP, PINKY_MCP) >= OPEN_PINKY
     }
 
     /** Índice estirado y los otros tres doblados: ¿hacia dónde apunta? null si no apunta. */
@@ -137,6 +152,9 @@ object HandSigns {
     private const val EXTENDED = 0.72f
     /** …y doblado abajo de esto. */
     private const val FOLDED = 0.62f
+    /** Para la mano abierta (los dedos juntos de costado se ven un poco más cortos). */
+    private const val OPEN = 0.6f
+    private const val OPEN_PINKY = 0.45f
     /** Cuánto más tiene que ser un eje que el otro para contar como esa dirección. */
     private const val DOMINANT = 1.3f
     private const val MIN_SCORE = 0.5f

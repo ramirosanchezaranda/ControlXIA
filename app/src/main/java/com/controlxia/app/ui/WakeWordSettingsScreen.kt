@@ -730,11 +730,10 @@ private val ANSWER_LEGEND = listOf(
 
 /** Qué hace cada seña frente a la cámara (la última, las dos manos, siempre está). */
 private val HAND_LEGEND = listOf(
-    "✋⬆️" to "Deslizar en el aire: mano quieta frente a la cámara hasta que vibre apenas… y movela rápido para arriba (siguiente), abajo (anterior) o a un costado. Hace el mismo deslizamiento que el dedo",
-    "☝️" to "Dedo para arriba: el reel o video siguiente (mantenelo para seguir pasando)",
-    "👇" to "Dedo para abajo: el anterior",
-    "👉" to "Dedo al costado: la foto o historia siguiente o anterior",
-    "✋" to "Palma abierta quieta 1 segundo: pausa o sigue el video",
+    "✋⬆️" to "Palma abierta hacia la cámara, quieta hasta que vibre apenas… y movela rápido para arriba: el reel o video siguiente",
+    "✋⬇️" to "Para abajo: el anterior",
+    "✋↔️" to "A un costado: la foto o historia siguiente o anterior. Es el mismo deslizamiento que con el dedo, y volver la mano no cuenta",
+    "✋" to "Palma quieta 2 segundos, sin moverla: pausa o sigue el video",
     "👍" to "Pulgar arriba: me gusta",
     "✌️" to "V: pausa y te escucho, sin decir mi nombre",
     "🙌" to "Las dos manos arriba: pausa y te pregunto qué necesitás",

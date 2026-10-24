@@ -5,12 +5,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Deslizar en el aire: mano quieta y movimiento rápido. */
+/** Deslizar en el aire: palma quieta, movimiento rápido y la vuelta no cuenta. */
 class HandMotionTest {
 
     /** Cuadros cada 100 ms: (x, y) o null sin mano. Devuelve los deslizamientos con su cuadro. */
-    private fun run(motion: HandMotion, frames: List<Pair<Float, Float>?>, mirrored: Boolean = false): List<Pair<Int, Swipe>> =
-        frames.mapIndexedNotNull { i, p -> motion.feed(p?.first, p?.second, i * 100L, mirrored)?.let { i to it } }
+    private fun run(
+        motion: HandMotion,
+        frames: List<Pair<Float, Float>?>,
+        mirrored: Boolean = false,
+        open: Boolean = true,
+    ): List<Pair<Int, Swipe>> =
+        frames.mapIndexedNotNull { i, p -> motion.feed(p?.first, p?.second, i * 100L, mirrored, open)?.let { i to it } }
 
     private fun still(x: Float, y: Float, n: Int) = List(n) { x to y }
 
@@ -57,10 +62,37 @@ class HandMotionTest {
     @Test
     fun needsToBeStillAgainForASecondSwipe() {
         val frames = still(0.5f, 0.6f, 5) + listOf(0.5f to 0.4f, 0.5f to 0.6f, 0.5f to 0.4f) +
-            still(0.5f, 0.6f, 5) + listOf(0.5f to 0.4f)
+            still(0.5f, 0.6f, 7) + listOf(0.5f to 0.4f)
         val swipes = run(HandMotion(cooldownMs = 300), frames)
         assertEquals(listOf(Swipe.UP, Swipe.UP), swipes.map { it.second })
-        assertEquals(13, swipes.last().first)
+        assertEquals(15, swipes.last().first)
+    }
+
+    @Test
+    fun theReturnStrokeIsIgnored() {
+        // Sube (siguiente), se queda arriba un momento y baja la mano: no es "anterior".
+        val frames = still(0.5f, 0.6f, 5) + listOf(0.5f to 0.4f) + still(0.5f, 0.4f, 10) + listOf(0.5f to 0.6f)
+        assertEquals(listOf(5 to Swipe.UP), run(HandMotion(), frames))
+    }
+
+    @Test
+    fun theOtherWayCountsAfterAWhile() {
+        val frames = still(0.5f, 0.6f, 5) + listOf(0.5f to 0.4f) + still(0.5f, 0.4f, 20) + listOf(0.5f to 0.6f)
+        assertEquals(listOf(5 to Swipe.UP, 26 to Swipe.DOWN), run(HandMotion(), frames))
+    }
+
+    @Test
+    fun aClosedHandDoesNotSwipe() {
+        // Por ejemplo, bajar la mano después de un 👍.
+        val frames = still(0.5f, 0.4f, 6) + listOf(0.5f to 0.5f, 0.5f to 0.65f)
+        assertEquals(emptyList<Pair<Int, Swipe>>(), run(HandMotion(), frames, open = false))
+    }
+
+    @Test
+    fun aSlowMoveIsNothing() {
+        // Lista, pero se va moviendo de a poco: es la mano acomodándose.
+        val frames = still(0.5f, 0.4f, 5) + List(10) { i -> 0.5f to 0.4f + (i + 1) * 0.02f }
+        assertEquals(emptyList<Pair<Int, Swipe>>(), run(HandMotion(), frames))
     }
 
     @Test
