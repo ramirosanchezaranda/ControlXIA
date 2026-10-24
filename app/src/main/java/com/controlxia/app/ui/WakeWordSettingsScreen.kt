@@ -389,7 +389,7 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
     if (enabled) {
         SwitchRow(
             title = "Señas con una mano",
-            detail = "Pasar de reel, me gusta, pausa, hablarme (abajo, la lista).",
+            detail = "Índice arriba o abajo para pasar de reel, puño para pausa, me gusta, hablarme (abajo, la lista).",
             checked = oneHand,
             onChange = {
                 oneHand = it
@@ -420,7 +420,7 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
         SwitchRow(
             title = "Videos en WhatsApp con un gesto",
             detail = "Con un chat abierto, el puño ✊ sostenido empieza a grabar un video con la cámara de adelante; " +
-                "✊ otra vez o la palma quieta lo termina, y te pregunto si lo mando a ese chat.",
+                "✊ otra vez lo termina, y te pregunto si lo mando a ese chat.",
             checked = videos,
             onChange = {
                 videos = it
@@ -740,7 +740,7 @@ private val WAVE_LEGEND = listOf(
 /** Contestar cuando pregunto algo. */
 private val VIDEO_LEGEND = listOf(
     "✊🎥" to "En un chat de WhatsApp, puño sostenido casi un segundo: grabo un video para ese chat",
-    "✊✋" to "Bajá la mano y hacé ✊ otra vez (o dejá la palma quieta): termino y te pregunto si lo mando (hasta 1 minuto)",
+    "✊✊" to "Bajá la mano y hacé ✊ otra vez: termino y te pregunto si lo mando (hasta 1 minuto)",
 )
 
 private val ANSWER_LEGEND = listOf(
@@ -751,10 +751,10 @@ private val ANSWER_LEGEND = listOf(
 
 /** Qué hace cada seña frente a la cámara (la última, las dos manos, siempre está). */
 private val HAND_LEGEND = listOf(
-    "✋⬆️" to "Palma abierta hacia la cámara, quieta hasta que vibre apenas… y movela rápido para arriba: el reel o video siguiente",
-    "✋⬇️" to "Para abajo: el anterior",
-    "✋↔️" to "A un costado: la foto o historia siguiente o anterior. Es el mismo deslizamiento que con el dedo, y volver la mano no cuenta",
-    "✋" to "Palma quieta 2 segundos, sin moverla: pausa o sigue el video",
+    "☝️" to "Índice para arriba, medio segundo: el reel, Short o TikTok siguiente",
+    "👇" to "Índice para abajo: el anterior",
+    "👉" to "Índice al costado: la foto o historia siguiente o anterior. Relajá la mano entre una seña y otra",
+    "✊" to "Puño cerrado: pausa o sigue el video",
     "👍" to "Pulgar arriba: me gusta",
     "✌️" to "V: pausa y te escucho, sin decir mi nombre",
     "🙌" to "Las dos manos arriba: pausa y te pregunto qué necesitás",

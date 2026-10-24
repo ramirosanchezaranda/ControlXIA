@@ -193,9 +193,9 @@ object HandSigns {
     private const val PINKY_TIP = 20
 
     /** Punta-nudillo sobre el largo de la palma: estirado arriba de esto… */
-    private const val EXTENDED = 0.72f
+    private const val EXTENDED = 0.8f
     /** …y doblado abajo de esto. */
-    private const val FOLDED = 0.62f
+    private const val FOLDED = 0.55f
     /** Para la mano abierta (los dedos juntos de costado se ven un poco más cortos). */
     private const val OPEN = 0.6f
     private const val OPEN_PINKY = 0.45f
@@ -208,6 +208,6 @@ object HandSigns {
     private const val FIST_FOLDED = 0.55f
     private const val THUMB_OUT = 0.9f
     /** Cuánto más tiene que ser un eje que el otro para contar como esa dirección. */
-    private const val DOMINANT = 1.3f
+    private const val DOMINANT = 1.6f
     private const val MIN_SCORE = 0.5f
 }

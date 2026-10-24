@@ -179,35 +179,35 @@ Pasando la mano por encima de la pantalla, a unos centímetros y sin tocarla. Us
 
 Ajustar → Gestos con las manos → **Señas con la cámara**. Mientras mirás videos o reels (o con cualquier app, si activás **Con cualquier app**, que gasta bastante más batería), la cámara frontal mira tus manos. Ajustes muestra en vivo si está mirando, por qué, y la última seña que vio.
 
-**Deslizar en el aire con la palma (desde la 0.14.2)**, como los gestos aéreos de los teléfonos: poné la **palma abierta** hacia la cámara (a 30–50 cm; los dedos pueden ir juntos), quieta hasta que el teléfono haga un "tic" apenas perceptible, y movela rápido para arriba (reel siguiente), abajo (anterior) o a un costado (foto o historia). Cada movimiento cuenta **una sola vez**: volver la mano a su lugar no cuenta como el gesto contrario (por 2 s), un movimiento lento no cuenta, y para otro deslizamiento hay que dejar la palma quieta de nuevo. El dedo apuntando ya no desliza: al soltar el dedo después de apuntar para arriba se veía "para abajo" y pasaba dos veces. La app hace **el mismo deslizamiento que harías con el dedo**, así que anda en Instagram, TikTok, YouTube Shorts y cualquier app (antes usaba el "desplazar" de la accesibilidad, que en Instagram podía decir que había andado sin cambiar el reel). Cada gesto reconocido muestra un cartelito ("⬆️ siguiente") para saber que lo vio.
+**Señas con el dedo y el puño (desde la 0.18.0)**: **☝️ índice para arriba** medio segundo es el reel, Short o TikTok siguiente; **👇 para abajo**, el anterior; **👉 / 👈 al costado**, la foto o historia siguiente o anterior. La app hace **el mismo deslizamiento que harías con el dedo en la pantalla**, así que anda en Instagram, TikTok, YouTube Shorts y cualquier app. Cada seña cuenta **una sola vez**: hay que relajar la mano (o bajarla) antes de la próxima, hay un segundo como mínimo entre una y otra, y el sentido contrario no cuenta por 2 s (al soltar el dedo después de apuntar arriba, a veces se ve "abajo"). El **✊ puño** pausa o sigue el video. La palma abierta ya no hace nada sola: se confundía con la mano que usa el teléfono. Cada seña reconocida muestra un cartelito ("⬆️ siguiente").
 
-**Videos en WhatsApp con un gesto (desde la 0.16.0).** Con un chat de WhatsApp abierto, el **puño ✊ sostenido** casi un segundo empieza a grabar un video con la cámara de adelante (la misma que mira las señas, así que se puede terminar con otro gesto). Para terminar: bajá la mano y hacé ✊ otra vez, o dejá la palma quieta (como mucho dura un minuto). Después pregunta "¿Le mando a «Rodri» el video de 12 segundos?" y lo contestás con la voz, 👍 o un guiño; con el "sí" lo pasa a ese chat y toca enviar. Mientras graba, la escucha del nombre se pausa para que el micrófono sea del video. Si la escucha está apagada, alcanza con 👍 (o 👎 para descartarlo). Se apaga en Ajustar → Gestos → "Videos en WhatsApp con un gesto".
+**Videos en WhatsApp con un gesto (desde la 0.16.0).** Con un chat de WhatsApp abierto, el **puño ✊ sostenido** casi un segundo empieza a grabar un video con la cámara de adelante (la misma que mira las señas, así que se puede terminar con otro gesto). Para terminar: bajá la mano y hacé ✊ otra vez (como mucho dura un minuto). Después pregunta "¿Le mando a «Rodri» el video de 12 segundos?" y lo contestás con la voz, 👍 o un guiño; con el "sí" lo pasa a ese chat y toca enviar. Mientras graba, la escucha del nombre se pausa para que el micrófono sea del video. Si la escucha está apagada, alcanza con 👍 (o 👎 para descartarlo). Se apaga en Ajustar → Gestos → "Videos en WhatsApp con un gesto".
 
-Con el teléfono **bloqueado y música sonando**, deslizar a los costados cambia de tema y arriba/abajo sube o baja el volumen. Bloqueado y sin música la cámara no mira: el desbloqueo con la cara también usa la cámara frontal.
+Con el teléfono **bloqueado y música sonando**, el índice a los costados cambia de tema, arriba/abajo sube o baja el volumen y el puño pausa o sigue. Bloqueado y sin música la cámara no mira: el desbloqueo con la cara también usa la cámara frontal.
 
-**Probar con la cámara** abre la cámara como un espejo y muestra dónde ve tu mano (círculo azul; verde cuando está lista para deslizar), qué seña entiende y cada deslizamiento. **Copiar diagnóstico** copia un resumen (qué está activado, si el control de apps está conectado, el sensor, lo último que pasó) para pegarlo en un chat.
+**Probar con la cámara** abre la cámara como un espejo y muestra dónde ve tu mano (círculo verde cuando la mano cuenta: entera y a buena distancia), qué seña entiende y cada deslizamiento. **Copiar diagnóstico** copia un resumen (qué está activado, si el control de apps está conectado, el sensor, lo último que pasó) para pegarlo en un chat.
 
 **Contestar sí o no con un gesto**: cuando el asistente pregunta algo ("¿Le mando a Juan…?"), la cámara mira tu cara y tus manos un momento (hasta un minuto): **guiñar un ojo o asentir** es "sí", **negar con la cabeza** es "no", y también 👍 / 👎. Un parpadeo no cuenta como guiño. Usa el modelo de la cara de MediaPipe (3,7 MB, se baja con el de gestos).
 
 
 | Seña | Hace |
 |---|---|
-| ✋⬆️ Palma quieta y movida rápido para arriba | Reel o video siguiente |
-| ✋⬇️ Para abajo | El anterior |
-| ✋↔️ A un costado | Foto o historia siguiente o anterior |
-| ✋ Palma abierta, quieta 2 segundos sin moverla | Pausa o sigue el video |
-| ✊ Puño casi un segundo, en un chat de WhatsApp | Graba un video para ese chat (✊ otra vez o ✋ quieta para terminar) |
+| ☝️ Índice para arriba, medio segundo | Reel, Short o TikTok siguiente |
+| 👇 Índice para abajo | El anterior |
+| 👉 👈 Índice al costado | Foto o historia siguiente o anterior |
+| ✊ Puño casi un segundo | Pausa o sigue el video (sin video ni música, nada) |
+| ✊ Puño, en un chat de WhatsApp | Graba un video para ese chat (✊ otra vez para terminar) |
 | 👍 Pulgar arriba | Me gusta (dos toques en el medio) |
 | ✌️ V | Pausa y te escucha, sin decir el nombre |
 | 🙌 Las dos manos arriba | Pausa y pregunta "¿Qué necesitás?" |
 
-- Usa el **reconocedor de gestos de MediaPipe** (Google, Apache 2.0) y los 21 puntos de la mano: la palma cuenta como abierta con los cuatro dedos estirados aunque estén juntos (MediaPipe no siempre la llama "Open_Palm" así). La lógica está en `AirGestures` y `HandMotion`, sin Android y con pruebas.
-- Para que no se dispare sin querer (0.17.1):
+- Usa el **reconocedor de gestos de MediaPipe** (Google, Apache 2.0) y los 21 puntos de la mano: el dedo apuntando se calcula con la forma de la mano (índice bien estirado, los otros tres doblados, y casi vertical u horizontal: en diagonal no cuenta); el puño, también por la forma cuando MediaPipe no lo nombra. La lógica está en `AirGestures` y `HandSigns`, sin Android y con pruebas.
+- Para que no se dispare sin querer:
   - Solo cuenta una mano **entera en la imagen y a buena distancia** (ni cortada en el borde, ni pegada a la pantalla como la que usa el teléfono, ni lejos como alguien atrás).
   - **Mientras usás el teléfono** (tocás, escribís o deslizás) y 2,5 s después, no se miran señas.
-  - La pausa con la palma pide que MediaPipe esté **seguro** de que es una palma durante los 2 s; 👍 y ✌️ también.
-  - La palma **pausa solo si algo suena**, y "sigue" solo si la pausó un gesto en los últimos 10 minutos: nunca arranca música sola. 👍 es "me gusta" solo en apps de videos.
-  - Solo la palma abierta se pone lista para deslizar, hay ~1 s entre acciones y, para repetir una seña, hay que bajar la mano. Vibra apenas al actuar.
+  - 👍 y ✌️ piden que MediaPipe esté **seguro**; el dedo, medio segundo quieto en la misma dirección.
+  - Fuera de una app de videos, el puño **pausa solo si algo suena** y "sigue" solo si lo pausó un gesto en los últimos 10 minutos: nunca arranca música sola. 👍 es "me gusta" solo en apps de videos.
+  - Hay ~1 s entre acciones y, para repetir una seña, hay que relajar o bajar la mano. Vibra apenas al actuar.
   - Si algo igual se activa solo, el registro de "Copiar diagnóstico" dice qué vio y qué hizo (o por qué no hizo nada).
 - La cámara se prende **solo mientras algo se reproduce o hay una app de videos adelante** (Instagram, TikTok, YouTube, Facebook, Netflix, Snapchat) y se apaga a los 8 s. Analiza ~5 cuadros por segundo en el teléfono: no se guardan ni se mandan imágenes.
 - Las señas que tocan la pantalla necesitan el **control de apps** (accesibilidad).

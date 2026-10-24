@@ -140,7 +140,7 @@ private fun GestureTestContent(onClose: () -> Unit) {
                         -1
                     }
                     val hand = result.hands.firstOrNull { it.presented } ?: result.hands.firstOrNull()
-                    val gesture = air.feed(hand?.sign, hand?.x, hand?.y, now, presented = hand?.presented ?: false, sure = hand?.sure ?: false)
+                    val gesture = air.feed(hand?.sign, now, presented = hand?.presented ?: false, sure = hand?.sure ?: false)
                     val swipe = (gesture as? AirGestures.Event.Swipe)?.swipe
                     val fired = (gesture as? AirGestures.Event.Sign)?.sign
                     val sign = hand?.sign ?: HandSigns.Sign.NONE
@@ -160,16 +160,15 @@ private fun GestureTestContent(onClose: () -> Unit) {
                             frame = shown,
                             // Se muestra como espejo: la x se invierte.
                             hands = result.hands.map { h -> (1f - h.x) to h.y },
-                            armed = air.armed,
+                            armed = hand?.presented == true,
                             sign = when {
                                 result.hands.isEmpty() -> "No veo ninguna mano. Ponela frente a la cámara, a unos 30–50 cm, con luz."
-                                air.armed -> "✋ Lista: deslizala rápido para un lado"
                                 hand?.presented == false ->
                                     "Veo una mano, pero no cuenta: tiene que estar entera en la imagen, ni pegada a la pantalla ni lejos (a unos 30–50 cm)."
                                 sign != HandSigns.Sign.NONE && hand?.sure == false && sign != HandSigns.Sign.FIST ->
                                     "Veo: ${NAMES[sign] ?: sign.name}, pero no estoy seguro: más luz o más de frente."
                                 sign != HandSigns.Sign.NONE -> "Veo: ${NAMES[sign] ?: sign.name}"
-                                else -> "Veo tu mano. Abrila (palma hacia la cámara) y dejala quieta un instante para deslizar."
+                                else -> "Veo tu mano: apuntá con el índice arriba o abajo (o al costado), o cerrá el puño."
                             },
                             event = event ?: it.event,
                             eventAt = if (event != null) now else it.eventAt,
@@ -229,10 +228,10 @@ private fun GestureTestContent(onClose: () -> Unit) {
         }
         if (state.eyes.isNotEmpty()) Text(state.eyes, style = MaterialTheme.typography.bodySmall, color = Aura.colors.secondaryLabel)
         Text(
-            "Cómo deslizar: palma abierta hacia la cámara (los dedos pueden ir juntos), quieta hasta que el círculo " +
-                "se ponga verde, y movela rápido para arriba (siguiente), abajo (anterior) o a un costado. Volver la " +
-                "mano no cuenta. También: ✋ palma quieta 2 segundos (pausa), 👍 me gusta, ✌️ hablarme, 🙌 las dos " +
-                "manos. Analiza ${state.fps} cuadros por segundo.",
+            "La mano a unos 30–50 cm, entera en la imagen (el círculo se pone verde cuando cuenta). ☝️ índice arriba: " +
+                "siguiente · 👇 abajo: anterior · 👉👈 al costado: foto o historia, medio segundo cada uno y relajando la " +
+                "mano entre uno y otro. ✊ puño: pausa o sigue (en WhatsApp, graba un video) · 👍 me gusta · ✌️ hablarme · " +
+                "🙌 las dos manos. Analiza ${state.fps} cuadros por segundo.",
             style = MaterialTheme.typography.bodySmall,
             color = Aura.colors.secondaryLabel,
         )

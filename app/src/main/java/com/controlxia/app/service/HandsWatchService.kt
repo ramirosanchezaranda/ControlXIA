@@ -71,15 +71,15 @@ import java.util.concurrent.Executors
 /**
  * Gestos con la cámara frontal, como los gestos aéreos de los teléfonos:
  *
- * - **Deslizar en el aire** con la palma abierta ([AirGestures], [HandMotion]):
- *   la dejás quieta un instante y la movés rápido arriba, abajo o a un
- *   costado; la app hace el mismo deslizamiento con el dedo en la pantalla
- *   (reel siguiente o anterior, foto o historia). La vuelta de la mano no cuenta.
- * - 👍 me gusta (dos toques en el video), ✋ quieta 2 segundos pausa o sigue,
- *   ✌️ pausa y te escucha, 🙌 las dos manos pausan y preguntan "¿Qué necesitás?".
+ * - ☝️ / 👇 índice arriba o abajo: el reel siguiente o anterior; 👉 / 👈 al
+ *   costado: foto o historia ([AirGestures]). La app hace el mismo deslizamiento
+ *   que el dedo en la pantalla. Una vez por seña: hay que relajar la mano entre una y otra.
+ * - ✊ puño: pausa o sigue (en un chat de WhatsApp, graba un video), 👍 me gusta
+ *   (dos toques en el video), ✌️ pausa y te escucha, 🙌 las dos manos pausan y
+ *   preguntan "¿Qué necesitás?".
  * - Cuando el asistente pregunta algo: guiño o asentir = sí, negar = no, 👍/👎.
- * - Con el teléfono bloqueado y música sonando: deslizar a los costados cambia
- *   de tema, arriba y abajo el volumen.
+ * - Con el teléfono bloqueado y música sonando: el dedo a los costados cambia
+ *   de tema, arriba y abajo el volumen; el puño pausa o sigue.
  *
  * La cámara mira solo con la pantalla prendida y algo reproduciéndose, una app
  * de videos adelante, una pregunta esperando, una prueba, o el ajuste "con
@@ -382,27 +382,20 @@ class HandsWatchService : LifecycleService() {
                 air.reset()
                 return
             }
-            // Con la mano que se ve más: deslizar con la palma, palma quieta, 👍, ✌️.
             // Usando el teléfono (tocando, escribiendo, deslizando): la mano frente a la cámara es la que lo usa.
-            if (XiaAccessibilityService.userActiveWithin(BUSY_QUIET_MS) && !air.armed) {
+            if (XiaAccessibilityService.userActiveWithin(BUSY_QUIET_MS)) {
                 air.reset()
                 return
             }
-            // La mano que se presenta a la cámara (entera y a buena distancia), si hay.
+            // La mano que se presenta a la cámara (entera y a buena distancia), si hay: ☝️👇👉👈, ✊, 👍, ✌️.
             val hand = result.hands.firstOrNull { it.presented } ?: result.hands.firstOrNull()
-            val wasArmed = air.armed
-            when (val event = air.feed(hand?.sign, hand?.x, hand?.y, now, presented = hand?.presented ?: false, sure = hand?.sure ?: false)) {
+            when (val event = air.feed(hand?.sign, now, presented = hand?.presented ?: false, sure = hand?.sure ?: false)) {
                 is AirGestures.Event.Swipe -> return act(event.swipe)
                 is AirGestures.Event.Sign -> return perform(event.sign)
                 null -> Unit
             }
-            if (air.armed && !wasArmed) {
-                // Un "tic" apenas: ya se puede deslizar.
-                seen("✋ lista para deslizar")
-                feedback.vibrate(12)
-            }
             val sign = hand?.takeIf { it.presented }?.sign?.takeIf { it in SHOWN } ?: HandSigns.Sign.NONE
-            if (sign != HandSigns.Sign.NONE && !air.armed) seen(SIGN_NAMES[sign] ?: sign.name)
+            if (sign != HandSigns.Sign.NONE) seen(SIGN_NAMES[sign] ?: sign.name)
         } catch (e: Exception) {
             AgentLog.add("MANOS error al analizar: ${e.message}")
         } finally {
@@ -485,28 +478,16 @@ class HandsWatchService : LifecycleService() {
     }
 
     /**
-     * Hace lo que pide la seña, solo donde tiene sentido: la palma pausa lo que
-     * suena (y sigue solo si la pausó un gesto), 👍 es "me gusta" en apps de
-     * videos, ✌️ te escucha. Si no corresponde, no hace nada (y queda anotado).
+     * Hace lo que pide la seña, solo donde tiene sentido: ✊ graba un video en
+     * un chat de WhatsApp o pausa/sigue lo que se ve o se escucha, 👍 es "me
+     * gusta" en apps de videos, ✌️ te escucha. Si no corresponde, no hace nada
+     * (y queda anotado).
      */
     private fun perform(sign: HandSigns.Sign) {
-        // El puño solo hace algo en un chat de WhatsApp: grabar un video.
-        if (sign == HandSigns.Sign.FIST) return onFist()
+        if (sign == HandSigns.Sign.FIST && videoOn && !locked() && whatsAppInFront()) return onFist()
         val now = SystemClock.elapsedRealtime()
         val done: String? = when (sign) {
-            HandSigns.Sign.OPEN_PALM -> when {
-                musicPlaying() -> {
-                    DeviceControl(this).media(DeviceControl.Media.PAUSE)
-                    pausedByGestureAt = now
-                    "pausé lo que sonaba"
-                }
-                now - pausedByGestureAt < RESUME_WINDOW_MS -> {
-                    DeviceControl(this).media(DeviceControl.Media.PLAY)
-                    pausedByGestureAt = 0L
-                    "sigue lo que había pausado"
-                }
-                else -> null.also { AgentLog.add("MANOS ✋ quieta, pero no suena nada: no hago nada") }
-            }
+            HandSigns.Sign.FIST -> playPause(now)
             HandSigns.Sign.THUMB_UP -> if (!locked() && XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO) {
                 like()
                 "me gusta"
@@ -524,6 +505,32 @@ class HandsWatchService : LifecycleService() {
         AgentLog.add("MANOS seña ${sign.name}: $done")
         feedback.vibrate(25)
         show(SIGN_NAMES[sign] ?: sign.name)
+    }
+
+    /**
+     * ✊ pausa o sigue: en una app de videos, como el botón de pausa; fuera de
+     * ellas pausa lo que suena y sigue solo si lo pausó un gesto (no arranca
+     * música sola). null si no hizo nada.
+     */
+    private fun playPause(now: Long): String? {
+        val device = DeviceControl(this)
+        return when {
+            XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO -> {
+                device.media(DeviceControl.Media.TOGGLE)
+                "pausa o sigue el video"
+            }
+            musicPlaying() -> {
+                device.media(DeviceControl.Media.PAUSE)
+                pausedByGestureAt = now
+                "pausé lo que sonaba"
+            }
+            now - pausedByGestureAt < RESUME_WINDOW_MS -> {
+                device.media(DeviceControl.Media.PLAY)
+                pausedByGestureAt = 0L
+                "sigue lo que había pausado"
+            }
+            else -> null.also { AgentLog.add("MANOS ✊ sin video ni música: no hago nada") }
+        }
     }
 
     // ---- Videos con gestos en WhatsApp ----
@@ -617,12 +624,12 @@ class HandsWatchService : LifecycleService() {
         publish(reason())
     }
 
-    /** Mientras graba: ✊ otra vez o ✋ quieta terminan (el primer puño no cuenta hasta bajar la mano). */
+    /** Mientras graba: ✊ otra vez termina (el primer puño no cuenta hasta bajar la mano). */
     private fun watchWhileRecording(result: HandAnalyzer.Result, now: Long) {
         val hand = result.hands.firstOrNull { it.presented } ?: result.hands.firstOrNull()
-        val event = air.feed(hand?.sign, hand?.x, hand?.y, now, presented = hand?.presented ?: false, sure = hand?.sure ?: false)
+        val event = air.feed(hand?.sign, now, presented = hand?.presented ?: false, sure = hand?.sure ?: false)
             as? AirGestures.Event.Sign ?: return
-        if (event.sign == HandSigns.Sign.FIST || event.sign == HandSigns.Sign.OPEN_PALM) {
+        if (event.sign == HandSigns.Sign.FIST) {
             handler.post { stopVideo(SIGN_NAMES[event.sign] ?: event.sign.name) }
         }
     }
@@ -810,7 +817,10 @@ class HandsWatchService : LifecycleService() {
 
         /** Las señas quietas que hacen algo (las demás se ignoran). */
         /** Las señas que hacen algo (para mostrar la última que vio). */
-        private val SHOWN = setOf(HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY, HandSigns.Sign.OPEN_PALM, HandSigns.Sign.FIST)
+        private val SHOWN = setOf(
+            HandSigns.Sign.THUMB_UP, HandSigns.Sign.VICTORY, HandSigns.Sign.FIST,
+            HandSigns.Sign.POINT_UP, HandSigns.Sign.POINT_DOWN, HandSigns.Sign.POINT_LEFT, HandSigns.Sign.POINT_RIGHT,
+        )
 
         private val SIGN_NAMES = mapOf(
             HandSigns.Sign.POINT_UP to "☝️ dedo arriba", HandSigns.Sign.POINT_DOWN to "👇 dedo abajo",
