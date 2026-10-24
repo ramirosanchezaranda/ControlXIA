@@ -244,6 +244,13 @@ class WhatsAppUi(private val context: Context) {
             .map { it to matchScore(name, it.text.toString()) }
             .maxByOrNull { it.second }
 
+    /** El chat de WhatsApp que está abierto adelante, o null si no hay uno. */
+    fun openChatTitle(): String? {
+        val root = XiaAccessibilityService.instance?.rootInActiveWindow ?: return null
+        val pkg = root.packageName?.toString()?.takeIf { it in PACKAGES } ?: return null
+        return chatHeader(root, pkg)
+    }
+
     private fun chatHeader(root: AccessibilityNodeInfo, pkg: String): String? =
         root.findAccessibilityNodeInfosByViewId("$pkg:id/conversation_contact_name")
             .firstOrNull()?.text?.toString()?.takeIf { it.isNotBlank() }

@@ -182,7 +182,7 @@
         <service
             android:name=".service.HandsWatchService"
             android:exported="false"
-            android:foregroundServiceType="camera" />
+            android:foregroundServiceType="camera|microphone" />
 
         <!-- Para pasarle a WhatsApp los audios que graba o genera el asistente. -->
         <provider

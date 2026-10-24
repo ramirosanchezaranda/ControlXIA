@@ -44,4 +44,15 @@ class AirGesturesTest {
             listOf(Frame(Sign.THUMB_UP, y = 0.5f), Frame(Sign.NONE, y = 0.7f), Frame(null))
         assertEquals(listOf(3 to Event.Sign(Sign.THUMB_UP)), run(frames))
     }
+
+    @Test
+    fun fistNeedsAlmostASecondAndOnlyOnceUntilTheHandGoesDown() {
+        // Empieza a grabar con un puño; el mismo puño sostenido no corta, sí uno nuevo.
+        val fist = List(12) { Frame(Sign.FIST) }
+        val frames = fist + listOf(Frame(null), Frame(null)) + fist
+        assertEquals(
+            listOf(7 to Event.Sign(Sign.FIST), 21 to Event.Sign(Sign.FIST)),
+            run(frames),
+        )
+    }
 }

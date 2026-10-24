@@ -27,6 +27,14 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -37,8 +45,12 @@ import com.controlxia.app.XiaApplication
 import com.controlxia.app.actions.DeviceControl
 import com.controlxia.app.actions.Gestures
 import com.controlxia.app.actions.MediaApps
+import com.controlxia.app.actions.VideoMessage
+import com.controlxia.app.actions.WhatsAppUi
+import com.controlxia.app.brain.PendingAction
 import com.controlxia.app.diagnostics.AgentLog
 import com.controlxia.app.permissions.A11yHealth
+import com.controlxia.app.permissions.PermissionManager
 import com.controlxia.app.voice.AirGestures
 import com.controlxia.app.voice.AssistantState
 import com.controlxia.app.voice.ConfirmState
@@ -52,6 +64,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 
@@ -98,6 +111,23 @@ class HandsWatchService : LifecycleService() {
     private val faceSigns = FaceSigns()
     private val answerSigns = HandSigns.Trigger(framesNeeded = 3, repeatable = emptySet())
 
+    // ---- Videos con gestos en WhatsApp ----
+    @Volatile
+    private var videoOn = true
+    private var videoCapture: VideoCapture<Recorder>? = null
+
+    @Volatile
+    private var recording: Recording? = null
+    private var recordingChat: String? = null
+    private var recordingFile: File? = null
+    private var recordingStartedAt = 0L
+
+    /** El video grabado esperando 👍 o 👎, cuando la escucha no anda para preguntarlo en voz alta. */
+    @Volatile
+    private var localPending: PendingAction? = null
+    private var localPendingUntil = 0L
+    private val stopVideoAtLimit = Runnable { stopVideo(LIMIT) }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_STOP) {
@@ -105,8 +135,15 @@ class HandsWatchService : LifecycleService() {
             stopSelf()
             return START_NOT_STICKY
         }
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0
-        val started = runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), type) }
+        // Cámara, y micrófono si se puede (para el sonido de los videos con gestos).
+        val camera = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0
+        val withMic = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && PermissionManager.hasRecordAudio(this)) {
+            camera or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        } else {
+            camera
+        }
+        val started = runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), withMic) }
+            .recoverCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), camera) }
         if (started.isFailure) {
             // Sin permiso de cámara, o Android no deja (arranque desde segundo plano).
             AgentLog.add("MANOS no pude arrancar: ${started.exceptionOrNull()?.message}")
@@ -135,6 +172,7 @@ class HandsWatchService : LifecycleService() {
         gesturesOn = settings.handGestures
         always = settings.handsAlways
         confirmOn = settings.confirmGestures
+        videoOn = settings.videoGestures
     }
 
     /**
@@ -195,14 +233,19 @@ class HandsWatchService : LifecycleService() {
      * cámara frontal también la usa el desbloqueo con la cara).
      */
     private fun wanted(): Boolean {
+        if (recording != null || videoCapture != null || localPending != null) return true
         if (paused || !power.isInteractive) return false
         if (locked()) return musicPlaying() || (confirmOn && ConfirmState.waiting)
         return always || (confirmOn && ConfirmState.waiting) || musicPlaying() ||
-            XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO
+            XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO || (videoOn && whatsAppInFront())
     }
+
+    private fun whatsAppInFront(): Boolean = XiaAccessibilityService.foregroundPackage in WhatsAppUi.PACKAGES
 
     /** Por qué la cámara está como está (para Ajustes). */
     private fun reason(): String = when {
+        recording != null -> "grabando un video para «${recordingChat.orEmpty()}»"
+        localPending != null -> "esperando 👍 para mandar el video"
         paused -> "en pausa: la está usando la prueba"
         !power.isInteractive -> "apagada: la pantalla está apagada"
         analyzer == null -> "apagada: falta el modelo de gestos (activá de nuevo «Señas con la cámara»)"
@@ -212,6 +255,7 @@ class HandsWatchService : LifecycleService() {
         always -> "mirando: con cualquier app"
         musicPlaying() -> "mirando: se está reproduciendo algo"
         XiaAccessibilityService.foregroundPackage in MediaApps.VIDEO -> "mirando: app de videos adelante"
+        videoOn && whatsAppInFront() -> "mirando: WhatsApp adelante (✊ para grabar un video)"
         XiaAccessibilityService.instance == null ->
             "apagada: no suena nada, y sin el control de apps no sé si hay una app de videos adelante"
         else -> "apagada: no hay video ni música"
@@ -238,6 +282,23 @@ class HandsWatchService : LifecycleService() {
             publish(reason())
             return
         }
+        val analysis = analysisUseCase(cameras, lowFps = true)
+        val ok = runCatching {
+            useCase?.let { cameras.unbind(it) }
+            cameras.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
+        }
+        useCase = analysis.takeIf { ok.isSuccess }
+        cameraOn = ok.isSuccess
+        AgentLog.add(if (cameraOn) "MANOS cámara prendida (${reason()})" else "MANOS no pude usar la cámara: ${ok.exceptionOrNull()?.message}")
+        publish(if (cameraOn) reason() else "no pude usar la cámara: ${ok.exceptionOrNull()?.message}")
+    }
+
+    /**
+     * El análisis de cuadros para las señas. [lowFps]: que la cámara no saque
+     * 30 cuadros por segundo (alcanzan ~10); grabando un video, los de siempre.
+     */
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+    private fun analysisUseCase(cameras: ProcessCameraProvider, lowFps: Boolean): ImageAnalysis {
         val builder = ImageAnalysis.Builder()
             .setResolutionSelector(
                 ResolutionSelector.Builder()
@@ -248,20 +309,12 @@ class HandsWatchService : LifecycleService() {
             )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-        // Para ver un deslizamiento hacen falta ~10 cuadros por segundo; que la cámara no saque 30.
-        lowestFpsRange(cameras)?.let { range ->
-            Camera2Interop.Extender(builder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
+        if (lowFps) {
+            lowestFpsRange(cameras)?.let { range ->
+                Camera2Interop.Extender(builder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
+            }
         }
-        val analysis = builder.build()
-        analysis.setAnalyzer(analysisExecutor) { image -> analyze(image) }
-        val ok = runCatching {
-            useCase?.let { cameras.unbind(it) }
-            cameras.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
-        }
-        useCase = analysis.takeIf { ok.isSuccess }
-        cameraOn = ok.isSuccess
-        AgentLog.add(if (cameraOn) "MANOS cámara prendida (${reason()})" else "MANOS no pude usar la cámara: ${ok.exceptionOrNull()?.message}")
-        publish(if (cameraOn) reason() else "no pude usar la cámara: ${ok.exceptionOrNull()?.message}")
+        return builder.build().also { it.setAnalyzer(analysisExecutor) { image -> analyze(image) } }
     }
 
     /** El rango de cuadros por segundo más bajo que acepta la cámara frontal (al menos 15). */
@@ -309,6 +362,9 @@ class HandsWatchService : LifecycleService() {
             }
             val result = engine.analyze(HandAnalyzer.upright(image))
             if (result.hands.isNotEmpty()) lastHandAt = now
+            // Grabando un video: solo se mira si querés terminar.
+            if (recording != null) return watchWhileRecording(result, now)
+            localPending?.let { return answerVideo(it, result, now) }
             // Dos palmas abiertas levantadas: pausa y pregunta.
             streak = if (result.raised >= 2) streak + 1 else 0
             if (streak >= FRAMES_NEEDED && now - lastTrigger > COOLDOWN_MS) {
@@ -420,6 +476,8 @@ class HandsWatchService : LifecycleService() {
 
     /** Hace lo que pide la seña, en la app que esté adelante. */
     private fun perform(sign: HandSigns.Sign) {
+        // El puño solo hace algo en un chat de WhatsApp: grabar un video.
+        if (sign == HandSigns.Sign.FIST) return onFist()
         AgentLog.add("MANOS seña ${sign.name}")
         feedback.vibrate(25)
         show(SIGN_NAMES[sign] ?: sign.name)
@@ -432,6 +490,159 @@ class HandsWatchService : LifecycleService() {
             }
             else -> Unit
         }
+    }
+
+    // ---- Videos con gestos en WhatsApp ----
+
+    /** ✊ sostenido con un chat de WhatsApp abierto: empieza a grabar un video para ese chat. */
+    private fun onFist() {
+        if (!videoOn || locked() || !whatsAppInFront()) return
+        val chat = WhatsAppUi(this).openChatTitle()
+        if (chat == null) {
+            show("Abrí el chat al que le querés mandar el video y hacé ✊ de nuevo")
+            return
+        }
+        handler.post { startVideo(chat) }
+    }
+
+    /** Suma la grabación a la cámara que ya mira las señas (así se puede terminar con un gesto). */
+    private fun startVideo(chat: String) {
+        if (recording != null || videoCapture != null) return
+        val cameras = provider ?: return
+        val recorder = Recorder.Builder()
+            .setQualitySelector(QualitySelector.from(Quality.HD, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)))
+            .build()
+        val capture = VideoCapture.withOutput(recorder)
+        val analysis = analysisUseCase(cameras, lowFps = false)
+        val bound = runCatching {
+            useCase?.let { cameras.unbind(it) }
+            cameras.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis, capture)
+        }
+        if (bound.isFailure) {
+            AgentLog.add("MANOS no pude grabar video: ${bound.exceptionOrNull()?.message}")
+            show("No pude grabar el video con esta cámara")
+            useCase = null
+            cameraOn = false
+            evaluate()
+            return
+        }
+        useCase = analysis
+        videoCapture = capture
+        recordingChat = chat
+        val file = File(VideoMessage.dir(this), "video_${System.currentTimeMillis()}.mp4")
+        recordingFile = file
+        // Que la escucha del nombre suelte el micrófono antes de grabar el sonido.
+        WakeWordService.lendMicForVideo(true)
+        handler.postDelayed({ beginRecording(recorder, file, chat) }, MIC_HANDOFF_MS)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun beginRecording(recorder: Recorder, file: File, chat: String) {
+        if (videoCapture == null) return
+        val prepared = recorder.prepareRecording(this, FileOutputOptions.Builder(file).build())
+        val withAudio = if (PermissionManager.hasRecordAudio(this)) {
+            runCatching { prepared.withAudioEnabled() }.getOrDefault(prepared)
+        } else {
+            prepared
+        }
+        val started = runCatching { withAudio.start(ContextCompat.getMainExecutor(this)) { event -> onVideoEvent(event) } }
+        val active = started.getOrNull()
+        if (active == null) {
+            AgentLog.add("MANOS no pude empezar a grabar: ${started.exceptionOrNull()?.message}")
+            show("No pude empezar a grabar")
+            endVideo()
+            return
+        }
+        recording = active
+        recordingStartedAt = SystemClock.elapsedRealtime()
+        handler.postDelayed(stopVideoAtLimit, MAX_VIDEO_MS)
+        feedback.vibrate(60)
+        seen("🎥 grabando")
+        show("🎥 Grabando para «$chat»… ✊ o ✋ quieta para terminar")
+        AgentLog.add("MANOS grabando un video para «$chat»")
+        publish(reason())
+    }
+
+    /** Mientras graba: ✊ otra vez o ✋ quieta terminan (el primer puño no cuenta hasta bajar la mano). */
+    private fun watchWhileRecording(result: HandAnalyzer.Result, now: Long) {
+        val hand = result.hands.firstOrNull()
+        val event = air.feed(hand?.sign, hand?.x, hand?.y, now) as? AirGestures.Event.Sign ?: return
+        if (event.sign == HandSigns.Sign.FIST || event.sign == HandSigns.Sign.OPEN_PALM) {
+            handler.post { stopVideo(SIGN_NAMES[event.sign] ?: event.sign.name) }
+        }
+    }
+
+    private fun stopVideo(why: String) {
+        val active = recording ?: return
+        if (why != LIMIT && SystemClock.elapsedRealtime() - recordingStartedAt < MIN_VIDEO_MS) return
+        handler.removeCallbacks(stopVideoAtLimit)
+        AgentLog.add("MANOS termino el video ($why)")
+        runCatching { active.stop() }
+    }
+
+    private fun onVideoEvent(event: VideoRecordEvent) {
+        if (event !is VideoRecordEvent.Finalize) return
+        val chat = recordingChat
+        val file = recordingFile
+        val seconds = (event.recordingStats.recordedDurationNanos / 1_000_000_000L).toInt()
+        endVideo()
+        if (chat == null || file == null || !file.exists() || file.length() == 0L || seconds < 1) {
+            AgentLog.add("MANOS el video no se grabó (error ${event.error}: ${event.cause?.message})")
+            show("No se grabó el video")
+            return
+        }
+        AgentLog.add("MANOS video listo: $seconds s, ${file.length() / 1024} KB")
+        feedback.vibrate(40)
+        val action = PendingAction(
+            question = "¿Le mando a «$chat» el video de $seconds segundos?",
+            progress = "Mandando el video…",
+            execute = { VideoMessage(applicationContext).send(file, chat) },
+        )
+        // Con la escucha andando, lo pregunta en voz alta (contestás con la voz, 👍 o un guiño).
+        if (!WakeWordService.confirm(action)) {
+            answerSigns.reset()
+            localPendingUntil = SystemClock.elapsedRealtime() + LOCAL_CONFIRM_MS
+            localPending = action
+            show("Video listo: 👍 para mandarlo a «$chat», 👎 para no")
+            evaluate()
+        }
+    }
+
+    /** Termina la grabación: suelta la cámara de video, devuelve el micrófono y vuelve a mirar como siempre. */
+    private fun endVideo() {
+        recording = null
+        recordingChat = null
+        recordingFile = null
+        handler.removeCallbacks(stopVideoAtLimit)
+        videoCapture?.let { capture -> runCatching { provider?.unbind(capture) } }
+        videoCapture = null
+        WakeWordService.lendMicForVideo(false)
+        useCase?.let { analysis -> runCatching { provider?.unbind(analysis) } }
+        useCase = null
+        cameraOn = false
+        evaluate()
+    }
+
+    /** Sin la escucha andando: 👍 manda el video, 👎 no. */
+    private fun answerVideo(action: PendingAction, result: HandAnalyzer.Result, now: Long) {
+        if (now > localPendingUntil) {
+            localPending = null
+            show("No mandé el video")
+            handler.post { evaluate() }
+            return
+        }
+        val sign = result.hands.map { it.sign }
+            .firstOrNull { it == HandSigns.Sign.THUMB_UP || it == HandSigns.Sign.THUMB_DOWN } ?: HandSigns.Sign.NONE
+        val answer = answerSigns.feed(sign, now) ?: return
+        localPending = null
+        if (answer == HandSigns.Sign.THUMB_UP) {
+            feedback.vibrate(40)
+            show("👍 Mandando el video…")
+            lifecycleScope.launch { show(action.execute()) }
+        } else {
+            show("👎 Listo, no lo mando.")
+        }
+        handler.post { evaluate() }
     }
 
     /** Sin el control de apps no hay gestos: lo prende solo si puede, o dice qué pasa y avisa. */
@@ -485,6 +696,13 @@ class HandsWatchService : LifecycleService() {
     override fun onDestroy() {
         running = false
         handler.removeCallbacksAndMessages(null)
+        recording?.let { runCatching { it.stop() } }
+        recording = null
+        if (videoCapture != null) {
+            videoCapture?.let { capture -> runCatching { provider?.unbind(capture) } }
+            videoCapture = null
+            WakeWordService.lendMicForVideo(false)
+        }
         runCatching { audio.unregisterAudioPlaybackCallback(playbackCallback) }
         XiaAccessibilityService.foregroundListeners -= foregroundListener
         runCatching { unregisterReceiver(screenReceiver) }
@@ -507,6 +725,13 @@ class HandsWatchService : LifecycleService() {
 
         /** Control lento por si se escapa algún aviso del sistema. */
         private const val HEARTBEAT_MS = 10_000L
+
+        /** Videos con gestos: como mucho un minuto, y el primer segundo y medio no se puede cortar. */
+        private const val MAX_VIDEO_MS = 60_000L
+        private const val MIN_VIDEO_MS = 1_500L
+        private const val MIC_HANDOFF_MS = 300L
+        private const val LOCAL_CONFIRM_MS = 20_000L
+        private const val LIMIT = "llegó al minuto"
         private const val IDLE_FRAME_MS = 300L
         private const val ACTIVE_FRAME_MS = 100L
         private const val ACTIVE_WINDOW_MS = 4_000L

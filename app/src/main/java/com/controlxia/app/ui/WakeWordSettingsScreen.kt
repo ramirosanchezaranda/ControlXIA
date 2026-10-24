@@ -351,6 +351,7 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
     var oneHand by remember { mutableStateOf(settings.handGestures) }
     var always by remember { mutableStateOf(settings.handsAlways) }
     var answers by remember { mutableStateOf(settings.confirmGestures) }
+    var videos by remember { mutableStateOf(settings.videoGestures) }
     val download by GestureModel.state.collectAsState()
 
     fun turnOn() {
@@ -416,7 +417,22 @@ private fun HandsPauseContent(settings: WakeWordSettings) {
                 HandsWatchService.refresh()
             },
         )
-        Legend((if (oneHand) HAND_LEGEND else HAND_LEGEND.takeLast(1)) + (if (answers) ANSWER_LEGEND else emptyList()))
+        SwitchRow(
+            title = "Videos en WhatsApp con un gesto",
+            detail = "Con un chat abierto, el puño ✊ sostenido empieza a grabar un video con la cámara de adelante; " +
+                "✊ otra vez o la palma quieta lo termina, y te pregunto si lo mando a ese chat.",
+            checked = videos,
+            onChange = {
+                videos = it
+                settings.videoGestures = it
+                HandsWatchService.refresh()
+            },
+        )
+        Legend(
+            (if (oneHand) HAND_LEGEND else HAND_LEGEND.takeLast(1)) +
+                (if (videos) VIDEO_LEGEND else emptyList()) +
+                (if (answers) ANSWER_LEGEND else emptyList()),
+        )
         CameraTester()
     }
     when (val state = download) {
@@ -722,6 +738,11 @@ private val WAVE_LEGEND = listOf(
 )
 
 /** Contestar cuando pregunto algo. */
+private val VIDEO_LEGEND = listOf(
+    "✊🎥" to "En un chat de WhatsApp, puño sostenido casi un segundo: grabo un video para ese chat",
+    "✊✋" to "Bajá la mano y hacé ✊ otra vez (o dejá la palma quieta): termino y te pregunto si lo mando (hasta 1 minuto)",
+)
+
 private val ANSWER_LEGEND = listOf(
     "😉" to "Guiñar un ojo o asentir con la cabeza: sí",
     "🙅" to "Negar con la cabeza: no",

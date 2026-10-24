@@ -44,7 +44,7 @@ object A11yHealth {
     private const val PREFS = "a11y_health"
     private const val KEY_WAS_ON = "was_on"
     private const val KEY_NOTIFIED = "notified"
-    private const val NOTIFICATION_ID = 1003
+    private const val NOTIFICATION_ID = 1004
     /** Lo que tarda Android en conectarlo cuando arranca la app. */
     private const val CHECK_DELAY_MS = 8_000L
     /** Entre apagarlo y prenderlo, para que Android vea el cambio. */

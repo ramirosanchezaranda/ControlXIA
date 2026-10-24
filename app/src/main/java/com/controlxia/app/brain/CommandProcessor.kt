@@ -557,6 +557,16 @@ class CommandProcessor(context: Context) {
         }
     }
 
+    /**
+     * Una acción que ya está lista y espera el "sí" sin que se haya pedido de
+     * palabra (el video grabado con gestos): queda esperando como cualquier otra.
+     */
+    fun offer(action: PendingAction) {
+        pending = action
+        pendingTask = null
+        memory.addExchange("[grabé un video con gestos]", action.question)
+    }
+
     /** Si había una acción esperando el "sí", la resuelve con este comando. */
     private suspend fun confirmPending(command: String, onProgress: (String) -> Unit): Reply? {
         val action = pending ?: return null

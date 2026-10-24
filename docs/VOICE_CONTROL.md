@@ -181,6 +181,8 @@ Ajustar → Gestos con las manos → **Señas con la cámara**. Mientras mirás 
 
 **Deslizar en el aire con la palma (desde la 0.14.2)**, como los gestos aéreos de los teléfonos: poné la **palma abierta** hacia la cámara (a 30–50 cm; los dedos pueden ir juntos), quieta hasta que el teléfono haga un "tic" apenas perceptible, y movela rápido para arriba (reel siguiente), abajo (anterior) o a un costado (foto o historia). Cada movimiento cuenta **una sola vez**: volver la mano a su lugar no cuenta como el gesto contrario (por 2 s), un movimiento lento no cuenta, y para otro deslizamiento hay que dejar la palma quieta de nuevo. El dedo apuntando ya no desliza: al soltar el dedo después de apuntar para arriba se veía "para abajo" y pasaba dos veces. La app hace **el mismo deslizamiento que harías con el dedo**, así que anda en Instagram, TikTok, YouTube Shorts y cualquier app (antes usaba el "desplazar" de la accesibilidad, que en Instagram podía decir que había andado sin cambiar el reel). Cada gesto reconocido muestra un cartelito ("⬆️ siguiente") para saber que lo vio.
 
+**Videos en WhatsApp con un gesto (desde la 0.16.0).** Con un chat de WhatsApp abierto, el **puño ✊ sostenido** casi un segundo empieza a grabar un video con la cámara de adelante (la misma que mira las señas, así que se puede terminar con otro gesto). Para terminar: bajá la mano y hacé ✊ otra vez, o dejá la palma quieta (como mucho dura un minuto). Después pregunta "¿Le mando a «Rodri» el video de 12 segundos?" y lo contestás con la voz, 👍 o un guiño; con el "sí" lo pasa a ese chat y toca enviar. Mientras graba, la escucha del nombre se pausa para que el micrófono sea del video. Si la escucha está apagada, alcanza con 👍 (o 👎 para descartarlo). Se apaga en Ajustar → Gestos → "Videos en WhatsApp con un gesto".
+
 Con el teléfono **bloqueado y música sonando**, deslizar a los costados cambia de tema y arriba/abajo sube o baja el volumen. Bloqueado y sin música la cámara no mira: el desbloqueo con la cara también usa la cámara frontal.
 
 **Probar con la cámara** abre la cámara como un espejo y muestra dónde ve tu mano (círculo azul; verde cuando está lista para deslizar), qué seña entiende y cada deslizamiento. **Copiar diagnóstico** copia un resumen (qué está activado, si el control de apps está conectado, el sensor, lo último que pasó) para pegarlo en un chat.
@@ -194,6 +196,7 @@ Con el teléfono **bloqueado y música sonando**, deslizar a los costados cambia
 | ✋⬇️ Para abajo | El anterior |
 | ✋↔️ A un costado | Foto o historia siguiente o anterior |
 | ✋ Palma abierta, quieta 2 segundos sin moverla | Pausa o sigue el video |
+| ✊ Puño casi un segundo, en un chat de WhatsApp | Graba un video para ese chat (✊ otra vez o ✋ quieta para terminar) |
 | 👍 Pulgar arriba | Me gusta (dos toques en el medio) |
 | ✌️ V | Pausa y te escucha, sin decir el nombre |
 | 🙌 Las dos manos arriba | Pausa y pregunta "¿Qué necesitás?" |

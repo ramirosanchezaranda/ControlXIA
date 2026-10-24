@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solo la carpeta de audios para compartir (se borra sola: es caché). -->
+<!-- Solo las carpetas de audios y videos para compartir (se borran solas: es caché). -->
 <paths>
     <cache-path name="audio" path="audio/" />
+    <cache-path name="video" path="video/" />
 </paths>

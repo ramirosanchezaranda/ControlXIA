@@ -25,6 +25,7 @@ import com.controlxia.app.actions.OwnAlarms
 import com.controlxia.app.actions.UnlockGate
 import com.controlxia.app.brain.CommandProcessor
 import com.controlxia.app.brain.Confirmation
+import com.controlxia.app.brain.PendingAction
 import com.controlxia.app.brain.Reply
 import com.controlxia.app.brain.StopWords
 import com.controlxia.app.diagnostics.AgentLog
@@ -140,6 +141,9 @@ class WakeWordService : Service() {
 
     /** Una herramienta está usando el micrófono (grabando un audio): no escuchar "pará". */
     private var micLent = false
+
+    /** Se está grabando un video con gestos: el micrófono es del video hasta que termine. */
+    private var videoMic = false
 
     /** El pedido en curso se escribió (no se dijo): no seguir escuchando de más. */
     private var typedSession = false
@@ -357,6 +361,10 @@ class WakeWordService : Service() {
     private fun startListening() {
         if (wakeEngine != null || listeningCommand) return
         main.removeCallbacks(retryWakeWord)
+        if (videoMic) {
+            setWakeStatus(false, "Grabando un video: vuelvo a escuchar al terminar")
+            return
+        }
         if (!PermissionManager.hasRecordAudio(this)) {
             setWakeStatus(false, "Falta el permiso de micrófono", failed = true)
             return
@@ -561,6 +569,51 @@ class WakeWordService : Service() {
         AssistantState.update(AssistantState.Phase.HEARD, "“$text”")
         pill("“$text”")
         processAndRespond(text)
+    }
+
+    /** Un video con gestos empieza o termina: el micrófono es del video mientras graba. */
+    private fun onVideoMic(on: Boolean) {
+        videoMic = on
+        if (on) {
+            if (listeningCommand) return
+            wakeEngine?.release()
+            wakeEngine = null
+            setWakeStatus(false, "Grabando un video: vuelvo a escuchar al terminar")
+        } else if (inForeground && !listeningCommand) {
+            startListening()
+        }
+    }
+
+    /**
+     * Una acción lista que espera el "sí" sin que la hayas pedido de palabra
+     * (el video grabado con gestos): la pregunta en voz alta y escucha la
+     * respuesta (también con 👍 o un guiño), como cualquier confirmación.
+     */
+    private fun startConfirmation(action: PendingAction) {
+        if (processingJob?.isActive == true) return
+        if (listeningCommand) {
+            stt?.cancel()
+            main.removeCallbacks(sttTimeout)
+            main.removeCallbacks(resumeAfterReply)
+            main.removeCallbacks(afterAck)
+            inFollowUp = false
+        }
+        listeningCommand = true
+        typedSession = false
+        followUps = 0
+        followUpPending = false
+        transcriptionStarted = true
+        voiceWakeLock.acquire(INTERACTION_MAX_MS)
+        val settings = WakeWordSettings(this)
+        agentName = settings.agentName
+        lockedSession = isLockedOrScreenOff()
+        showContentLocked = settings.showContentWhenLocked
+        AssistantState.begin(agentName, lockedSession)
+        wakeEngine?.stop()
+        val processor = commandProcessor ?: CommandProcessor(applicationContext).also { commandProcessor = it }
+        processor.offer(action)
+        AgentLog.add("PREGUNTO: «${action.question}»")
+        deliverReply(Reply(action.question, expectsReply = true), null)
     }
 
     /**
@@ -1161,6 +1214,22 @@ class WakeWordService : Service() {
         /** Contesta la pregunta pendiente con un gesto ("sí" o "no"). Solo si el servicio anda. */
         fun answer(context: Context, text: String) {
             if (running) deliver(context, Intent(context, WakeWordService::class.java).setAction(ACTION_ANSWER).putExtra(EXTRA_TEXT, text))
+        }
+
+        /** Un video con gestos empieza ([on]) o termina: suelta o vuelve a tomar el micrófono. */
+        fun lendMicForVideo(on: Boolean) {
+            val service = current?.get() ?: return
+            service.main.post { service.onVideoMic(on) }
+        }
+
+        /**
+         * Pregunta [action] en voz alta y espera el "sí" (el video grabado con
+         * gestos). false si la escucha no está andando.
+         */
+        fun confirm(action: PendingAction): Boolean {
+            val service = current?.get()?.takeIf { running } ?: return false
+            service.main.post { service.startConfirmation(action) }
+            return true
         }
 
         /** Frena lo que el asistente esté haciendo o diciendo (sin apagar la escucha). */
